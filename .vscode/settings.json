@@ -1,0 +1,130 @@
+{
+	//
+	// 🤖 FIGHTING COPILOT 
+	"github.copilot.editor.enableCodeActions": false,
+	"editor.lightbulb.enabled": "off",
+	//
+	//
+	"workbench.colorCustomizations": {
+		// BUILD IN
+		"editor.findMatchBackground": "#f5eda80e", // active match (the one you’re on)
+		"editor.findMatchBorder": "#fa902ccb",
+		"editor.findMatchHighlightBackground": "#ffffff00", // all other matches
+		"editor.findMatchHighlightBorder": "#feffc686",
+		//
+		// STATUS BAR
+		// "statusBar.background": "#4f8b7e57",
+		// "statusBar.noFolderBackground": "#212121",
+		// "statusBar.debuggingBackground": "#263238",
+		//
+		//
+		// COLORFUL BRACKETS
+		"editorBracketHighlight.foreground1": "#abc9ff",
+		"editorBracketHighlight.foreground2": "#fcb5fce7",
+		"editorBracketHighlight.foreground3": "#acf0a9ee",
+		"editorBracketHighlight.foreground4": "#ffe3ab",
+		"editorBracketHighlight.foreground5": "#ffabae",
+		"editorBracketHighlight.foreground6": "#abfff9",
+		//
+		// BUILD IN ERRORS
+		// color of wave like underline
+		"editorError.foreground": "#fd5ca75b", // 🚨 semi-transparent red
+		// "editorError.foreground": "#fd5ca700", // ⏺ FAKE TURN OFF
+		"editorWarning.foreground": "#ffff002a", // semi-transparent yellow
+		// "editorInfo.foreground": "#ffff002a", // semi-transparent yellow
+		//
+		// ⚠️ ERROR LENS
+		"errorLens.errorForeground": "#fd578177", // 🚨 more gentle red
+		// "errorLens.errorForeground": "#fd578100", // ⏺ FAKE TURN OFF
+		"errorLens.errorBackground": "#ffffff00",
+		"errorLens.messageBackgroundMode": "none",
+		"errorLens.warningBackground": "#ffffff00",
+		"errorLens.warningForeground": "#dba35a91",
+		"errorLens.infoBackground": "#ffffff00",
+		//
+		// COLORFUL FOLDERS
+		"folderPathColor.dark_misc": "#c3c78d",
+		"folderPathColor.utils": "#92b69fe5", // utils
+		"folderPathColor.turquoise": "#8ce1ec",
+		"folderPathColor.custom13": "#c3a9d8",
+		"folderPathColor.custom10": "#d1abe7", // states enemy
+		"folderPathColor.white_": "#ececec", // white
+		"folderPathColor.states_blue": "#6692d4",
+		"folderPathColor.custom11": "#e9ca9cd5", // orange
+		"folderPathColor.custom12": "#caeed5cc",
+		"folderPathColor.custom14": "#e492ad", // red-ish
+		"folderPathColor.orange_shade_2": "#92b9e4",
+		"folderPathColor.gray_ignore": "#9ea4ac",
+		"folderPathColor.green_shade_3": "#94f0c5d5",
+		"folderPathColor.blue_shade_3": "#b2cfee",
+	},
+	//
+	// </> MARKDOWN
+	"markdown.extension.toc.levels": "2..3",
+	"[markdown]": {
+		"editor.defaultFormatter": "yzhang.markdown-all-in-one"
+	},
+	"editor.codeActionsOnSave": {
+		"source.fixAll.markdownlint": "explicit"
+	},
+	"markdownlint.focusMode": true,
+	//
+	// 🔠 SPELL
+	"cSpell.enabledFileTypes": {
+		"markdown": true
+	},
+	//
+	// GO
+	"gopls": {
+		"ui.semanticTokens": true
+	},
+	// 🔴🟠🟡🟢🔵🟣
+	// HIGHLIGHT EXTENSION
+	"highlight.regexes": {
+		// -- IMPORTANT -- 
+		// Godot tools fixes
+		"(// ignore error)": [
+			{
+				"backgroundColor": "#d15555",
+				"color": "#ffffff",
+				"fontWeight": "bold",
+				"borderRadius": "2px"
+			}
+		],
+	},
+	//
+	// 🟥🟪🟦🟩🟨🟧
+	// COLORFUL FOLDERS
+	//**/components/* - Matches any folder named "components" at any depth
+	//src/**/test - Matches any "test" folder inside the "src" directory at any depth
+	//packages/*-utils - Matches folders like "packages/common-utils" or "packages/math-utils
+	//
+	// No built in git color on files (conflict with colorful folders)
+	"git.decorations.enabled": false,
+	//
+	"folder-path-color.folders": [
+		{
+			"path": "*main.go*",
+			"color": "custom14"
+		},
+		{
+			"path": "*_test.go",
+			"color": "custom12"
+		},
+		{
+			"path": "cmd/",
+			"color": "blue_shade_3"
+		},
+		{
+			"path": "client/",
+			"color": "custom13"
+		},
+		{
+			"path": "*utils*",
+			"color": "utils"
+		},
+	],
+	"yaml.schemas": {
+		"swaggerviewer:openapi": "file:///c%3A/safe/git_stuff/goo/apex/api.yaml"
+	}
+}

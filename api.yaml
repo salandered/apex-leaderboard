@@ -1,0 +1,88 @@
+openapi: 3.0.4 # VSCode extension does not support 3.0.x+ 
+info:
+  title: Leaderboard Apex Service API
+  version: 0.0.1
+  description: A simple API for storing and retrieving player scores.
+paths:
+  /:
+    get:
+      summary: Simple health check or root handler
+      responses:
+        "200":
+          description: Successful response
+
+  /api/scores:
+    post:
+      summary: Accepts player name and score; returns a generated ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayerData"
+      responses:
+        "201":
+          description: Score successfully created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedIdData"
+        "400":
+          description: Bad Request (e.g. invalid body)
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/scores/{id}:
+    get:
+      summary: Retrieves a player's name and score by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the player entry
+          schema:
+            type: string
+      responses:
+        "200":
+          description: All ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerData"
+        "404":
+          description: ID not found
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  schemas:
+    PlayerData:
+      type: object
+      required:
+        - player_name
+        - player_score
+      properties:
+        player_name:
+          type: string
+          description: The player's name
+        player_score:
+          type: number
+          format: double
+          description: The player's score
+
+    GeneratedIdData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The generated unique ID for the score entry
