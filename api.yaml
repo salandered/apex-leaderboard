@@ -1,4 +1,4 @@
-openapi: 3.0.4 # VSCode extension does not support 3.0.x+ 
+openapi: 3.0.4 # VSCode extension does not support 3.0.x+
 info:
   title: Leaderboard Apex Service API
   version: 0.0.1
@@ -19,7 +19,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PlayerData"
+              $ref: "#/components/schemas/PlayerPOSTBodyData"
       responses:
         "201":
           description: Score successfully created
@@ -40,11 +40,11 @@ paths:
               schema:
                 type: string
 
-  /api/scores/{id}:
+  /api/scores/{player_id}:
     get:
-      summary: Retrieves a player's name and score by ID
+      summary: Retrieves a player's info by ID
       parameters:
-        - name: id
+        - name: player_id
           in: path
           required: true
           description: The ID of the player entry
@@ -66,7 +66,7 @@ paths:
 
 components:
   schemas:
-    PlayerData:
+    PlayerInputData:
       type: object
       required:
         - player_name
@@ -74,11 +74,23 @@ components:
       properties:
         player_name:
           type: string
-          description: The player's name
         player_score:
           type: number
           format: double
-          description: The player's score
+    PlayerData:
+      type: object
+      required:
+        - player_id
+        - player_name
+        - player_score
+      properties:
+        player_id:
+          type: string
+        player_name:
+          type: string
+        player_score:
+          type: number
+          format: double
 
     GeneratedIdData:
       type: object

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/salandered/apex/models"
 	playerid "github.com/salandered/apex/player_id"
 	"github.com/salandered/apex/storage"
@@ -22,7 +21,13 @@ type PostRequestData struct {
 }
 
 type PostResponseData struct {
-	Id string `json:"id"`
+	PlayerId string `json:"player_id"`
+}
+
+type GetResponseData struct {
+	PlayerId    playerid.PlayerId `json:"player_id"`
+	PlayerName  string            `json:"player_name"`
+	PlayerScore float64           `json:"player_score"`
 }
 
 func (h *HTTPHandler) HandleRoot(w http.ResponseWriter, req *http.Request) {
@@ -38,7 +43,7 @@ func (h *HTTPHandler) HandlePostScore(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	var id = generatePlayerId()
+	var id = playerid.GeneratePlayerId()
 
 	err = h.Storage.PutData(
 		req.Context(),
@@ -53,14 +58,19 @@ func (h *HTTPHandler) HandlePostScore(w http.ResponseWriter, req *http.Request) 
 		return
 
 	}
-	response := PostResponseData{Id: string(id)}
+	response := PostResponseData{PlayerId: string(id)}
 
 	writeJSONToResponse(w, http.StatusCreated, response)
 }
 
 func (h *HTTPHandler) HandleGetScore(w http.ResponseWriter, req *http.Request) {
-	id := req.PathValue("id")
-	playerData, err := h.Storage.GetData(req.Context(), playerid.PlayerId(id))
+	id := playerid.PlayerId(req.PathValue("id"))
+	if err := id.Validate(); err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	playerData, err := h.Storage.GetData(req.Context(), id)
 
 	if err != nil {
 		// todo: error classification
@@ -68,9 +78,11 @@ func (h *HTTPHandler) HandleGetScore(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	writeJSONToResponse(w, http.StatusOK, playerData)
-}
+	response := GetResponseData{
+		PlayerId:    playerData.PlayerId,
+		PlayerName:  playerData.PlayerName,
+		PlayerScore: playerData.PlayerScore,
+	}
 
-func generatePlayerId() playerid.PlayerId {
-	return playerid.PlayerId(uuid.New().String())
+	writeJSONToResponse(w, http.StatusOK, response)
 }

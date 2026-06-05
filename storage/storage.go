@@ -36,3 +36,4 @@ func (rs *redisStorage) GetData(c context.Context, id playerid.PlayerId) (*model
 func NewStorage() *redisStorage {
 	return &redisStorage{}
 }
+
