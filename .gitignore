@@ -27,3 +27,10 @@ go.work.sum
 # Editor/IDE
 .idea/
 .vscode/
+
+# ai
+.claude/
+CLAUDE.md
+
+# custom
+*__internal*

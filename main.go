@@ -34,6 +34,9 @@ func startServer(mux *http.ServeMux) {
 }
 
 func main() {
+	// TODO: get range of users (pagination)
+	// TODO: api/v1/ prefix
+
 	mux := getMux(storage.NewStorage())
 	startServer(mux)
 

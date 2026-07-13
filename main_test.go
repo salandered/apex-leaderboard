@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/getkin/kin-openapi/routers"
+	"github.com/getkin/kin-openapi/routers/gorillamux"
 	"github.com/salandered/apex/handlers"
 	"github.com/salandered/apex/models"
 	playerid "github.com/salandered/apex/player_id"
@@ -19,6 +24,9 @@ import (
 
 var MockedUUID = "698057b7-eb86-4f63-a228-100304c6ca0a"
 
+//go:embed api.yaml
+var apiSpec []byte
+
 func TestAPI(t *testing.T) {
 	suite.Run(t, new(APISuite))
 }
@@ -27,12 +35,21 @@ type APISuite struct {
 	suite.Suite
 	server *httptest.Server
 	client *http.Client
+	router routers.Router
 }
 
 func (s *APISuite) SetupSuite() {
 	fmt.Println("SetupSuite")
 	s.server = httptest.NewServer(getMux(getMockedStorage()))
 	s.client = s.server.Client()
+
+	loader := openapi3.NewLoader()
+	doc, err := loader.LoadFromData(apiSpec)
+	s.Require().NoError(err)
+	s.Require().NoError(doc.Validate(loader.Context))
+	router, err := gorillamux.NewRouter(doc)
+	s.Require().NoError(err)
+	s.router = router
 }
 
 func (s *APISuite) TearDownSuite() {
@@ -41,10 +58,7 @@ func (s *APISuite) TearDownSuite() {
 }
 
 func (s *APISuite) TestRoot() {
-	resp, err := s.client.Get(s.server.URL + "/")
-
-	s.Require().NoError(err)
-	defer resp.Body.Close()
+	resp := s.get("/")
 	s.Require().Equal(http.StatusOK, resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
@@ -54,9 +68,7 @@ func (s *APISuite) TestRoot() {
 }
 
 func (s *APISuite) TestGetScore() {
-	resp, err := s.client.Get(s.server.URL + "/api/scores/" + MockedUUID)
-	s.Require().NoError(err)
-	defer resp.Body.Close()
+	resp := s.get("/api/scores/" + MockedUUID)
 	s.Require().Equal(http.StatusOK, resp.StatusCode)
 
 	var result handlers.GetResponseData
@@ -65,16 +77,12 @@ func (s *APISuite) TestGetScore() {
 }
 
 func (s *APISuite) TestGetScoreInvalidId() {
-	resp, err := s.client.Get(s.server.URL + "/api/scores/not-a-uuid")
-	s.Require().NoError(err)
-	defer resp.Body.Close()
+	resp := s.get("/api/scores/not-a-uuid")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
 func (s *APISuite) TestNotFound() {
-	resp, err := s.client.Get(s.server.URL + "/invalid-path")
-
-	s.Require().NoError(err)
+	resp := s.get("/invalid-path")
 	s.Require().Equal(http.StatusNotFound, resp.StatusCode)
 }
 
@@ -83,7 +91,6 @@ func (s *APISuite) TestPostScore() {
 		PlayerName:  "alice",
 		PlayerScore: 42.5,
 	})
-	defer resp.Body.Close()
 	s.Require().Equal(http.StatusCreated, resp.StatusCode)
 
 	var result handlers.PostResponseData
@@ -91,12 +98,55 @@ func (s *APISuite) TestPostScore() {
 	s.Require().NotEmpty(result.PlayerId)
 }
 
+func (s *APISuite) get(path string) *http.Response {
+	resp, err := s.client.Get(s.server.URL + path)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { resp.Body.Close() })
+	s.validateAgainstSpec(resp)
+	return resp
+}
+
 func (s *APISuite) postJSON(path string, payload any) *http.Response {
 	body, err := json.Marshal(payload)
 	s.Require().NoError(err)
 	resp, err := s.client.Post(s.server.URL+path, "application/json", bytes.NewReader(body))
 	s.Require().NoError(err)
+	s.T().Cleanup(func() { resp.Body.Close() })
+	s.validateAgainstSpec(resp)
 	return resp
+}
+
+// checks that resp satisfies the Open API spec
+// see https://github.com/getkin/kin-openapi#validating-http-requestsresponses
+func (s *APISuite) validateAgainstSpec(resp *http.Response) {
+	route, pathParams, err := s.router.FindRoute(resp.Request)
+	if err != nil {
+		return // path not in spec - not a error
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	s.Require().NoError(err)
+	resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(body)) // put body back for main tests
+
+	in := &openapi3filter.ResponseValidationInput{
+		RequestValidationInput: &openapi3filter.RequestValidationInput{
+			Request:    resp.Request,
+			PathParams: pathParams,
+			Route:      route,
+		},
+		Status:  resp.StatusCode,
+		Header:  resp.Header,
+		Options: &openapi3filter.Options{IncludeResponseStatus: true},
+	}
+	in.SetBodyBytes(body)
+
+	err = openapi3filter.ValidateResponse(context.Background(), in)
+	s.Require().NoError(err,
+		"%s %s: Open API validation failed: response does not satisfy api.yaml",
+		resp.Request.Method,
+		resp.Request.URL.Path,
+	)
 }
 
 func (s *APISuite) decodeJSON(resp *http.Response, target any) {

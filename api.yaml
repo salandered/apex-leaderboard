@@ -1,4 +1,4 @@
-openapi: 3.0.4 # VSCode extension does not support 3.0.x+
+openapi: 3.0.4 # VSCode extension does not support 3.1
 info:
   title: Leaderboard Apex Service API
   version: 0.0.1
@@ -19,7 +19,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PlayerPOSTBodyData"
+              $ref: "#/components/schemas/PlayerInputData"
       responses:
         "201":
           description: Score successfully created
@@ -57,6 +57,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlayerData"
+        "400":
+          description: Bad Request (e.g. malformed player id)
+          content:
+            text/plain:
+              schema:
+                type: string
         "404":
           description: ID not found
           content:
@@ -94,7 +100,10 @@ components:
 
     GeneratedIdData:
       type: object
+      additionalProperties: false
+      required:
+        - player_id
       properties:
-        id:
+        player_id:
           type: string
           description: The generated unique ID for the score entry

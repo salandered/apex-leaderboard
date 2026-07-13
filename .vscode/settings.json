@@ -1,4 +1,5 @@
 {
+	"workbench.colorTheme": "Dark+",
 	//
 	// 🤖 FIGHTING COPILOT 
 	"github.copilot.editor.enableCodeActions": false,
@@ -13,7 +14,7 @@
 		"editor.findMatchHighlightBorder": "#feffc686",
 		//
 		// STATUS BAR
-		// "statusBar.background": "#4f8b7e57",
+		"statusBar.background": "#6e64485e",
 		// "statusBar.noFolderBackground": "#212121",
 		// "statusBar.debuggingBackground": "#263238",
 		//
@@ -47,7 +48,7 @@
 		"folderPathColor.utils": "#92b69fe5", // utils
 		"folderPathColor.turquoise": "#8ce1ec",
 		"folderPathColor.custom13": "#c3a9d8",
-		"folderPathColor.custom10": "#d1abe7", // states enemy
+		"folderPathColor.custom10": "#d1abe7", // 
 		"folderPathColor.white_": "#ececec", // white
 		"folderPathColor.states_blue": "#6692d4",
 		"folderPathColor.custom11": "#e9ca9cd5", // orange
@@ -81,11 +82,9 @@
 	// 🔴🟠🟡🟢🔵🟣
 	// HIGHLIGHT EXTENSION
 	"highlight.regexes": {
-		// -- IMPORTANT -- 
-		// Godot tools fixes
 		"(// ignore error)": [
 			{
-				"backgroundColor": "#d15555",
+				"backgroundColor": "#a15555",
 				"color": "#ffffff",
 				"fontWeight": "bold",
 				"borderRadius": "2px"
@@ -124,7 +123,4 @@
 			"color": "utils"
 		},
 	],
-	"yaml.schemas": {
-		"swaggerviewer:openapi": "file:///c%3A/safe/git_stuff/goo/apex/api.yaml"
-	}
 }

@@ -35,6 +35,7 @@ func (h *HTTPHandler) HandleRoot(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Root handled")
 }
 
+
 func (h *HTTPHandler) HandlePostScore(w http.ResponseWriter, req *http.Request) {
 	var data PostRequestData
 	err := json.NewDecoder(req.Body).Decode(&data)
@@ -86,3 +87,5 @@ func (h *HTTPHandler) HandleGetScore(w http.ResponseWriter, req *http.Request) {
 
 	writeJSONToResponse(w, http.StatusOK, response)
 }
+
+
