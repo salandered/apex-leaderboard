@@ -14,7 +14,7 @@
 		"editor.findMatchHighlightBorder": "#feffc686",
 		//
 		// STATUS BAR
-		"statusBar.background": "#6e64485e",
+		"statusBar.background": "#ac9d579f",
 		// "statusBar.noFolderBackground": "#212121",
 		// "statusBar.debuggingBackground": "#263238",
 		//
@@ -77,7 +77,10 @@
 	//
 	// GO
 	"gopls": {
-		"ui.semanticTokens": true
+		"ui.semanticTokens": true,
+		"build.buildFlags": [
+			"-tags=integration"
+		]
 	},
 	// 🔴🟠🟡🟢🔵🟣
 	// HIGHLIGHT EXTENSION

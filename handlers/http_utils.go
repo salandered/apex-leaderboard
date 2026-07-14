@@ -2,8 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/salandered/apex/storage"
 )
 
 func writeJSONToResponse(w http.ResponseWriter, statusCode int, data any) {
@@ -34,4 +38,14 @@ func createHeaders(w http.ResponseWriter) {
 
 func writeErrorToResponse(w http.ResponseWriter, err error, statusCode int) {
 	http.Error(w, err.Error(), statusCode)
+}
+
+// maps a storage-layer error to an HTTP response
+func writeStorageError(w http.ResponseWriter, err error) {
+	if errors.Is(err, storage.ErrNotFound) {
+		writeErrorToResponse(w, fmt.Errorf("not found"), http.StatusNotFound)
+		return
+	}
+	log.Printf("internal storage error: %v", err)
+	writeErrorToResponse(w, fmt.Errorf("internal server error"), http.StatusInternalServerError)
 }

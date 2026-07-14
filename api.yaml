@@ -1,4 +1,4 @@
-openapi: 3.0.4 # VSCode extension does not support 3.1
+openapi: 3.0.4 # TODO: bug with VSCode extension not supporting  support 3.1
 info:
   title: Leaderboard Apex Service API
   version: 0.0.1
@@ -11,7 +11,7 @@ paths:
         "200":
           description: Successful response
 
-  /api/scores:
+  /api/v1/scores:
     post:
       summary: Accepts player name and score; returns a generated ID.
       requestBody:
@@ -19,14 +19,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PlayerInputData"
+              $ref: "#/components/schemas/NewPlayerRequest"
       responses:
         "201":
           description: Score successfully created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GeneratedIdData"
+                $ref: "#/components/schemas/GeneratedIdResponse"
         "400":
           description: Bad Request (e.g. invalid body)
           content:
@@ -40,7 +40,7 @@ paths:
               schema:
                 type: string
 
-  /api/scores/{player_id}:
+  /api/v1/scores/{player_id}:
     get:
       summary: Retrieves a player's info by ID
       parameters:
@@ -56,9 +56,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PlayerData"
+                $ref: "#/components/schemas/PlayerDataResponse"
         "400":
-          description: Bad Request (e.g. malformed player id)
+          description: Bad Request
           content:
             text/plain:
               schema:
@@ -69,11 +69,60 @@ paths:
             text/plain:
               schema:
                 type: string
+        "500":
+          description: Internal Server Error
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/scores/{player_id}/increment:
+    post:
+      summary: Increments the score (supports negative values for decrementing)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IncrementScoreRequest"
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          description: The ID of the player entry
+          schema:
+            type: string
+      responses:
+        "200":
+          description: All ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncrementScoreResponse"
+        "400":
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: ID not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+          content:
+            text/plain:
+              schema:
+                type: string
 
 components:
   schemas:
-    PlayerInputData:
+    NewPlayerRequest:
       type: object
+      additionalProperties: false
       required:
         - player_name
         - player_score
@@ -83,8 +132,20 @@ components:
         player_score:
           type: number
           format: double
-    PlayerData:
+
+    IncrementScoreRequest:
       type: object
+      additionalProperties: false
+      required:
+        - amount
+      properties:
+        amount:
+          type: number
+          format: double
+
+    PlayerDataResponse:
+      type: object
+      additionalProperties: false
       required:
         - player_id
         - player_name
@@ -98,7 +159,7 @@ components:
           type: number
           format: double
 
-    GeneratedIdData:
+    GeneratedIdResponse:
       type: object
       additionalProperties: false
       required:
@@ -106,4 +167,15 @@ components:
       properties:
         player_id:
           type: string
-          description: The generated unique ID for the score entry
+          description: The generated unique ID for a player entry
+
+    IncrementScoreResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - score
+      properties:
+        score:
+          type: number
+          format: double
+          description: Score after incrementing

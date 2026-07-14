@@ -3,11 +3,14 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/salandered/apex/handlers"
 	"github.com/salandered/apex/storage"
 )
+
+const defaultRedisURL = "redis://localhost:6379/0"
 
 func getMux(s storage.Storage) *http.ServeMux {
 	handler := &handlers.HTTPHandler{
@@ -15,9 +18,12 @@ func getMux(s storage.Storage) *http.ServeMux {
 	}
 
 	mux := http.NewServeMux()
+
+	// using snaked 'player_id' naming to match OpenAPI docs
 	mux.HandleFunc("GET /{$}", handler.HandleRoot)
-	mux.HandleFunc("GET /api/scores/{id}", handler.HandleGetScore)
-	mux.HandleFunc("POST /api/scores", handler.HandlePostScore)
+	mux.HandleFunc("GET /api/v1/scores/{player_id}", handler.HandleGetScore)
+	mux.HandleFunc("POST /api/v1/scores/{player_id}/increment", handler.HandleIncrementScore)
+	mux.HandleFunc("POST /api/v1/scores", handler.HandlePostPlayer)
 
 	return mux
 }
@@ -35,9 +41,17 @@ func startServer(mux *http.ServeMux) {
 
 func main() {
 	// TODO: get range of users (pagination)
-	// TODO: api/v1/ prefix
 
-	mux := getMux(storage.NewStorage())
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = defaultRedisURL
+	}
+
+	store, err := storage.NewStorage(redisURL)
+	if err != nil {
+		log.Fatalf("storage init: %v", err)
+	}
+
+	mux := getMux(store)
 	startServer(mux)
-
 }

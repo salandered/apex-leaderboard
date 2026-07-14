@@ -68,7 +68,7 @@ func (s *APISuite) TestRoot() {
 }
 
 func (s *APISuite) TestGetScore() {
-	resp := s.get("/api/scores/" + MockedUUID)
+	resp := s.get("/api/v1/scores/" + MockedUUID)
 	s.Require().Equal(http.StatusOK, resp.StatusCode)
 
 	var result handlers.GetResponseData
@@ -77,7 +77,7 @@ func (s *APISuite) TestGetScore() {
 }
 
 func (s *APISuite) TestGetScoreInvalidId() {
-	resp := s.get("/api/scores/not-a-uuid")
+	resp := s.get("/api/v1/scores/not-a-uuid")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -87,7 +87,7 @@ func (s *APISuite) TestNotFound() {
 }
 
 func (s *APISuite) TestPostScore() {
-	resp := s.postJSON("/api/scores", handlers.PostRequestData{
+	resp := s.postJSON("/api/v1/scores", handlers.PostRequestData{
 		PlayerName:  "alice",
 		PlayerScore: 42.5,
 	})
@@ -96,6 +96,19 @@ func (s *APISuite) TestPostScore() {
 	var result handlers.PostResponseData
 	s.decodeJSON(resp, &result)
 	s.Require().NotEmpty(result.PlayerId)
+}
+
+func (s *APISuite) TestIncrementScore() {
+	resp := s.postJSON("/api/v1/scores/"+MockedUUID+"/increment", handlers.IncrementScoreRequest{
+		Amount: 12.0,
+	})
+
+	// then/
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.IncrementScoreResponse
+	s.decodeJSON(resp, &result)
+	s.Require().Equal(12.0, result.Score)
 }
 
 func (s *APISuite) get(path string) *http.Response {
@@ -162,17 +175,20 @@ func getMockedStorage() storage.Storage {
 type mockStorage struct {
 }
 
-func (ms *mockStorage) PutData(c context.Context, playerData *models.PlayerData) error {
-	fmt.Printf("putting data %v to mocked storage", playerData)
+func (ms *mockStorage) CreatePlayer(c context.Context, profile *models.Profile, score float64) error {
+	fmt.Printf("putting profile %v (score %v) to mocked storage", profile, score)
 	return nil
 }
 
-func (ms *mockStorage) GetData(c context.Context, id playerid.PlayerId) (*models.PlayerData, error) {
-	playerData := models.PlayerData{
-		PlayerId:    playerid.PlayerId(MockedUUID),
-		PlayerName:  "Mighty Warrior",
-		PlayerScore: 46.4,
+func (ms *mockStorage) GetPlayer(c context.Context, id playerid.PlayerId) (*models.Profile, float64, error) {
+	profile := models.Profile{
+		PlayerId:   playerid.PlayerId(MockedUUID),
+		PlayerName: "Mighty Warrior",
 	}
-	fmt.Printf("getting stabbed data %v from mocked storage", playerData)
-	return &playerData, nil
+	fmt.Printf("getting stabbed profile %v from mocked storage", profile)
+	return &profile, 46.4, nil
+}
+
+func (ms *mockStorage) IncrementScore(c context.Context, playerId playerid.PlayerId, amount float64) (float64, error) {
+	return 12.0, nil
 }

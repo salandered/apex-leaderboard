@@ -6,7 +6,9 @@ Apex is the backend web service implementing the Leaderboard functionality. A li
 
 ### Prerequisites
 
-Install 1.26+ [Go](https://go.dev/doc/install)
+- 1.26+ [Go](https://go.dev/doc/install)
+- A running Redis for the server (e.g. `docker run -p 6379:6379 redis:8.8.0-alpine`)
+- [Docker](https://docs.docker.com/get-docker/) — only for the integration tests
 
 ### Run the Server
 
@@ -14,23 +16,33 @@ Install 1.26+ [Go](https://go.dev/doc/install)
 go run main.go
 ```
 
-The server listens on port `:8090`.
+The server listens on port `:8090` and connects to Redis via `REDIS_URL`
+(default `redis://localhost:6379/0`). Point it elsewhere with the env var:
+
+```bash
+REDIS_URL=redis://:password@host:6379/0 go run main.go
+```
 
 ###
 
 TODO: add curls with basic functionality
 
-## 📡 API
+## 📚 Documentation
 
-See OpenAPI specification [`api.yaml`](api.yaml)
+- [`api.yaml`](api.yaml) - OpenAPI specification
+- [docs/tests.md](docs/tests.md) - testing approach
+- [docs/redis.md](docs/redis.md) - go-redis references
 
 ## 🛠️ Development
 
 ### Run Tests
 
 ```bash
-go test ./...
+go test ./...                    # unit tests — fast, no Docker
+go test -tags=integration ./...  # + storage integration tests (needs Docker)
 ```
+
+See [docs/tests.md](docs/tests.md) for details.
 
 ### Compile
 

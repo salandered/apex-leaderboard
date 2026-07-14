@@ -10,14 +10,26 @@ import (
 	"github.com/salandered/apex/storage"
 )
 
+const (
+	playerIDPathValue string = "player_id"
+)
+
 type HTTPHandler struct {
 	Storage storage.Storage
-	// storage map[string]PlayerData
+	// storage map[string]PlayerData with mu
 }
 
 type PostRequestData struct {
 	PlayerName  string  `json:"player_name"`
 	PlayerScore float64 `json:"player_score"`
+}
+
+type IncrementScoreRequest struct {
+	Amount float64 `json:"amount"`
+}
+
+type IncrementScoreResponse struct {
+	Score float64 `json:"score"`
 }
 
 type PostResponseData struct {
@@ -35,8 +47,7 @@ func (h *HTTPHandler) HandleRoot(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Root handled")
 }
 
-
-func (h *HTTPHandler) HandlePostScore(w http.ResponseWriter, req *http.Request) {
+func (h *HTTPHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request) {
 	var data PostRequestData
 	err := json.NewDecoder(req.Body).Decode(&data)
 	if err != nil {
@@ -46,46 +57,67 @@ func (h *HTTPHandler) HandlePostScore(w http.ResponseWriter, req *http.Request) 
 
 	var id = playerid.GeneratePlayerId()
 
-	err = h.Storage.PutData(
+	err = h.Storage.CreatePlayer(
 		req.Context(),
-		&models.PlayerData{
-			PlayerId:    id,
-			PlayerName:  data.PlayerName,
-			PlayerScore: data.PlayerScore,
-		})
+		&models.Profile{
+			PlayerId:   id,
+			PlayerName: data.PlayerName,
+			// TODO: date
+		},
+		data.PlayerScore)
 
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusInternalServerError) // todo: error code
+		writeStorageError(w, err)
 		return
-
 	}
 	response := PostResponseData{PlayerId: string(id)}
 
 	writeJSONToResponse(w, http.StatusCreated, response)
 }
 
-func (h *HTTPHandler) HandleGetScore(w http.ResponseWriter, req *http.Request) {
-	id := playerid.PlayerId(req.PathValue("id"))
-	if err := id.Validate(); err != nil {
+func (h *HTTPHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Request) {
+	playerId := playerid.PlayerId(req.PathValue(playerIDPathValue))
+	if err := playerId.Validate(); err != nil {
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}
 
-	playerData, err := h.Storage.GetData(req.Context(), id)
+	var data IncrementScoreRequest
+	err := json.NewDecoder(req.Body).Decode(&data)
+	if err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	score, err := h.Storage.IncrementScore(req.Context(), playerId, data.Amount)
+	if err != nil {
+		writeStorageError(w, err)
+		return
+	}
+
+	response := IncrementScoreResponse{Score: score}
+	writeJSONToResponse(w, http.StatusOK, response)
+}
+
+func (h *HTTPHandler) HandleGetScore(w http.ResponseWriter, req *http.Request) {
+	playerId := playerid.PlayerId(req.PathValue(playerIDPathValue))
+	if err := playerId.Validate(); err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	profile, score, err := h.Storage.GetPlayer(req.Context(), playerId)
 
 	if err != nil {
-		// todo: error classification
-		writeErrorToResponse(w, fmt.Errorf("not found"), http.StatusNotFound)
+		writeStorageError(w, err)
 		return
 	}
 
 	response := GetResponseData{
-		PlayerId:    playerData.PlayerId,
-		PlayerName:  playerData.PlayerName,
-		PlayerScore: playerData.PlayerScore,
+		PlayerId:    profile.PlayerId,
+		PlayerName:  profile.PlayerName,
+		PlayerScore: score,
 	}
 
 	writeJSONToResponse(w, http.StatusOK, response)
 }
-
-
