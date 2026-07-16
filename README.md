@@ -4,30 +4,27 @@ Apex is the backend web service implementing the Leaderboard functionality. A li
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- 1.26+ [Go](https://go.dev/doc/install)
-- A running Redis for the server (e.g. `docker run -p 6379:6379 redis:8.8.0-alpine`)
-- [Docker](https://docs.docker.com/get-docker/) — only for the integration tests
-
-### Run the Server
+You only need [Docker](https://docs.docker.com/get-docker/). Run the app:
 
 ```bash
-go run main.go
+docker compose up --build      # app on :8090, Redis on :6379
 ```
 
-The server listens on port `:8090` and connects to Redis via `REDIS_URL`
-(default `redis://localhost:6379/0`). Point it elsewhere with the env var:
+Make your first requests against `:8090`:
 
 ```bash
-REDIS_URL=redis://:password@host:6379/0 go run main.go
+# Create a player with an initial score
+curl -X POST http://localhost:8090/api/v1/scores \
+  -H "Content-Type: application/json" \
+  -d '{"player_name":"alice","player_score":42.5}'
+# {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
+
+# Fetch that player back by its id
+curl http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de
+# {"player_id":"7dcbeb46-...","player_name":"alice","player_score":42.5}
 ```
 
-###
-
-TODO: add curls with basic functionality
-
-## 📚 Documentation
+## 📚 Additional Docs
 
 - [`api.yaml`](api.yaml) - OpenAPI specification
 - [docs/tests.md](docs/tests.md) - testing approach
@@ -35,11 +32,80 @@ TODO: add curls with basic functionality
 
 ## 🛠️ Development
 
+Working on the code needs 1.26+ [Go](https://go.dev/doc/install) in addition to Docker.
+
+### Running the Server
+
+**Everything in Docker (app + Redis)** — uses [`docker-compose.yml`](docker-compose.yml)
+
+```bash
+docker compose up -d --build   # app on :8090, Redis on :6379 (data persisted in a volume)
+docker compose logs -f app     # follow the app logs
+docker compose down            # stop the stack (add -v to wipe Redis data)
+```
+
+**Locally with Go (Redis in Docker)**
+
+```bash
+docker compose up -d redis 
+# or just docker: docker run -p 6379:6379 redis:8.8.0-alpine
+go run .
+```
+
+The server listens on port `:8090` and connects to Redis via `REDIS_URL`
+(default `redis://localhost:6379/0`). Point it elsewhere with the env var:
+
+```bash
+REDIS_URL=redis://:password@host:6379/0 go run .
+```
+
+### Configuration
+
+All envs are optional:
+
+| Variable     | Values                        | Default                    | Description                                                                                                              |
+| ------------ | ----------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `REDIS_URL`  | Redis connection URL          | `redis://localhost:6379/0` | Storage url.                                                                                                             |
+| `LOG_LEVEL`  | `debug` `info` `warn` `error` | `info`                     | Minimum log level being printed.                                                                                         |
+| `LOG_FORMAT` | `text` `json`                 | `text`                     | `text` is a human readable format (colorized if using stdout), `json` is for machines.                                   |
+| `LOG_FILE`   | file path                     | *(empty → stdout)*         | If set, logs go to this file only.                                                                                       |
+| `LOG_TIME`   | `short` `nano`                | `short`                    | `text` timestamp precision; `nano` adds fractional seconds. Does not affect `LOG_FORMAT = json` (always full precision). |
+
+For example,
+
+```bash
+LOG_LEVEL=debug LOG_FORMAT=text LOG_FILE=./apex.log go run .
+```
+
+will be logging messages like `05:23:40 INFO starting server addr=:8090` into file.
+
+### API Examples
+
+With the server running on `:8090`:
+
+```bash
+# Create a player; returns the generated id
+curl -X POST http://localhost:8090/api/v1/scores \
+  -H "Content-Type: application/json" \
+  -d '{"player_name":"alice","player_score":42.5}'
+# {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
+
+# Fetch a player by id
+curl http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de
+# {"player_id":"7dcbeb46-...","player_name":"alice","player_score":42.5}
+
+# Increment player's score
+curl -X POST http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
+  -H "Content-Type: application/json" \
+  -d '{"amount":5}'
+# {"score":47.5}
+```
+
 ### Run Tests
 
 ```bash
-go test ./...                    # unit tests — fast, no Docker
-go test -tags=integration ./...  # + storage integration tests (needs Docker)
+go test ./...                    # unit tests
+go test -tags=integration ./...  # integration tests with db (uses Docker)
 ```
 
 See [docs/tests.md](docs/tests.md) for details.

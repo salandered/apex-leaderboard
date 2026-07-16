@@ -12,8 +12,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
-	"github.com/salandered/apex/models"
-	playerid "github.com/salandered/apex/player_id"
+	"github.com/salandered/apex/player"
 )
 
 // should be the same as in deployment
@@ -59,10 +58,10 @@ func (s *StorageSuite) TestCreatePlayer() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	playerId := playerid.GeneratePlayerId()
+	playerId := player.GenerateID()
 
 	// when
-	err := s.storage.CreatePlayer(ctx, &models.Profile{PlayerId: playerId, PlayerName: "alice"}, 42.5)
+	err := s.storage.CreatePlayer(ctx, &player.Profile{PlayerId: playerId, PlayerName: "alice"}, 42.5)
 
 	// then
 	s.Require().NoError(err)
@@ -77,6 +76,7 @@ func (s *StorageSuite) TestCreatePlayer() {
 }
 
 func (s *StorageSuite) TestGetPlayerReturnsProfileAndScore() {
+	// TODO: add test cased for ErrInconsistent
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -97,7 +97,7 @@ func (s *StorageSuite) TestGetPlayerMissingReturnsNotFound() {
 	defer cancel()
 
 	// when
-	_, _, err := s.storage.GetPlayer(ctx, playerid.GeneratePlayerId())
+	_, _, err := s.storage.GetPlayer(ctx, player.GenerateID())
 
 	// then
 	s.Require().ErrorIs(err, ErrNotFound)
@@ -122,20 +122,20 @@ func (s *StorageSuite) TestIncrementScoreReturnsNotFound() {
 	defer cancel()
 
 	// when
-	_, err := s.storage.IncrementScore(ctx, playerid.GeneratePlayerId(), 5.0)
+	_, err := s.storage.IncrementScore(ctx, player.GenerateID(), 5.0)
 
 	// then
 	s.Require().ErrorIs(err, ErrNotFound)
 }
 
-func addPlayer(s *StorageSuite) playerid.PlayerId {
-	playerId := playerid.GeneratePlayerId()
+func addPlayer(s *StorageSuite) player.ID {
+	playerId := player.GenerateID()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// rawClient should be used so tests are independent, but fine for now
 	err := s.storage.CreatePlayer(
 		ctx,
-		&models.Profile{PlayerId: playerId, PlayerName: "bob"},
+		&player.Profile{PlayerId: playerId, PlayerName: "bob"},
 		34.0)
 	s.Require().NoError(err)
 	return playerId

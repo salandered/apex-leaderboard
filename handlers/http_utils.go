@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/salandered/apex/storage"
@@ -23,13 +23,11 @@ func writeJSONToResponse(w http.ResponseWriter, statusCode int, data any) {
 
 	_, err = w.Write(rawJSON)
 	if err != nil {
-		log.Printf(
-			"error while writing JSON data to the connection. Note that headers with status code %v was already sent to client. Error: %v\n",
-			statusCode,
-			err)
+		// headers with the status code were already sent to the client
+		slog.Error("failed writing response body", "status", statusCode, "error", err)
 		return
 	}
-	log.Printf("response sent - status: %d, payload: %s\n", statusCode, string(rawJSON))
+	slog.Debug("response sent", "payload", string(rawJSON))
 }
 
 func createHeaders(w http.ResponseWriter) {
@@ -46,6 +44,6 @@ func writeStorageError(w http.ResponseWriter, err error) {
 		writeErrorToResponse(w, fmt.Errorf("not found"), http.StatusNotFound)
 		return
 	}
-	log.Printf("internal storage error: %v", err)
+	slog.Error("internal storage error", "error", err)
 	writeErrorToResponse(w, fmt.Errorf("internal server error"), http.StatusInternalServerError)
 }

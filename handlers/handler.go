@@ -3,15 +3,16 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
-	"github.com/salandered/apex/models"
-	playerid "github.com/salandered/apex/player_id"
+	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
 )
 
 const (
 	playerIDPathValue string = "player_id"
+	version           string = "0.1.0"
 )
 
 type HTTPHandler struct {
@@ -37,14 +38,14 @@ type PostResponseData struct {
 }
 
 type GetResponseData struct {
-	PlayerId    playerid.PlayerId `json:"player_id"`
-	PlayerName  string            `json:"player_name"`
-	PlayerScore float64           `json:"player_score"`
+	PlayerId    player.ID `json:"player_id"`
+	PlayerName  string    `json:"player_name"`
+	PlayerScore float64   `json:"player_score"`
 }
 
 func (h *HTTPHandler) HandleRoot(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintln(w, "Root handled")
-	fmt.Println("Root handled")
+	fmt.Fprintf(w, "apex %s — see /api/v1/scores\n", version)
+	slog.Debug("root handled")
 }
 
 func (h *HTTPHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request) {
@@ -55,11 +56,11 @@ func (h *HTTPHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	var id = playerid.GeneratePlayerId()
+	var id = player.GenerateID()
 
 	err = h.Storage.CreatePlayer(
 		req.Context(),
-		&models.Profile{
+		&player.Profile{
 			PlayerId:   id,
 			PlayerName: data.PlayerName,
 			// TODO: date
@@ -76,7 +77,7 @@ func (h *HTTPHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request)
 }
 
 func (h *HTTPHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Request) {
-	playerId := playerid.PlayerId(req.PathValue(playerIDPathValue))
+	playerId := player.ID(req.PathValue(playerIDPathValue))
 	if err := playerId.Validate(); err != nil {
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
@@ -100,7 +101,7 @@ func (h *HTTPHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Requ
 }
 
 func (h *HTTPHandler) HandleGetScore(w http.ResponseWriter, req *http.Request) {
-	playerId := playerid.PlayerId(req.PathValue(playerIDPathValue))
+	playerId := player.ID(req.PathValue(playerIDPathValue))
 	if err := playerId.Validate(); err != nil {
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return

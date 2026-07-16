@@ -1,0 +1,25 @@
+# Build context: only source + go.mod/go.sum
+
+
+# git / docker
+.git
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# build outputs / test artifacts
+*.exe
+*.exe~
+*.test
+*.out
+coverage.*
+*.coverprofile
+
+# docs / configs
+docs/
+README.md
+.vscode/
+.idea/
+.claude/
+CLAUDE.md

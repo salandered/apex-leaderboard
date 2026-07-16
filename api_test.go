@@ -16,8 +16,7 @@ import (
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 	"github.com/salandered/apex/handlers"
-	"github.com/salandered/apex/models"
-	playerid "github.com/salandered/apex/player_id"
+	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
 	"github.com/stretchr/testify/suite"
 )
@@ -175,20 +174,20 @@ func getMockedStorage() storage.Storage {
 type mockStorage struct {
 }
 
-func (ms *mockStorage) CreatePlayer(c context.Context, profile *models.Profile, score float64) error {
+func (ms *mockStorage) CreatePlayer(c context.Context, profile *player.Profile, score float64) error {
 	fmt.Printf("putting profile %v (score %v) to mocked storage", profile, score)
 	return nil
 }
 
-func (ms *mockStorage) GetPlayer(c context.Context, id playerid.PlayerId) (*models.Profile, float64, error) {
-	profile := models.Profile{
-		PlayerId:   playerid.PlayerId(MockedUUID),
+func (ms *mockStorage) GetPlayer(c context.Context, id player.ID) (*player.Profile, float64, error) {
+	profile := player.Profile{
+		PlayerId:   player.ID(MockedUUID),
 		PlayerName: "Mighty Warrior",
 	}
 	fmt.Printf("getting stabbed profile %v from mocked storage", profile)
 	return &profile, 46.4, nil
 }
 
-func (ms *mockStorage) IncrementScore(c context.Context, playerId playerid.PlayerId, amount float64) (float64, error) {
+func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, amount float64) (float64, error) {
 	return 12.0, nil
 }

@@ -1,12 +1,14 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/salandered/apex/handlers"
+	"github.com/salandered/apex/logging"
 	"github.com/salandered/apex/storage"
 )
 
@@ -28,19 +30,29 @@ func getMux(s storage.Storage) *http.ServeMux {
 	return mux
 }
 
-func startServer(mux *http.ServeMux) {
+func startServer(handler http.Handler) {
 	s := &http.Server{
 		Addr:           ":8090",
-		Handler:        mux,
+		Handler:        handler,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1 mb
 	}
-	log.Fatal(s.ListenAndServe())
+	slog.Info("starting server", "addr", s.Addr)
+	slog.Error("server stopped", "error", s.ListenAndServe())
+	os.Exit(1)
 }
 
 func main() {
 	// TODO: get range of users (pagination)
+
+	logCloser, err := logging.Setup()
+	if err != nil {
+		// logger isn't up yet, so report to stderr directly
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer logCloser.Close()
 
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {
@@ -49,9 +61,10 @@ func main() {
 
 	store, err := storage.NewStorage(redisURL)
 	if err != nil {
-		log.Fatalf("storage init: %v", err)
+		slog.Error("storage init failed", "error", err)
+		os.Exit(1)
 	}
 
 	mux := getMux(store)
-	startServer(mux)
+	startServer(loggingMiddleware(mux))
 }

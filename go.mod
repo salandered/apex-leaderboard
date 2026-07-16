@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/getkin/kin-openapi v0.142.0
 	github.com/google/uuid v1.6.0
+	github.com/lmittmann/tint v1.2.0
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.43.0

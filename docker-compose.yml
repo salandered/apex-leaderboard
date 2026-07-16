@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8090:8090" # todo: port configuration
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: info
+      LOG_FORMAT: text # or "json"
+      LOG_FILE:
+      LOG_TIME: short # or "nano" (text timestamp precision)
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:8.8.0-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

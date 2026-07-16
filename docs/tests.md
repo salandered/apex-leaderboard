@@ -26,7 +26,7 @@ Go test runner
 
 ## OpenAPI spec validation
 
-Every response the tests produce is auto checked against Open API spec. Library
+Responses that tests produce are auto checked against Open API spec. Library
 [kin-openapi](https://github.com/getkin/kin-openapi) is used.
 This runs **only in tests** (no production middleware).
 
