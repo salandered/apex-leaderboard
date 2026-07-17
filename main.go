@@ -20,10 +20,10 @@ func getMux(s storage.Storage) *http.ServeMux {
 	}
 
 	mux := http.NewServeMux()
-
 	// using snaked 'player_id' naming to match OpenAPI docs
 	mux.HandleFunc("GET /{$}", handler.HandleRoot)
 	mux.HandleFunc("GET /api/v1/scores/{player_id}", handler.HandleGetScore)
+	mux.HandleFunc("PUT /api/v1/scores/{player_id}", handler.HandleSetScore)
 	mux.HandleFunc("POST /api/v1/scores/{player_id}/increment", handler.HandleIncrementScore)
 	mux.HandleFunc("POST /api/v1/scores", handler.HandlePostPlayer)
 
@@ -48,7 +48,7 @@ func main() {
 
 	logCloser, err := logging.Setup()
 	if err != nil {
-		// logger isn't up yet, so report to stderr directly
+		// logger isn't ready yet, report to stderr directly
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

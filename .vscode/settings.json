@@ -126,4 +126,9 @@
 			"color": "utils"
 		},
 	],
+	"Lua.diagnostics.globals": [
+		"KEYS",
+		"redis",
+		"ARGV"
+	],
 }

@@ -3,17 +3,20 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
 )
 
 const (
 	playerIDPathValue string = "player_id"
-	version           string = "0.1.0"
 )
+
+// version is overridden at build time via -ldflags "-X ...handlers.version=...".
+// Defaults to "dev" for plain `go run`/`go build`.
+var version = "dev"
 
 type HTTPHandler struct {
 	Storage storage.Storage
@@ -27,6 +30,10 @@ type PostRequestData struct {
 
 type IncrementScoreRequest struct {
 	Amount float64 `json:"amount"`
+}
+
+type SetScoreRequest struct {
+	PlayerScore float64 `json:"player_score"`
 }
 
 type IncrementScoreResponse struct {
@@ -43,9 +50,17 @@ type GetResponseData struct {
 	PlayerScore float64   `json:"player_score"`
 }
 
+// newRequestID produces the idempotency key threaded into a write.
+//
+// TODO: accept a client-supplied key (e.g. an Idempotency-Key header) instead. Generating
+// it server-side makes every request unique, so retries are NOT deduplicated yet — the
+// stub only wires the plumbing so the storage/Lua contract is final.
+func newRequestID() string {
+	return uuid.NewString()
+}
+
 func (h *HTTPHandler) HandleRoot(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "apex %s — see /api/v1/scores\n", version)
-	slog.Debug("root handled")
 }
 
 func (h *HTTPHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request) {
@@ -65,7 +80,8 @@ func (h *HTTPHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request)
 			PlayerName: data.PlayerName,
 			// TODO: date
 		},
-		data.PlayerScore)
+		data.PlayerScore,
+		newRequestID())
 
 	if err != nil {
 		writeStorageError(w, err)
@@ -90,7 +106,7 @@ func (h *HTTPHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	score, err := h.Storage.IncrementScore(req.Context(), playerId, data.Amount)
+	score, err := h.Storage.IncrementScore(req.Context(), playerId, data.Amount, newRequestID())
 	if err != nil {
 		writeStorageError(w, err)
 		return
@@ -98,6 +114,29 @@ func (h *HTTPHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Requ
 
 	response := IncrementScoreResponse{Score: score}
 	writeJSONToResponse(w, http.StatusOK, response)
+}
+
+func (h *HTTPHandler) HandleSetScore(w http.ResponseWriter, req *http.Request) {
+	playerId := player.ID(req.PathValue(playerIDPathValue))
+	if err := playerId.Validate(); err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	var data SetScoreRequest
+	err := json.NewDecoder(req.Body).Decode(&data)
+	if err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Storage.SetScore(req.Context(), playerId, data.PlayerScore, newRequestID()); err != nil {
+		writeStorageError(w, err)
+		return
+	}
+
+	// the new value is exactly what the client sent, so nothing to return
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *HTTPHandler) HandleGetScore(w http.ResponseWriter, req *http.Request) {

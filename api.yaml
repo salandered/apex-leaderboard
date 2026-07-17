@@ -1,12 +1,12 @@
-openapi: 3.0.4 # TODO: bug with VSCode extension not supporting  support 3.1
+openapi: 3.0.4 # TODO: bug with VSCode extension not supporting 3.1.x
 info:
   title: Leaderboard Apex Service API
-  version: 0.0.1
-  description: A simple API for storing and retrieving player scores.
+  version: 1.0.0
+  description: An API for storing and retrieving player scores.
 paths:
   /:
     get:
-      summary: Simple health check or root handler
+      summary: May be used to ping
       responses:
         "200":
           description: Successful response
@@ -57,6 +57,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlayerDataResponse"
+        "400":
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: ID not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+          content:
+            text/plain:
+              schema:
+                type: string
+    put:
+      summary: Sets a player's absolute score
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetScoreRequest"
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          description: The ID of the player entry
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Score updated (no content)
         "400":
           description: Bad Request
           content:
@@ -140,6 +176,16 @@ components:
         - amount
       properties:
         amount:
+          type: number
+          format: double
+
+    SetScoreRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - player_score
+      properties:
+        player_score:
           type: number
           format: double
 

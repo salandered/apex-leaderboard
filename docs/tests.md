@@ -1,5 +1,3 @@
-<!-- markdownlint-disable MD040 -->
-
 # Tests
 
 ## Testify usage
@@ -34,3 +32,5 @@ This runs **only in tests** (no production middleware).
 * Test helpers which work with HTTP requests call `validateAgainstSpec`.
 * Since all tests use http helpers, no extra code to test bodies
 * NOTE: Requests to paths not in the spec are skipped.
+
+## TODO: add info about testcontainers go with Redis

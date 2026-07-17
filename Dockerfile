@@ -8,11 +8,14 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 # CGO_ENABLED=0 - no libc dependency, runs on `scratch`/distroless
-# -ldflags "-s -w" strips debug info
+# -ldflags "-s -w" strips debug info; -X injects the build-time version
+ARG VERSION=dev
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
 	--mount=type=cache,target=/root/.cache/go-build \
-	CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/apex .
+	CGO_ENABLED=0 GOOS=linux go build \
+	-ldflags="-s -w -X github.com/salandered/apex/handlers.version=${VERSION}" \
+	-o /out/apex .
 
 
 FROM alpine:3.22

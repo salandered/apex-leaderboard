@@ -2,10 +2,10 @@ package storage
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
-	"log/slog"
-	"time"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/player"
@@ -17,24 +17,51 @@ var (
 	ErrInconsistent = fmt.Errorf("%w.inconsistent", StorageError)
 )
 
+// requestID is a client-supplied idempotency key: replaying the same key is a no-op,
+// making the operation idempotent.
 type Storage interface {
-	CreatePlayer(ctx context.Context, profile *player.Profile, score float64) error
+	CreatePlayer(ctx context.Context, profile *player.Profile, score float64, requestID string) error
 	GetPlayer(ctx context.Context, playerId player.ID) (*player.Profile, float64, error)
-	IncrementScore(ctx context.Context, playerId player.ID, amount float64) (float64, error)
+	IncrementScore(ctx context.Context, playerId player.ID, amount float64, requestID string) (float64, error)
+	SetScore(ctx context.Context, playerId player.ID, score float64, requestID string) error
 }
 
 const (
-	leaderboardKey  = "leaderboard"
+	leaderboardKey  = "leaderboard"   // ZSET projection: the ranking index
+	streamKey       = "score:events"  // STREAM: the ledger, source of truth
+	appliedKey      = "score:applied" // HASH request_id -> stream id: idempotency table
 	playerNameField = "player_name"
 )
 
-const (
-	pingTimeout       = 5 * time.Second
-	pingRetryInterval = 250 * time.Millisecond
-)
+// The single write path. Every score change goes through this script so the projection
+// (leaderboard) and the ledger (score:events) move together atomically. See the script
+// header for the KEYS/ARGV contract.
+//
+//go:embed scripts/apply_score_event.lua
+var applyScoreScript string
+
+var applyScore = redis.NewScript(applyScoreScript)
 
 type redisStorage struct {
 	client *redis.Client
+}
+
+// Runs the write script and returns the player's score.
+// Callers do request validation first; by here the write is accepted.
+func (rs *redisStorage) applyEvent(ctx context.Context, etype EventType, playerId player.ID, amount float64, requestID string) (float64, error) {
+	res, err := applyScore.Run(ctx, rs.client,
+		[]string{leaderboardKey, streamKey, appliedKey},
+		string(etype), string(playerId), amount, requestID,
+	).Slice()
+	if err != nil {
+		return 0, fmt.Errorf("storage apply %s event: %w", etype, err)
+	}
+	// res = { applied(int64), new_score(string), stream_id(string) }
+	score, err := strconv.ParseFloat(res[1].(string), 64)
+	if err != nil {
+		return 0, fmt.Errorf("storage apply %s event: parse score %q: %w", etype, res[1], err)
+	}
+	return score, nil
 }
 
 // builds the profile Hash key
@@ -42,16 +69,19 @@ func playerHashKey(id player.ID) string {
 	return "player:" + string(id)
 }
 
-// writes the profile (Hash) and score (Sorted Set) atomically via MULTI/EXEC
-func (rs *redisStorage) CreatePlayer(ctx context.Context, profile *player.Profile, score float64) error {
-	playerId := string(profile.PlayerId)
-	_, err := rs.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		pipe.HSet(ctx, playerHashKey(profile.PlayerId), playerNameField, profile.PlayerName)
-		pipe.ZAdd(ctx, leaderboardKey, redis.Z{Score: score, Member: playerId})
-		return nil
-	})
+// writes the profile (Hash) and the initial score as a `set` event through the ledger.
+// The two aren't in one atomic unit: the profile Hash isn't a key of the write script.
+// The window is small and create-time only; if the score write fails after the Hash is
+// written, GetPlayer reports ErrInconsistent (profile without score). A future
+// create-specific script could fold both if this ever matters.
+func (rs *redisStorage) CreatePlayer(ctx context.Context, profile *player.Profile, score float64, requestID string) error {
+	err := rs.client.HSet(ctx, playerHashKey(profile.PlayerId), playerNameField, profile.PlayerName).Err()
 	if err != nil {
-		return fmt.Errorf("storage put data: %w", err)
+		return fmt.Errorf("storage create profile: %w", err)
+	}
+	// unconditional set: the player doesn't exist in the projection yet, so no pre-check.
+	if _, err := rs.applyEvent(ctx, EventSet, profile.PlayerId, score, requestID); err != nil {
+		return err
 	}
 	return nil
 }
@@ -88,76 +118,33 @@ func (rs *redisStorage) GetPlayer(ctx context.Context, playerId player.ID) (*pla
 	return profile, score, nil
 }
 
-func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, amount float64) (float64, error) {
-	// ZIncrXX removed in v9 https://pkg.go.dev/github.com/go-redis/redis/v8#Client.ZIncrXX
-	score, err := rs.client.ZAddArgsIncr(
-		ctx,
-		leaderboardKey,
-		redis.ZAddArgs{
-			XX: true, // no increment if no key
-			Members: []redis.Z{{
-				Score:  amount,
-				Member: string(playerId)}}}).Result()
+// Applies a delta to an existing player's score.
+// Validates existence first and return ErrNotFound without appending.
+func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, amount float64, requestID string) (float64, error) {
+	if err := rs.requireExists(ctx, playerId); err != nil {
+		return 0, err
+	}
+	return rs.applyEvent(ctx, EventIncrement, playerId, amount, requestID)
+}
 
+// Sets an absolute to an existing player's score.
+// Validates existence first and return ErrNotFound without appending.
+func (rs *redisStorage) SetScore(ctx context.Context, playerId player.ID, score float64, requestID string) error {
+	if err := rs.requireExists(ctx, playerId); err != nil {
+		return err
+	}
+	_, err := rs.applyEvent(ctx, EventSet, playerId, score, requestID)
+	return err
+}
+
+// requireExists returns ErrNotFound if the player has no score in the projection.
+func (rs *redisStorage) requireExists(ctx context.Context, playerId player.ID) error {
+	err := rs.client.ZScore(ctx, leaderboardKey, string(playerId)).Err()
 	if errors.Is(err, redis.Nil) {
-		return score, ErrNotFound
+		return ErrNotFound
 	}
 	if err != nil {
-		return score, fmt.Errorf("storage increment score: %w", err)
+		return fmt.Errorf("storage check player exists: %w", err)
 	}
-	return score, nil
-}
-
-// go-redis writes its diagnostic logs (e.g. pool dial failures) to stderr via a package-global logger.
-// We route them through slog with Debug level, because the app already logs similar errors on its side
-func init() {
-	redis.SetLogger(redisLogger{})
-}
-
-// redisLogger adapts go-redis's internal Logging interface to slog.
-type redisLogger struct{}
-
-func (redisLogger) Printf(ctx context.Context, format string, v ...any) {
-	slog.DebugContext(ctx, fmt.Sprintf(format, v...))
-}
-
-// Probes Redis at startup so an unreachable server is reported early
-// instead of on the first request.
-// On timeout it warns and returns, leaving go-redis to connect lazily.
-func pingWithRetry(client *redis.Client, addr string) {
-	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
-	defer cancel()
-
-	var lastErr error
-	for attempt := 1; ; attempt++ {
-		err := client.Ping(ctx).Err()
-		if err == nil {
-			slog.Info("redis connected", "addr", addr)
-			return
-		}
-		if ctx.Err() != nil { // prefer a real dial error over the deadline
-			if lastErr == nil {
-				lastErr = err
-			}
-			break
-		}
-		lastErr = err
-		slog.Debug("redis not ready, retrying", "attempt", attempt, "error", err)
-		select {
-		case <-time.After(pingRetryInterval):
-		case <-ctx.Done():
-		}
-	}
-	slog.Warn("redis unreachable at startup, continuing (will connect on first use)",
-		"waited", pingTimeout, "error", lastErr)
-}
-
-func NewStorage(url string) (Storage, error) {
-	opts, err := redis.ParseURL(url)
-	if err != nil {
-		return nil, fmt.Errorf("storage: parse redis url: %w", err)
-	}
-	client := redis.NewClient(opts)
-	pingWithRetry(client, opts.Addr)
-	return &redisStorage{client: client}, nil
+	return nil
 }

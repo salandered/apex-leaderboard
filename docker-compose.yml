@@ -1,6 +1,9 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        VERSION: "${VERSION:-dev}"
     ports:
       - "8090:8090" # todo: port configuration
     environment:

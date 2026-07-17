@@ -24,12 +24,6 @@ curl http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de
 # {"player_id":"7dcbeb46-...","player_name":"alice","player_score":42.5}
 ```
 
-## 📚 Additional Docs
-
-- [`api.yaml`](api.yaml) - OpenAPI specification
-- [docs/tests.md](docs/tests.md) - testing approach
-- [docs/redis.md](docs/redis.md) - go-redis references
-
 ## 🛠️ Development
 
 Working on the code needs 1.26+ [Go](https://go.dev/doc/install) in addition to Docker.
@@ -99,6 +93,11 @@ curl -X POST http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13
   -H "Content-Type: application/json" \
   -d '{"amount":5}'
 # {"score":47.5}
+
+# Set an absolute score
+curl -X PUT http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
+  -H "Content-Type: application/json" \
+  -d '{"player_score":100}'
 ```
 
 ### Run Tests
@@ -133,3 +132,9 @@ Run `go mod tidy` to sync `go.mod` and `go.sum` with the actual imports.
 ```bash
 go mod tidy
 ```
+
+### Developer Docs
+
+- [`api.yaml`](api.yaml) - OpenAPI specification
+- [docs/tests.md](docs/tests.md) - testing approach
+- [docs/redis.md](docs/redis.md) - go-redis references

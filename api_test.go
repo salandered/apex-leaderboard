@@ -63,7 +63,9 @@ func (s *APISuite) TestRoot() {
 	body, err := io.ReadAll(resp.Body)
 	s.Require().NoError(err)
 
-	s.Require().Equal("Root handled\n", string(body))
+	// the exact version is build-time injected
+	s.Require().Contains(string(body), "apex")
+	s.Require().Contains(string(body), "see /api/v1/scores")
 }
 
 func (s *APISuite) TestGetScore() {
@@ -110,6 +112,13 @@ func (s *APISuite) TestIncrementScore() {
 	s.Require().Equal(12.0, result.Score)
 }
 
+func (s *APISuite) TestSetScore() {
+	resp := s.putJSON("/api/v1/scores/"+MockedUUID, handlers.SetScoreRequest{
+		PlayerScore: 99.0,
+	})
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
+}
+
 func (s *APISuite) get(path string) *http.Response {
 	resp, err := s.client.Get(s.server.URL + path)
 	s.Require().NoError(err)
@@ -122,6 +131,19 @@ func (s *APISuite) postJSON(path string, payload any) *http.Response {
 	body, err := json.Marshal(payload)
 	s.Require().NoError(err)
 	resp, err := s.client.Post(s.server.URL+path, "application/json", bytes.NewReader(body))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { resp.Body.Close() })
+	s.validateAgainstSpec(resp)
+	return resp
+}
+
+func (s *APISuite) putJSON(path string, payload any) *http.Response {
+	body, err := json.Marshal(payload)
+	s.Require().NoError(err)
+	req, err := http.NewRequest(http.MethodPut, s.server.URL+path, bytes.NewReader(body))
+	s.Require().NoError(err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.client.Do(req)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { resp.Body.Close() })
 	s.validateAgainstSpec(resp)
@@ -174,7 +196,7 @@ func getMockedStorage() storage.Storage {
 type mockStorage struct {
 }
 
-func (ms *mockStorage) CreatePlayer(c context.Context, profile *player.Profile, score float64) error {
+func (ms *mockStorage) CreatePlayer(c context.Context, profile *player.Profile, score float64, requestID string) error {
 	fmt.Printf("putting profile %v (score %v) to mocked storage", profile, score)
 	return nil
 }
@@ -188,6 +210,11 @@ func (ms *mockStorage) GetPlayer(c context.Context, id player.ID) (*player.Profi
 	return &profile, 46.4, nil
 }
 
-func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, amount float64) (float64, error) {
+func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, amount float64, requestID string) (float64, error) {
 	return 12.0, nil
 }
+
+func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, score float64, requestID string) error {
+	return nil
+}
+
