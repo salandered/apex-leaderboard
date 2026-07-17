@@ -48,6 +48,7 @@ func pingWithRetry(client *redis.Client, addr string) {
 		}
 		lastErr = err
 		slog.Debug("redis not ready, retrying", "attempt", attempt, "error", err)
+
 		select {
 		case <-time.After(pingRetryInterval):
 		case <-ctx.Done():

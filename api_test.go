@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -79,6 +80,27 @@ func (s *APISuite) TestGetScore() {
 
 func (s *APISuite) TestGetScoreInvalidId() {
 	resp := s.get("/api/v1/scores/not-a-uuid")
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestGetHistory() {
+	resp := s.get("/api/v1/scores/" + MockedUUID + "/history")
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.HistoryResponse
+	s.decodeJSON(resp, &result)
+	s.Require().Equal(MockedUUID, string(result.PlayerId))
+	s.Require().Len(result.Events, 2)
+	s.Require().Equal("increment", result.Events[0].Type) // newest first
+}
+
+func (s *APISuite) TestGetHistoryInvalidId() {
+	resp := s.get("/api/v1/scores/not-a-uuid/history")
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestGetHistoryInvalidLimit() {
+	resp := s.get("/api/v1/scores/" + MockedUUID + "/history?limit=0")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -218,3 +240,15 @@ func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, score flo
 	return nil
 }
 
+func (ms *mockStorage) History(c context.Context, playerId player.ID, limit int64) ([]storage.ScoreEvent, error) {
+	return []storage.ScoreEvent{
+		{ID: "200-0", Type: storage.EventIncrement, PlayerID: string(playerId), Amount: 3, RequestID: "r2", At: time.UnixMilli(200)},
+		{ID: "100-0", Type: storage.EventSet, PlayerID: string(playerId), Amount: 0, RequestID: "r1", At: time.UnixMilli(100)},
+	}, nil
+}
+
+func (ms *mockStorage) Rebuild(c context.Context) error { return nil }
+
+func (ms *mockStorage) VerifyProjection(c context.Context) ([]storage.ScoreMismatch, error) {
+	return nil, nil
+}

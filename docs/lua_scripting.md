@@ -78,9 +78,9 @@ result, err := script.Run(ctx, rdb, []string{"mycounter"}).Result()
 
 ## Tips
 
-It is normal, that Lua language extensions will warn you with messages like "Undefined global `ARGV`"
+It is normal that Lua language extensions will warn you with messages like "Undefined global `ARGV`"
 
-For example, [this VSCode extension warnings](https://marketplace.visualstudio.com/items?itemName=sumneko.lua) can be supressed in settings:
+For example, this [VSCode extension warnings](https://marketplace.visualstudio.com/items?itemName=sumneko.lua) can be supressed in settings:
 
 ```json
 "Lua.diagnostics.globals": [

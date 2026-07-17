@@ -20,12 +20,13 @@ func getMux(s storage.Storage) *http.ServeMux {
 	}
 
 	mux := http.NewServeMux()
-	// using snaked 'player_id' naming to match OpenAPI docs
+	// using snaked 'player_id' naming to match the OpenAPI spec
 	mux.HandleFunc("GET /{$}", handler.HandleRoot)
+	mux.HandleFunc("POST /api/v1/scores", handler.HandlePostPlayer)
 	mux.HandleFunc("GET /api/v1/scores/{player_id}", handler.HandleGetScore)
+	mux.HandleFunc("GET /api/v1/scores/{player_id}/history", handler.HandleGetHistory)
 	mux.HandleFunc("PUT /api/v1/scores/{player_id}", handler.HandleSetScore)
 	mux.HandleFunc("POST /api/v1/scores/{player_id}/increment", handler.HandleIncrementScore)
-	mux.HandleFunc("POST /api/v1/scores", handler.HandlePostPlayer)
 
 	return mux
 }

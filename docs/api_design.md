@@ -36,3 +36,65 @@ Implementation notes:
 * Lua script will be needed
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/If-Match
+
+## Listing endpoint (`GET /api/v1/scores`) and pagination
+
+The leaderboard is a ZSET which naturally is good for any kind of ranges and hence the pagination. Arguably most important leaderboard functionality - Top N - is just the pagination with starting with the first page.
+
+Two important pagination properties:
+
+* **Performance** — not an issue for us. Sorted set performs ranges in log time
+(In SQL or mongo offset is not cheap and usually cursor is used)
+* **Consistency** — under concurrent writes items shift between page reads,
+so some items can be skipped or duplicated.
+
+### Approaches
+
+**Offset / limit** — `?limit=10&offset=0`
+
+Pros: simplest, no state, the native ZSET operation.
+
+Cons: weakest consistency.
+
+**Cursor relies on player_id** — cursor = the last row's `(score, player_id)`.
+
+Next page: `rank = ZREVRANK(leaderboard, player_id)`, then `ZREVRANGE rank+1 rank+size`.
+
+Pros:
+
+* also simple, while lua scripting is probably required
+* more robust than offset — unaffected by changes far above the cursor.
+  misses. (The `score` half is only a staleness check, or a fallback if delete ever returns.)
+
+Cons:
+
+We rely on the score. If the anchor's score moves,
+even an _unchanged_ row can be skipped or duplicated.
+
+Illustration with page size 2, and elements `A=100 B=90 C=80 D=70`:
+
+* page 1 returns `A, B`, cursor = `B`.
+* `B` drops 90 → 75 => new order `A, C, B, D`
+* page 2 reads `D`
+* => `C` is skipped and never was returned
+
+**Value cursor (composite score)** — cursor = the last row's score value.
+
+Next page op will look something like `ZRANGE key (S_last -inf REV BYSCORE LIMIT 0 size`.
+
+* The `(` bound is exclusive, so scores must be **unique**.
+* Solution: bake a tiebreaker into the score (e.g. `points·BIG + seq`, or an inverse
+  timestamp in the fraction), so no two members collide.
+
+Pros: the "correct" cursor — anchors on a _fixed value_ in the total order, so every
+  _stationary_ row is returned exactly once.
+  
+Cons:
+
+* Complex implementation: changes how score are stored (more code, less transparent db etc)
+* without unique scores the exclusive bound `(` skips tied members
+
+### Decision
+
+Currenly using the simplest one. The second approach is a bit weird,
+and the third one is complex and the pay off is unclear.

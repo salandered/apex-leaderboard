@@ -4,6 +4,7 @@ package storage
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -234,6 +235,108 @@ func (s *StorageSuite) TestIncrementIsIdempotent() {
 	s.Require().NoError(err)
 	s.Require().Equal(44.0, retry) // score unchanged, not 54
 	s.requireStreamLen(ctx, 2)     // no new event
+}
+
+// TestHistory checks ledger reads: newest-first order, per-player filtering, and limit.
+func (s *StorageSuite) TestHistory() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	alice := player.GenerateID()
+	s.Require().NoError(s.storage.CreatePlayer(ctx, &player.Profile{PlayerId: alice, PlayerName: "alice"}, 0, "a1"))
+	_, err := s.storage.IncrementScore(ctx, alice, 3, "a2")
+	s.Require().NoError(err)
+	_, err = s.storage.IncrementScore(ctx, alice, 10, "a3")
+	s.Require().NoError(err)
+
+	// a second player must not leak into alice's history
+	bob := player.GenerateID()
+	s.Require().NoError(s.storage.CreatePlayer(ctx, &player.Profile{PlayerId: bob, PlayerName: "bob"}, 5, "b1"))
+
+	// all of alice's events, newest first
+	all, err := s.storage.History(ctx, alice, 0)
+	s.Require().NoError(err)
+	s.Require().Len(all, 3)
+	s.Require().Equal(EventIncrement, all[0].Type)
+	s.Require().Equal(10.0, all[0].Amount)
+	s.Require().Equal("a3", all[0].RequestID)
+	s.Require().Equal(EventSet, all[2].Type) // the create event is oldest
+	s.Require().Equal(alice.String(), all[0].PlayerID)
+	s.Require().False(all[0].At.IsZero()) // timestamp derived from the stream id
+
+	// limit caps the result
+	limited, err := s.storage.History(ctx, alice, 2)
+	s.Require().NoError(err)
+	s.Require().Len(limited, 2)
+	s.Require().Equal("a3", limited[0].RequestID)
+
+	// unknown player yields an empty (non-nil) slice
+	none, err := s.storage.History(ctx, player.GenerateID(), 0)
+	s.Require().NoError(err)
+	s.Require().Empty(none)
+}
+
+// TestRebuild proves the ledger is the source of truth: wipe the projection, replay,
+// and the scores come back identical.
+func (s *StorageSuite) TestRebuild() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// alice replays the doc sequence to 56; bob is a second player with a plain score
+	alice := player.GenerateID()
+	s.Require().NoError(s.storage.CreatePlayer(ctx, &player.Profile{PlayerId: alice, PlayerName: "alice"}, 0, "a1"))
+	for i, delta := range []float64{3, 10, -4} {
+		_, err := s.storage.IncrementScore(ctx, alice, delta, "a"+strconv.Itoa(i+2))
+		s.Require().NoError(err)
+	}
+	s.Require().NoError(s.storage.SetScore(ctx, alice, 50, "a5"))
+	_, err := s.storage.IncrementScore(ctx, alice, 6, "a6")
+	s.Require().NoError(err)
+
+	bob := player.GenerateID()
+	s.Require().NoError(s.storage.CreatePlayer(ctx, &player.Profile{PlayerId: bob, PlayerName: "bob"}, 42, "b1"))
+
+	// wipe the projection entirely, then rebuild from the stream
+	s.Require().NoError(s.rawClient.Del(ctx, leaderboardKey).Err())
+	s.Require().NoError(s.storage.Rebuild(ctx))
+
+	aliceScore, err := s.rawClient.ZScore(ctx, leaderboardKey, string(alice)).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(56.0, aliceScore)
+
+	bobScore, err := s.rawClient.ZScore(ctx, leaderboardKey, string(bob)).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(42.0, bobScore)
+}
+
+// TestVerifyProjection: a clean projection reports no drift; a write that bypasses the
+// ledger is detected; the scratch key is cleaned up afterwards.
+func (s *StorageSuite) TestVerifyProjection() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	playerId := addPlayer(s) // 34.0 via the script
+	_, err := s.storage.IncrementScore(ctx, playerId, 6, "v1")
+	s.Require().NoError(err)
+
+	// consistent: every write went through the script
+	mismatches, err := s.storage.VerifyProjection(ctx)
+	s.Require().NoError(err)
+	s.Require().Empty(mismatches)
+
+	// the scratch key must not linger
+	exists, err := s.rawClient.Exists(ctx, verifyKey).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(int64(0), exists)
+
+	// corrupt the projection directly (bypassing the ledger) -> drift is detected
+	s.Require().NoError(s.rawClient.ZIncrBy(ctx, leaderboardKey, 1000, string(playerId)).Err())
+	mismatches, err = s.storage.VerifyProjection(ctx)
+	s.Require().NoError(err)
+	s.Require().Len(mismatches, 1)
+	s.Require().Equal(string(playerId), mismatches[0].PlayerID)
+	s.Require().Equal(1040.0, mismatches[0].LiveScore) // 34 + 6 + 1000
+	s.Require().Equal(40.0, mismatches[0].RebuiltScore)
 }
 
 func addPlayer(s *StorageSuite) player.ID {

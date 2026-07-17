@@ -1,4 +1,7 @@
 --[[
+	TODO: consider merging with the other lua script
+
+	
 	Performs an atomic score write:
 		- dedupe check
 		- apply to projection

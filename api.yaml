@@ -154,6 +154,43 @@ paths:
               schema:
                 type: string
 
+  /api/v1/scores/{player_id}/history:
+    get:
+      summary: Lists a player's score events (ledger), newest first
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          description: The ID of the player entry
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Max number of events to return (positive integer)
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: All ok (empty list if the player has no events)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoryResponse"
+        "400":
+          description: Bad Request (e.g. invalid id or limit)
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+          content:
+            text/plain:
+              schema:
+                type: string
+
 components:
   schemas:
     NewPlayerRequest:
@@ -225,3 +262,47 @@ components:
           type: number
           format: double
           description: Score after incrementing
+
+    HistoryEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - type
+        - amount
+        - request_id
+        - at
+      properties:
+        id:
+          type: string
+          description: Redis stream entry id
+        type:
+          type: string
+          enum:
+            - set
+            - increment
+        amount:
+          type: number
+          format: double
+          description: Absolute value (set) or delta (increment)
+        request_id:
+          type: string
+          description: Idempotency key the write carried
+        at:
+          type: string
+          format: date-time
+          description: Event time (RFC3339), derived from the entry id
+
+    HistoryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - player_id
+        - events
+      properties:
+        player_id:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryEvent"

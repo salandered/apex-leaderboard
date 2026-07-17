@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/salandered/apex/player"
@@ -12,6 +14,10 @@ import (
 
 const (
 	playerIDPathValue string = "player_id"
+
+	// history defaults; a client may narrow the window with ?limit=
+	historyLimitQuery   string = "limit"
+	defaultHistoryLimit int64  = 50
 )
 
 // version is overridden at build time via -ldflags "-X ...handlers.version=...".
@@ -50,6 +56,20 @@ type GetResponseData struct {
 	PlayerScore float64   `json:"player_score"`
 }
 
+// HistoryEvent is one ledger entry in the API response.
+type HistoryEvent struct {
+	Id        string  `json:"id"`         // Redis stream entry id
+	Type      string  `json:"type"`       // "set" | "increment"
+	Amount    float64 `json:"amount"`     // absolute value (set) or delta (increment)
+	RequestId string  `json:"request_id"` // idempotency key the write carried
+	At        string  `json:"at"`         // RFC3339, derived from the entry id
+}
+
+type HistoryResponse struct {
+	PlayerId player.ID      `json:"player_id"`
+	Events   []HistoryEvent `json:"events"`
+}
+
 // newRequestID produces the idempotency key threaded into a write.
 //
 // TODO: accept a client-supplied key (e.g. an Idempotency-Key header) instead. Generating
@@ -71,12 +91,12 @@ func (h *HTTPHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	var id = player.GenerateID()
+	player_id := player.GenerateID()
 
 	err = h.Storage.CreatePlayer(
 		req.Context(),
 		&player.Profile{
-			PlayerId:   id,
+			PlayerId:   player_id,
 			PlayerName: data.PlayerName,
 			// TODO: date
 		},
@@ -87,7 +107,7 @@ func (h *HTTPHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request)
 		writeStorageError(w, err)
 		return
 	}
-	response := PostResponseData{PlayerId: string(id)}
+	response := PostResponseData{PlayerId: string(player_id)}
 
 	writeJSONToResponse(w, http.StatusCreated, response)
 }
@@ -157,6 +177,47 @@ func (h *HTTPHandler) HandleGetScore(w http.ResponseWriter, req *http.Request) {
 		PlayerId:    profile.PlayerId,
 		PlayerName:  profile.PlayerName,
 		PlayerScore: score,
+	}
+
+	writeJSONToResponse(w, http.StatusOK, response)
+}
+
+func (h *HTTPHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request) {
+	playerId := player.ID(req.PathValue(playerIDPathValue))
+	if err := playerId.Validate(); err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	limit := defaultHistoryLimit
+	if raw := req.URL.Query().Get(historyLimitQuery); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 {
+			writeErrorToResponse(w, fmt.Errorf("invalid %s %q: want a positive integer", historyLimitQuery, raw), http.StatusBadRequest)
+			return
+		}
+		limit = parsed
+	}
+
+	events, err := h.Storage.History(req.Context(), playerId, limit)
+	if err != nil {
+		writeStorageError(w, err)
+		return
+	}
+
+	// an unknown player yields an empty list (collection semantics), not a 404
+	response := HistoryResponse{
+		PlayerId: playerId,
+		Events:   make([]HistoryEvent, 0, len(events)),
+	}
+	for _, e := range events {
+		response.Events = append(response.Events, HistoryEvent{
+			Id:        e.ID,
+			Type:      string(e.Type),
+			Amount:    e.Amount,
+			RequestId: e.RequestID,
+			At:        e.At.UTC().Format(time.RFC3339),
+		})
 	}
 
 	writeJSONToResponse(w, http.StatusOK, response)

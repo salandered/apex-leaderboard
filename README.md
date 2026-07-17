@@ -136,5 +136,6 @@ go mod tidy
 ### Developer Docs
 
 - [`api.yaml`](api.yaml) - OpenAPI specification
-- [docs/tests.md](docs/tests.md) - testing approach
-- [docs/redis.md](docs/redis.md) - go-redis references
+- See docs/ folder. In particular:
+  - [docs/tests.md](docs/tests.md) - testing approach
+  - [docs/api_design.md](docs/api_design.md)
