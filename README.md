@@ -98,6 +98,14 @@ curl -X POST http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13
 curl -X PUT http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
   -H "Content-Type: application/json" \
   -d '{"player_score":100}'
+
+# List the leaderboard, highest first (top 10 by default; page with ?limit= & ?offset=)
+curl "http://localhost:8090/api/v1/scores?limit=10&offset=0"
+# {"scores":[{"player_id":"7dcbeb46-...","score":100,"rank":1}],"limit":10,"offset":0,"total":1}
+
+# A single player's standing (rank is 1-based; total is the board size)
+curl http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/rank
+# {"player_id":"7dcbeb46-...","rank":1,"score":100,"total":1}
 ```
 
 ### Run Tests
@@ -137,5 +145,10 @@ go mod tidy
 
 - [`api.yaml`](api.yaml) - OpenAPI specification
 - See docs/ folder. In particular:
+  - [docs/architecture.md](docs/architecture.md) - how the system is put together and why
+  - [docs/design.md](docs/design.md) - vocabulary and invariants
   - [docs/tests.md](docs/tests.md) - testing approach
-  - [docs/api_design.md](docs/api_design.md)
+
+## Misc
+
+No connection with the Apex Legends game whatsoever.

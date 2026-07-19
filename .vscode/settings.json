@@ -50,13 +50,13 @@
 		"folderPathColor.custom13": "#c3a9d8",
 		"folderPathColor.custom10": "#d1abe7", // 
 		"folderPathColor.white_": "#ececec", // white
-		"folderPathColor.states_blue": "#6692d4",
+		"folderPathColor.states_blue": "#89ade4",
 		"folderPathColor.custom11": "#e9ca9cd5", // orange
-		"folderPathColor.custom12": "#9bbda5cc",
+		"folderPathColor.custom12": "#9bbda3cc",
 		"folderPathColor.custom14": "#e492ad", // red-ish
 		"folderPathColor.orange_shade_2": "#92b9e4",
 		"folderPathColor.gray_ignore": "#9ea4ac",
-		"folderPathColor.green_shade_3": "#94f0c5d5",
+		"folderPathColor.green_shade_3": "#a7dfd1d5",
 		"folderPathColor.blue_shade_3": "#b2cfee",
 	},
 	//
@@ -124,6 +124,22 @@
 		{
 			"path": "*utils*",
 			"color": "utils"
+		},
+		{
+			"path": "*player*",
+			"color": "states_blue"
+		},
+		{
+			"path": "*profile*",
+			"color": "states_blue"
+		},
+		{
+			"path": "*score*",
+			"color": "custom11"
+		},
+		{
+			"path": "*board*",
+			"color": "green_shade_3"
 		},
 	],
 	"Lua.diagnostics.globals": [

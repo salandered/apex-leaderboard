@@ -1,6 +1,44 @@
-# Storage API notes
+# Current design desicions
 
-## Increment endpoint (`POST scores/{id}/increment`) and Idempotency key
+## Language (aiming for this)
+
+| Term             | Means                                                          | Context                   |
+| ---------------- | -------------------------------------------------------------- | ------------------------- |
+| **event**        | one applied operation (a fact)                                 | all                       |
+| **ledger**       | append-only record of score **events**                         | all                       |
+| **tombstone**    | the delete **event**                                           | app, API uses "delete"?   |
+| **board**        | named score container with lifecycle.                          | all                       |
+| projection       | content of the **board** (derived view of the **ledger**)      | app                       |
+| standing         | **projection** read model: (playerId, boardId, value, rank)    | API uses generic "score"? |
+| **replay**       | Build a **projection** using the **ledger**                    | app                       |
+| applied table    | idempotency records: what reqIds were applied using **events** | app                       |
+| **profile**      | player's info (no score)                                       | all                       |
+| **stream entry** | Redis Stream item (raw **event**)                              | redis                     |
+
+Contexts:
+
+* all (codebase, docs, public API)
+* app (codebase, docs)
+* redis (storage codebase, not domain)
+
+## Rules (invariants)
+
+1. **The event stream is the source of truth.** The leaderboard ZSET (Sorted Set) is a projection:
+   it can be deleted and rebuilt from stream, and the result must be the same.
+
+2. **Events record facts only.** An event exists iff the operation was applied.
+   E.g failed score increment is not appended.
+
+3. **A non idempotent write carries a client `request_id` (Idempotency-key).**
+   Retrying the same request_id produces the same result.
+
+4. **`set` is a snapshot barrier.** The current score of a player is:
+   `last set value + sum of increments after it`. Replay never needs to look
+   past the most recent `set`.
+
+## Storage API notes
+
+### Increment endpoint (`POST scores/{id}/increment`) and Idempotency key
 
 Problem: `increment` applies a delta (`+amount`) which is not idempotent.
 If a client retries, we'll end up with a wrong, doubled value. **This makes it barely usable**.
@@ -15,17 +53,17 @@ Using the header is a known implementation, we do the same.
 
 Lua script is used to ensure that an operation is atomic.
 
-_Note: alternative is to remove `/increment` and use set. But that introduces the worse get + set race condition, see info below._
+*Note: alternative is to remove `/increment` and use set. But that introduces the worse get + set race condition, see info below.*
 
-## Set endpoint (`PUT /api/v1/scores/{id}`)
+### Set endpoint (`PUT /api/v1/scores/{id}`)
 
 Potential problem: read-modify-write, a client does `GET` → computes a new value → `PUT`.
 Two clients might read the same value and then set different values, one of them will be lost.
 
 This depends on a client scenario and covers the usage of the **two endpoints together**.
-_Do we need this for a leaderboard?_ Scores are volatile, and usually are incremented (and if the absolute value is set, it does not depend on the previous value). Also if a race occurs, last-write-wins may be fine.
+*Do we need this for a leaderboard?* Scores are volatile, and usually are incremented (and if the absolute value is set, it does not depend on the previous value). Also if a race occurs, last-write-wins may be fine.
 
-### Solution to consider: OCC
+#### Solution to consider: OCC
 
 GET returns a version alongside the value, and have the client send it back on PUT.
 The server applies the write only if the version still matches.
@@ -37,7 +75,7 @@ Implementation notes:
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/If-Match
 
-## Listing endpoint (`GET /api/v1/scores`) and pagination
+### Listing endpoint (`GET /api/v1/scores`) and pagination
 
 The leaderboard is a ZSET which naturally is good for any kind of ranges and hence the pagination. Arguably most important leaderboard functionality - Top N - is just the pagination with starting with the first page.
 
@@ -48,7 +86,7 @@ Two important pagination properties:
 * **Consistency** — under concurrent writes items shift between page reads,
 so some items can be skipped or duplicated.
 
-### Approaches
+#### Approaches
 
 **Offset / limit** — `?limit=10&offset=0`
 
@@ -69,7 +107,7 @@ Pros:
 Cons:
 
 We rely on the score. If the anchor's score moves,
-even an _unchanged_ row can be skipped or duplicated.
+even an *unchanged* row can be skipped or duplicated.
 
 Illustration with page size 2, and elements `A=100 B=90 C=80 D=70`:
 
@@ -86,15 +124,15 @@ Next page op will look something like `ZRANGE key (S_last -inf REV BYSCORE LIMIT
 * Solution: bake a tiebreaker into the score (e.g. `points·BIG + seq`, or an inverse
   timestamp in the fraction), so no two members collide.
 
-Pros: the "correct" cursor — anchors on a _fixed value_ in the total order, so every
-  _stationary_ row is returned exactly once.
+Pros: the "correct" cursor — anchors on a *fixed value* in the total order, so every
+  *stationary* row is returned exactly once.
   
 Cons:
 
 * Complex implementation: changes how score are stored (more code, less transparent db etc)
 * without unique scores the exclusive bound `(` skips tied members
 
-### Decision
+#### Decision
 
 Currenly using the simplest one. The second approach is a bit weird,
 and the third one is complex and the pay off is unclear.

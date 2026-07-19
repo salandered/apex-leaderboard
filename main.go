@@ -14,19 +14,36 @@ import (
 
 const defaultRedisURL = "redis://localhost:6379/0"
 
-func getMux(s storage.Storage) *http.ServeMux {
-	handler := &handlers.HTTPHandler{
-		Storage: s,
-	}
+// storage.ProjectionAdmin is absent - admin ops (replay/verify) are not
+// reachable from these routes; a future admin surface declares it separately.
+type apiStorage interface {
+	storage.PlayerRepo
+	storage.BoardRepo
+	storage.ScoreRepo
+}
+
+func getMux(s apiStorage) *http.ServeMux {
+	players := &handlers.PlayerHandler{Storage: s}
+	boards := &handlers.BoardHandler{Storage: s}
+	scores := &handlers.ScoreHandler{Storage: s}
 
 	mux := http.NewServeMux()
-	// using snaked 'player_id' naming to match the OpenAPI spec
-	mux.HandleFunc("GET /{$}", handler.HandleRoot)
-	mux.HandleFunc("POST /api/v1/scores", handler.HandlePostPlayer)
-	mux.HandleFunc("GET /api/v1/scores/{player_id}", handler.HandleGetScore)
-	mux.HandleFunc("GET /api/v1/scores/{player_id}/history", handler.HandleGetHistory)
-	mux.HandleFunc("PUT /api/v1/scores/{player_id}", handler.HandleSetScore)
-	mux.HandleFunc("POST /api/v1/scores/{player_id}/increment", handler.HandleIncrementScore)
+
+	mux.HandleFunc("GET /{$}", handlers.HandleRoot)
+	// players
+	mux.HandleFunc("POST /api/v1/players", players.HandlePostPlayer)
+	// profile read lives under /scores until the players namespace lands
+	mux.HandleFunc("GET /api/v1/scores/{player_id}", players.HandleGetPlayer)
+	// boards
+	mux.HandleFunc("PUT /api/v1/boards/{board_id}", boards.HandlePutBoard)
+	// mux.HandleFunc get boards
+	// scores
+	mux.HandleFunc("PUT /api/v1/boards/{board_id}/scores/{player_id}", scores.HandlePutScore)
+	mux.HandleFunc("POST /api/v1/boards/{board_id}/scores/{player_id}/increment", scores.HandleIncrementScore)
+	mux.HandleFunc("GET /api/v1/scores/{player_id}/rank", scores.HandleGetRank)
+	mux.HandleFunc("GET /api/v1/scores", scores.HandleListScores)
+	// ledger
+	mux.HandleFunc("GET /api/v1/scores/{player_id}/history", scores.HandleGetHistory)
 
 	return mux
 }
@@ -45,8 +62,6 @@ func startServer(handler http.Handler) {
 }
 
 func main() {
-	// TODO: get range of users (pagination)
-
 	logCloser, err := logging.Setup()
 	if err != nil {
 		// logger isn't ready yet, report to stderr directly
@@ -68,4 +83,6 @@ func main() {
 
 	mux := getMux(store)
 	startServer(loggingMiddleware(mux))
+
+	// TODO bootstrap: add main board
 }

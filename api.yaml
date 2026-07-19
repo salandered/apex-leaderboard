@@ -11,38 +11,107 @@ paths:
         "200":
           description: Successful response
 
-  /api/v1/scores:
+  /api/v1/players:
     post:
-      summary: Accepts player name and score; returns a generated ID.
+      summary: Add a new player profile. Returns a generated ID.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/NewPlayerRequest"
+              $ref: "#/components/schemas/CreatePlayerRequest"
       responses:
         "201":
-          description: Score successfully created
+          description: Player profile created.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/GeneratedIdResponse"
         "400":
-          description: Bad Request (e.g. invalid body)
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/scores:
+    get:
+      summary: Lists players by score, highest first (paginated)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Page size (1..100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          description: Number of higher-ranked rows to skip
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: All ok (empty list if the board is empty or offset is past the end)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListScoresResponse"
+        "400":
+          description: Bad Request (e.g. invalid limit or offset)
           content:
             text/plain:
               schema:
                 type: string
         "500":
-          description: Internal Server Error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/boards/{board_id}:
+    put:
+      summary: Create a new board.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBoardRequest"
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+      responses:
+        "201":
+          description: Board created (no body; the client chose the id).
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   /api/v1/scores/{player_id}:
     get:
       summary: Retrieves a player's info by ID
+      parameters:
+        - $ref: "#/components/parameters/PlayerIdPath"
+      responses:
+        "200":
+          description: All ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerDataResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: ID not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/scores/{player_id}/rank:
+    get:
+      summary: Retrieves a player's standing (rank, score, total)
       parameters:
         - name: player_id
           in: path
@@ -56,25 +125,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PlayerDataResponse"
+                $ref: "#/components/schemas/RankResponse"
         "400":
-          description: Bad Request
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/BadRequest"
         "404":
-          description: ID not found
+          description: ID not found (player not ranked)
           content:
             text/plain:
               schema:
                 type: string
         "500":
-          description: Internal Server Error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/boards/{board_id}/scores/{player_id}:
     put:
       summary: Sets a player's absolute score
       requestBody:
@@ -84,21 +147,13 @@ paths:
             schema:
               $ref: "#/components/schemas/SetScoreRequest"
       parameters:
-        - name: player_id
-          in: path
-          required: true
-          description: The ID of the player entry
-          schema:
-            type: string
+        - $ref: "#/components/parameters/BoardIdPath"
+        - $ref: "#/components/parameters/PlayerIdPath"
       responses:
         "204":
           description: Score updated (no content)
         "400":
-          description: Bad Request
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/BadRequest"
         "404":
           description: ID not found
           content:
@@ -106,13 +161,9 @@ paths:
               schema:
                 type: string
         "500":
-          description: Internal Server Error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/InternalServerError"
 
-  /api/v1/scores/{player_id}/increment:
+  /api/v1/boards/{board_id}/scores/{player_id}/increment:
     post:
       summary: Increments the score (supports negative values for decrementing)
       requestBody:
@@ -122,12 +173,8 @@ paths:
             schema:
               $ref: "#/components/schemas/IncrementScoreRequest"
       parameters:
-        - name: player_id
-          in: path
-          required: true
-          description: The ID of the player entry
-          schema:
-            type: string
+        - $ref: "#/components/parameters/PlayerIdPath"
+        - $ref: "#/components/parameters/BoardIdPath"
       responses:
         "200":
           description: All ok
@@ -136,11 +183,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/IncrementScoreResponse"
         "400":
-          description: Bad Request
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/BadRequest"
         "404":
           description: ID not found
           content:
@@ -148,22 +191,13 @@ paths:
               schema:
                 type: string
         "500":
-          description: Internal Server Error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/InternalServerError"
 
   /api/v1/scores/{player_id}/history:
     get:
       summary: Lists a player's score events (ledger), newest first
       parameters:
-        - name: player_id
-          in: path
-          required: true
-          description: The ID of the player entry
-          schema:
-            type: string
+        - $ref: "#/components/parameters/PlayerIdPath"
         - name: limit
           in: query
           required: false
@@ -179,32 +213,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/HistoryResponse"
         "400":
-          description: Bad Request (e.g. invalid id or limit)
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/BadRequest"
         "500":
-          description: Internal Server Error
-          content:
-            text/plain:
-              schema:
-                type: string
+          $ref: "#/components/responses/InternalServerError"
 
 components:
   schemas:
-    NewPlayerRequest:
+    CreatePlayerRequest:
       type: object
       additionalProperties: false
       required:
         - player_name
-        - player_score
       properties:
         player_name:
           type: string
-        player_score:
-          type: number
-          format: double
+
+    CreateBoardRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - board_name
+      properties:
+        board_name:
+          type: string
 
     IncrementScoreRequest:
       type: object
@@ -232,15 +263,11 @@ components:
       required:
         - player_id
         - player_name
-        - player_score
       properties:
         player_id:
           type: string
         player_name:
           type: string
-        player_score:
-          type: number
-          format: double
 
     GeneratedIdResponse:
       type: object
@@ -271,11 +298,11 @@ components:
         - type
         - amount
         - request_id
-        - at
+        - created_at
       properties:
         id:
           type: string
-          description: Redis stream entry id
+          description: Event ID
         type:
           type: string
           enum:
@@ -287,11 +314,11 @@ components:
           description: Absolute value (set) or delta (increment)
         request_id:
           type: string
-          description: Idempotency key the write carried
-        at:
+          description: Idempotency key the write used
+        created_at:
           type: string
           format: date-time
-          description: Event time (RFC3339), derived from the entry id
+          description: Event time (RFC3339)
 
     HistoryResponse:
       type: object
@@ -306,3 +333,93 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/HistoryEvent"
+
+    ScoreEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - player_id
+        - score
+        - rank
+      properties:
+        player_id:
+          type: string
+        score:
+          type: number
+          format: double
+        rank:
+          type: integer
+          description: 1-based position on the leaderboard (rank 1 = highest score)
+
+    RankResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - player_id
+        - rank
+        - score
+        - total
+      properties:
+        player_id:
+          type: string
+        rank:
+          type: integer
+          description: 1-based position on the leaderboard (rank 1 = highest score)
+        score:
+          type: number
+          format: double
+        total:
+          type: integer
+          description: Total ranked players (the denominator for rank)
+
+    ListScoresResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - scores
+        - limit
+        - offset
+        - total
+      properties:
+        scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreEntry"
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+          description: Total ranked players on the board (ZCARD)
+
+  parameters:
+    PlayerIdPath:
+      name: player_id
+      in: path
+      required: true
+      description: player ID
+      schema:
+        type: string
+    BoardIdPath:
+      name: board_id
+      in: path
+      required: true
+      description: leaderboard ID
+      schema:
+        type: string
+
+  responses:
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        text/plain:
+          schema:
+            type: string
+
+    BadRequest:
+      description: Bad Request
+      content:
+        text/plain:
+          schema:
+            type: string
