@@ -26,31 +26,28 @@ func (id ID) String() string {
 	return string(id)
 }
 
-// Board ids follow the DNS-label shape: lowercase a-z, 0-9 and inner single hyphens
-// (no leading/trailing/consecutive '-'), length 3..32. Ids are immutable forever once
-// written into ledger events, so the rule starts strict — loosening later is
-// backward-compatible, tightening is not. The charset excludes ':' by construction,
-// which keeps Redis key segments unambiguous.
+// Allowed: lowercase a-z, 0-9 and inner single hyphens; len is 3-32
 func (id ID) Validate() error {
+	// TODO: unit (and playerID)
 	if len(id) < 3 || len(id) > 32 {
-		return fmt.Errorf("invalid board id %q: length must be 3..32", string(id))
+		return fmt.Errorf("invalid board id %q: length must be in [3, 32]", string(id))
 	}
 	prevHyphen := false
 	for i := 0; i < len(id); i++ {
-		c := id[i]
+		char := id[i]
 		switch {
-		case c >= 'a' && c <= 'z' || c >= '0' && c <= '9':
+		case char >= 'a' && char <= 'z' || char >= '0' && char <= '9':
 			prevHyphen = false
-		case c == '-':
+		case char == '-':
 			if i == 0 || i == len(id)-1 {
-				return fmt.Errorf("invalid board id %q: must not start or end with '-'", string(id))
+				return fmt.Errorf("invalid board id '%q': must not start or end with '-'", string(id))
 			}
 			if prevHyphen {
-				return fmt.Errorf("invalid board id %q: consecutive '-' are not allowed", string(id))
+				return fmt.Errorf("invalid board id '%q': consecutive '-' are not allowed", string(id))
 			}
 			prevHyphen = true
 		default:
-			return fmt.Errorf("invalid board id %q: only a-z, 0-9 and '-' are allowed", string(id))
+			return fmt.Errorf("invalid board id '%q': only a-z, 0-9 and '-' are allowed", string(id))
 		}
 	}
 	return nil

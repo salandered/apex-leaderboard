@@ -13,7 +13,7 @@ func TestIDValidate(t *testing.T) {
 		id      string
 		wantErr bool
 	}{
-		{name: "simple slug", id: "main"},
+		{name: "simple id", id: "main"},
 		{name: "multi-word with hyphens", id: "summer-contest-2026"},
 		{name: "digit start", id: "2026-season"},
 		{name: "all digits", id: "2026"},

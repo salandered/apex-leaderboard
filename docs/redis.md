@@ -61,3 +61,5 @@ Which reads produce `redis.Nil` vs an empty value (missing key/member):
 ## Local dev
 
 `docker compose exec redis redis-cli FLUSHALL`
+
+`XRANGE ledger:events - +`

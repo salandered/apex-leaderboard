@@ -65,14 +65,28 @@ func parseIntQuery(req *http.Request, name string, def, min, max int64) (int64, 
 	return v, nil
 }
 
+// boardIdFromPath reads {board_id}; the legacy alias routes have no board segment,
+// which means the main board.
+func boardIdFromPath(req *http.Request) (board.ID, error) {
+	raw := req.PathValue(boardIDPathValue)
+	if raw == "" {
+		return board.MainId, nil
+	}
+	boardId := board.ID(raw)
+	if err := boardId.Validate(); err != nil {
+		return "", err
+	}
+	return boardId, nil
+}
+
 func parsePlayerBoardPathValues(w http.ResponseWriter, req *http.Request) (player.ID, board.ID, error) {
 	playerId := player.ID(req.PathValue(playerIDPathValue))
 	if err := playerId.Validate(); err != nil {
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return "", "", err
 	}
-	boardId := board.ID(req.PathValue(boardIDPathValue))
-	if err := boardId.Validate(); err != nil {
+	boardId, err := boardIdFromPath(req)
+	if err != nil {
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return "", "", err
 	}
@@ -114,6 +128,14 @@ func writeErrorToResponse(w http.ResponseWriter, err error, statusCode int) {
 func writeStorageError(w http.ResponseWriter, err error) {
 	if errors.Is(err, storage.ErrNotFound) {
 		writeErrorToResponse(w, fmt.Errorf("not found"), http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, storage.ErrBoardNotFound) {
+		writeErrorToResponse(w, fmt.Errorf("board not found"), http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, storage.ErrBoardExists) {
+		writeErrorToResponse(w, fmt.Errorf("board already exists"), http.StatusConflict)
 		return
 	}
 	slog.Error("internal storage error", "error", err)

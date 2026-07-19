@@ -6,19 +6,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/player"
 )
-
-const (
-	mockedTime = "2026-01-17T12:30:00.000Z"
-)
-
-func getMockedTime(s *StorageSuite) time.Time {
-	time, err := apextime.ApexParse(mockedTime)
-	s.Require().NoError(err)
-	return time
-}
 
 func (s *StorageSuite) TestCreatePlayer() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

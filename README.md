@@ -13,15 +13,19 @@ docker compose up --build      # app on :8090, Redis on :6379
 Make your first requests against `:8090`:
 
 ```bash
-# Create a player with an initial score
-curl -X POST http://localhost:8090/api/v1/scores \
+# Create a player profile; returns the generated id
+curl -X POST http://localhost:8090/api/v1/players \
   -H "Content-Type: application/json" \
-  -d '{"player_name":"alice","player_score":42.5}'
+  -d '{"player_name":"alice"}'
 # {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
 
-# Fetch that player back by its id
-curl http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de
-# {"player_id":"7dcbeb46-...","player_name":"alice","player_score":42.5}
+# Give that player a score on the default "main" board
+curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
+  -H "Content-Type: application/json" \
+  -d '{"player_score":42.5}'
+
+# See the leaderboard
+curl "http://localhost:8090/api/v1/boards/main/scores"
 ```
 
 ## 🛠️ Development
@@ -78,35 +82,47 @@ will be logging messages like `05:23:40 INFO starting server addr=:8090` into fi
 With the server running on `:8090`:
 
 ```bash
-# Create a player; returns the generated id
-curl -X POST http://localhost:8090/api/v1/scores \
+# Create a player profile; returns the generated id
+curl -X POST http://localhost:8090/api/v1/players \
   -H "Content-Type: application/json" \
-  -d '{"player_name":"alice","player_score":42.5}'
+  -d '{"player_name":"alice"}'
 # {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
 
 # Fetch a player by id
-curl http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de
-# {"player_id":"7dcbeb46-...","player_name":"alice","player_score":42.5}
+curl http://localhost:8090/api/v1/players/7dcbeb46-e1e1-492d-a32a-c593b13428de
+# {"player_id":"7dcbeb46-...","player_name":"alice"}
 
-# Increment player's score
-curl -X POST http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
+# Create a board (the id is client-chosen; the "main" board always exists)
+curl -X PUT http://localhost:8090/api/v1/boards/summer-contest \
   -H "Content-Type: application/json" \
-  -d '{"amount":5}'
-# {"score":47.5}
+  -d '{"board_name":"Summer Contest"}'
 
-# Set an absolute score
-curl -X PUT http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
+# List boards (creation order)
+curl http://localhost:8090/api/v1/boards
+# {"boards":[{"board_id":"main",...},{"board_id":"summer-contest",...}]}
+
+# Set an absolute score on a board (a player's first write enrolls them there)
+curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
   -H "Content-Type: application/json" \
   -d '{"player_score":100}'
 
-# List the leaderboard, highest first (top 10 by default; page with ?limit= & ?offset=)
-curl "http://localhost:8090/api/v1/scores?limit=10&offset=0"
-# {"scores":[{"player_id":"7dcbeb46-...","score":100,"rank":1}],"limit":10,"offset":0,"total":1}
+# Increment a player's score on a board
+curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
+  -H "Content-Type: application/json" \
+  -d '{"amount":5}'
+# {"score":105}
 
-# A single player's standing (rank is 1-based; total is the board size)
-curl http://localhost:8090/api/v1/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/rank
-# {"player_id":"7dcbeb46-...","rank":1,"score":100,"total":1}
+# List a board's leaderboard, highest first (top 10 by default; page with ?limit= & ?offset=)
+curl "http://localhost:8090/api/v1/boards/main/scores?limit=10&offset=0"
+# {"scores":[{"player_id":"7dcbeb46-...","score":105,"rank":1}],"limit":10,"offset":0,"total":1}
+
+# A single player's standing on a board (rank is 1-based; total is the board size)
+curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de
+# {"player_id":"7dcbeb46-...","rank":1,"score":105,"total":1}
 ```
+
+Legacy single-board routes (`GET /api/v1/scores*`) remain as aliases for the `main` board;
+see [api.yaml](api.yaml).
 
 ### Run Tests
 

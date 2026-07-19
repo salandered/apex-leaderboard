@@ -112,8 +112,71 @@ func (s *APISuite) TestIncrementScore() {
 	s.Require().Equal(12.0, result.Score)
 }
 
+func (s *APISuite) TestPutBoard() {
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
+		BoardName: "Summer Contest",
+	})
+	s.Require().Equal(http.StatusCreated, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutBoardInvalidId() {
+	resp := s.putJSON("/api/v1/boards/Bad_Id", handlers.PutBoardReq{
+		BoardName: "nope",
+	})
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestGetBoard() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId)
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.BoardResp
+	s.decodeJSON(resp, &result)
+	s.Require().Equal(MockedBoardId, result.BoardId)
+	s.Require().NotEmpty(result.BoardName)
+	s.Require().NotEmpty(result.CreatedAt)
+}
+
+func (s *APISuite) TestListBoards() {
+	resp := s.get("/api/v1/boards")
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.ListBoardsResp
+	s.decodeJSON(resp, &result)
+	s.Require().Len(result.Boards, 2)
+	s.Require().Equal("main", result.Boards[0].BoardId) // creation order
+}
+
+func (s *APISuite) TestListScoresOnBoard() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores?limit=10")
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.ListScoresResp
+	s.decodeJSON(resp, &result)
+	s.Require().Len(result.Scores, 2)
+}
+
+func (s *APISuite) TestGetStandingOnBoard() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/" + MockedPlayerId)
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.RankResp
+	s.decodeJSON(resp, &result)
+	s.Require().Equal(MockedPlayerId, string(result.PlayerId))
+	s.Require().Equal(int64(3), result.Rank)
+}
+
+func (s *APISuite) TestGetHistoryOnBoard() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/" + MockedPlayerId + "/history")
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.HistoryResp
+	s.decodeJSON(resp, &result)
+	s.Require().Len(result.Events, 2)
+}
+
 func (s *APISuite) TestGetScore() {
-	resp := s.get("/api/v1/scores/" + MockedPlayerId)
+	resp := s.get("/api/v1/players/" + MockedPlayerId)
 	s.Require().Equal(http.StatusOK, resp.StatusCode)
 
 	var result handlers.GetPlayerResp
@@ -122,7 +185,7 @@ func (s *APISuite) TestGetScore() {
 }
 
 func (s *APISuite) TestGetScoreInvalidId() {
-	resp := s.get("/api/v1/scores/not-a-uuid")
+	resp := s.get("/api/v1/players/not-a-uuid")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -293,6 +356,21 @@ func (ms *mockStorage) CreateBoard(
 ) error {
 	fmt.Printf("creating board %v to mocked storage", board)
 	return nil
+}
+
+func (ms *mockStorage) GetBoard(c context.Context, boardId board.ID) (*board.Board, error) {
+	return &board.Board{
+		BoardId:   boardId,
+		BoardName: "Mocked Board",
+		CreatedAt: time.UnixMilli(100),
+	}, nil
+}
+
+func (ms *mockStorage) ListBoards(c context.Context) ([]board.Board, error) {
+	return []board.Board{
+		{BoardId: board.MainId, BoardName: "main", CreatedAt: time.UnixMilli(100)},
+		{BoardId: "summer-contest", BoardName: "Summer Contest", CreatedAt: time.UnixMilli(200)},
+	}, nil
 }
 
 func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, boardId board.ID, amount float64, requestID string) (float64, error) {

@@ -2,8 +2,10 @@ package storage
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/board"
@@ -11,28 +13,49 @@ import (
 	"github.com/salandered/apex/player"
 )
 
-// Validates existence first and return ErrNotFound without appending.
+const (
+	ledgerKey      = "ledger:events"      // STREAM: the ledger
+	idempotencyKey = "ledger:idempotency" // HASH {board_id}:{player_id}:{request_id} -> stream id: replays the original result on retry
+)
+
+// A player's current standing in the projection.
+// Rank is 1-based (rank 1 means highest score).
+// Formerly known as RankedScore.
+type Standing struct {
+	// consider moving out of storage
+	PlayerID string
+	Score    float64
+	Rank     int64
+}
+
+//go:embed scripts/apply_score_event.lua
+var applyScoreLua string
+
+var applyScoreScript = redis.NewScript(applyScoreLua)
+
+// per-board ZSET projection
+func leaderboardKey(id board.ID) string {
+	return "leaderboard:" + string(id)
+}
+
+// Sets an absolute score.
+// An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
 func (rs *redisStorage) SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score float64, requestID string) error {
-	if err := rs.requireExists(ctx, playerId, boardId); err != nil {
-		return err
-	}
-	_, err := rs.applyEvent(ctx, ledger.EventSet, playerId, score, requestID)
+	_, err := rs.applyEvent(ctx, ledger.EventSet, playerId, boardId, score, requestID)
 	return err
 }
 
-// Validates existence first and return ErrNotFound without appending.
+// Applies a delta to score on the board (a player with no entry starts from 0).
+// An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
 func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount float64, requestID string) (float64, error) {
-	if err := rs.requireExists(ctx, playerId, boardId); err != nil {
-		return 0, err
-	}
-	return rs.applyEvent(ctx, ledger.EventIncrement, playerId, amount, requestID)
+	return rs.applyEvent(ctx, ledger.EventIncrement, playerId, boardId, amount, requestID)
 }
 
 // Commands are pipelined into one round trip (best-effort, not atomic: consider using MULT).
 func (rs *redisStorage) GetStanding(ctx context.Context, playerId player.ID, boardId board.ID) (Standing, int64, error) {
 	pipe := rs.client.Pipeline()
-	rankCmd := pipe.ZRevRankWithScore(ctx, leaderboardKey, string(playerId)) // O(log(N))
-	cardCmd := pipe.ZCard(ctx, leaderboardKey)                               // O(1)
+	rankCmd := pipe.ZRevRankWithScore(ctx, leaderboardKey(boardId), string(playerId)) // O(log(N))
+	cardCmd := pipe.ZCard(ctx, leaderboardKey(boardId))                               // O(1)
 
 	_, err := pipe.Exec(ctx)
 	if err != nil && !errors.Is(err, redis.Nil) {
@@ -61,13 +84,14 @@ func (rs *redisStorage) GetStanding(ctx context.Context, playerId player.ID, boa
 }
 
 // An offset past the end yields an empty (non-nil) slice; total is still the full board size.
+// An unknown board reads as an empty board, not an error currently.
 func (rs *redisStorage) ListStandings(
 	ctx context.Context, boardId board.ID, limit, offset int64,
 ) ([]Standing, int64, error) {
 	// Guard limit: ZREVRANGE with stop == -1 wraps to the last element and would return the
 	// whole board. Callers validate limit >= 1; this is defence in depth.
 	if limit <= 0 {
-		total, err := rs.client.ZCard(ctx, leaderboardKey).Result()
+		total, err := rs.client.ZCard(ctx, leaderboardKey(boardId)).Result()
 		if err != nil {
 			return nil, 0, fmt.Errorf("storage list scores: count: %w", err)
 		}
@@ -77,8 +101,8 @@ func (rs *redisStorage) ListStandings(
 	// rank is 1-based and continues across pages: the row at result index i has rank offset+i+1.
 	stop := offset + limit - 1
 	pipe := rs.client.Pipeline()
-	cardCmd := pipe.ZCard(ctx, leaderboardKey)                              // O(1)
-	rangeCmd := pipe.ZRevRangeWithScores(ctx, leaderboardKey, offset, stop) // O(log N + page)
+	cardCmd := pipe.ZCard(ctx, leaderboardKey(boardId))                              // O(1)
+	rangeCmd := pipe.ZRevRangeWithScores(ctx, leaderboardKey(boardId), offset, stop) // O(log N + page)
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {
@@ -86,7 +110,7 @@ func (rs *redisStorage) ListStandings(
 	}
 
 	// err checks here are redundant (after a strict Exec check)
-	// , kept for uniformity — see docs/redis.md
+	// kept for uniformity — see docs/redis.md
 	total, err := cardCmd.Result()
 	if err != nil {
 		return nil, 0, fmt.Errorf("storage list scores: count: %w", err)
@@ -120,7 +144,11 @@ func (rs *redisStorage) PlayerHistory(
 		if getStreamEntryValue(entry, entryFieldPlayerID) != string(playerId) {
 			continue
 		}
-		events = append(events, entryToEvent(entry))
+		event := entryToEvent(entry)
+		if event.BoardID != string(boardId) {
+			continue
+		}
+		events = append(events, event)
 		if limit > 0 && int64(len(events)) >= limit {
 			break
 		}
@@ -128,18 +156,46 @@ func (rs *redisStorage) PlayerHistory(
 	return events, nil
 }
 
-// returns error on unknown board or player; note that a player without a score on the board is fine
-// TODO: only the seeded main board exists until board CRUD lands.
-func (rs *redisStorage) requireExists(ctx context.Context, playerId player.ID, boardId board.ID) error {
-	if boardId != board.MainId {
-		return ErrNotFound
-	}
-	n, err := rs.client.Exists(ctx, playerHashKey(playerId)).Result() // O(number of key)
+// Script result codes. Must match the Lua write script.
+const (
+	applyCodeApplied        = 1  // event appended, projection updated
+	applyCodeDeduped        = 0  // request_id seen before: original result returned
+	applyCodePlayerNotFound = -1 // player hash missing
+	applyCodeBoardNotFound  = -2 // board hash missing
+	// -3 reserved for "board closed" when the lifecycle feature lands
+)
+
+// Runs the write script and returns the player's score on the board.
+// A rejected write appends nothing and maps to an error.
+func (rs *redisStorage) applyEvent(
+	ctx context.Context,
+	etype ledger.EventType,
+	playerId player.ID,
+	boardId board.ID,
+	amount float64,
+	requestID string,
+) (float64, error) {
+	result, err := applyScoreScript.Run(ctx, rs.client,
+		[]string{leaderboardKey(boardId), ledgerKey, idempotencyKey, playerHashKey(playerId), boardHashKey(boardId)},
+		string(etype), string(playerId), amount, requestID, string(boardId),
+	).Slice()
 	if err != nil {
-		return fmt.Errorf("storage check player exists: %w", err)
+		return 0, fmt.Errorf("storage apply %s event: %w", etype, err)
 	}
-	if n == 0 {
-		return ErrNotFound
+	// result = { code(int64), new_score(string), stream_id(string) }
+	switch code := result[0].(int64); code {
+	case applyCodeApplied, applyCodeDeduped:
+		// both ok
+	case applyCodePlayerNotFound:
+		return 0, ErrNotFound
+	case applyCodeBoardNotFound:
+		return 0, ErrBoardNotFound
+	default:
+		return 0, fmt.Errorf("storage apply %s event: unexpected script code %d", etype, code)
 	}
-	return nil
+	score, err := strconv.ParseFloat(result[1].(string), 64)
+	if err != nil {
+		return 0, fmt.Errorf("storage apply %s event: parse score %q: %w", etype, result[1], err)
+	}
+	return score, nil
 }

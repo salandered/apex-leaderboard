@@ -14,11 +14,14 @@ type PlayerRepo interface {
 }
 
 type BoardRepo interface {
+	// Create-or-conflict: an existing board id yields ErrBoardExists (never overwrites).
 	CreateBoard(ctx context.Context, board *board.Board, requestID string) error
+	GetBoard(ctx context.Context, boardId board.ID) (*board.Board, error)
+	// Boards in creation order.
+	ListBoards(ctx context.Context) ([]board.Board, error)
 }
 
 // Score reads and writes exposed through the API.
-// Standings and history are both derived views of the ledger, so they belong together here.
 type ScoreRepo interface {
 	IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount float64, requestID string) (float64, error)
 	SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score float64, requestID string) error

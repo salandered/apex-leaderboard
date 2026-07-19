@@ -56,7 +56,7 @@ func (s *StorageSuite) TestSetScore() {
 	// then
 	s.Require().NoError(err)
 
-	score, err := s.rawClient.ZScore(ctx, leaderboardKey, string(playerId)).Result()
+	score, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(100.0, score)
 
@@ -112,14 +112,13 @@ func (s *StorageSuite) TestScoreOperationSequence() {
 	incrementScore(s, playerId, 10, "r5")
 	incrementScore(s, playerId, -4, "r6")
 
-	projected, err := s.rawClient.ZScore(ctx, leaderboardKey, string(playerId)).Result()
+	projected, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(56.0, projected)
 	s.requireStreamLen(ctx, 6)
 }
 
-// Until board CRUD lands only the main board exists: writes naming any other board
-// are rejected without appending an event (rule 2).
+// Writes naming an unregistered board are rejected without appending an event (rule 2).
 func (s *StorageSuite) TestScoreWriteUnknownBoardReturnsNotFound() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -127,10 +126,10 @@ func (s *StorageSuite) TestScoreWriteUnknownBoardReturnsNotFound() {
 	playerId := createPlayer(s, "bob")
 
 	err := s.storage.SetScore(ctx, playerId, board.ID("other"), 100.0, "r-set")
-	s.Require().ErrorIs(err, ErrNotFound)
+	s.Require().ErrorIs(err, ErrBoardNotFound)
 
 	_, err = s.storage.IncrementScore(ctx, playerId, board.ID("other"), 5.0, "r-inc")
-	s.Require().ErrorIs(err, ErrNotFound)
+	s.Require().ErrorIs(err, ErrBoardNotFound)
 
 	s.requireStreamLen(ctx, 0)
 }

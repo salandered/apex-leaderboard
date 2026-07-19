@@ -3,8 +3,6 @@
 Apex is a leaderboard backend: a Go HTTP service with Redis as the only datastore. Clients manage
 player profiles and boards, write scores, and read rankings through a JSON API described by OpenAPI spec. This document explains how the system is put together and why.
 
-<!-- diagram: system overview (API -> storage -> Redis containers) -->
-
 ## The core idea: event sourcing
 
 Every score change is recorded as an **event** in an append-only **ledger** (a Redis Stream).
@@ -34,7 +32,7 @@ There is no  "join a board" operation - a player's first score write on a board
 enrolls them there.
 
 **Boards.** Named score containers. Ids are short, client-chosen slugs (`summer-contest2026`)
-rather than UUIDs. There are readable and appear in URLs. For simplicity the board id is **immutable forever** (ids are written into ledger events), however, a mutable display name lives
+rather than UUIDs. They are readable and appear in URLs. For simplicity the board id is **immutable forever** (ids are written into ledger events), however, a mutable display name lives
 alongside. A registry keeps the list of boards in creation order. The default board `main` is
 created at startup.
 Boards currently cannot be closed or deleted; a lifecycle (open/closed status) is a planned extension.

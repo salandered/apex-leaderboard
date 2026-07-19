@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -11,50 +10,26 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/ledger"
-	"github.com/salandered/apex/player"
 )
 
 var (
-	StorageError    = errors.New("storage")
-	ErrNotFound     = fmt.Errorf("%w.not found", StorageError)
-	ErrInconsistent = fmt.Errorf("%w.inconsistent", StorageError)
+	StorageError     = errors.New("storage")
+	ErrNotFound      = fmt.Errorf("%w.not found", StorageError)
+	ErrInconsistent  = fmt.Errorf("%w.inconsistent", StorageError)
+	ErrBoardExists   = fmt.Errorf("%w.board exists", StorageError)
+	ErrBoardNotFound = fmt.Errorf("%w.board not found", StorageError)
 )
-
-const (
-	leaderboardKey = "leaderboard"            // ZSET projection: the ranking index
-	verifyKey      = "leaderboard:tmp:verify" // ZSET scratch: transient rebuild for VerifyProjection
-	ledgerKey      = "score:events"           // STREAM: the ledger, source of truth
-	appliedKey     = "score:applied"          // HASH request_id -> stream id: idempotency table
-
-)
-
-// A player's current standing in the projection.
-// Rank is 1-based (rank 1 means highest score).
-// Formerly known as RankedScore.
-type Standing struct {
-	// consider moving out of storage
-	PlayerID string
-	Score    float64
-	Rank     int64
-}
-
-// The write path for score mutations. Every increment/set goes through this script so the
-// projection (leaderboard) and the ledger (score:events) move together atomically.
-//
-//go:embed scripts/apply_score_event.lua
-var applyScoreLua string
-
-var applyScoreScript = redis.NewScript(applyScoreLua)
 
 type redisStorage struct {
 	client *redis.Client
 }
 
-// Field keys stored in each score:events entry.
+// Field keys stored in each ledger:events entry.
 // Must match the Lua write script.
 const (
 	entryFieldType      = "type"
 	entryFieldPlayerID  = "player_id"
+	entryFieldBoardID   = "board_id"
 	entryFieldAmount    = "amount"
 	entryFieldRequestID = "request_id"
 )
@@ -66,6 +41,7 @@ func entryToEvent(entry redis.XMessage) ledger.Event {
 		ID:        entry.ID,
 		Type:      ledger.EventType(getStreamEntryValue(entry, entryFieldType)),
 		PlayerID:  getStreamEntryValue(entry, entryFieldPlayerID),
+		BoardID:   getStreamEntryValue(entry, entryFieldBoardID),
 		Amount:    amount,
 		RequestID: getStreamEntryValue(entry, entryFieldRequestID),
 		CreatedAt: eventTime(entry.ID),
@@ -88,22 +64,4 @@ func eventTime(id string) time.Time {
 		return time.Time{}
 	}
 	return t
-}
-
-// Runs the write script and returns the player's score.
-// Callers do request validation first; by here the write is accepted.
-func (rs *redisStorage) applyEvent(ctx context.Context, etype ledger.EventType, playerId player.ID, amount float64, requestID string) (float64, error) {
-	res, err := applyScoreScript.Run(ctx, rs.client,
-		[]string{leaderboardKey, ledgerKey, appliedKey},
-		string(etype), string(playerId), amount, requestID,
-	).Slice()
-	if err != nil {
-		return 0, fmt.Errorf("storage apply %s event: %w", etype, err)
-	}
-	// res = { applied(int64), new_score(string), stream_id(string) }
-	score, err := strconv.ParseFloat(res[1].(string), 64)
-	if err != nil {
-		return 0, fmt.Errorf("storage apply %s event: parse score %q: %w", etype, res[1], err)
-	}
-	return score, nil
 }

@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/salandered/apex/apextime"
+	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/handlers"
 	"github.com/salandered/apex/logging"
 	"github.com/salandered/apex/storage"
@@ -32,20 +36,39 @@ func getMux(s apiStorage) *http.ServeMux {
 	mux.HandleFunc("GET /{$}", handlers.HandleRoot)
 	// players
 	mux.HandleFunc("POST /api/v1/players", players.HandlePostPlayer)
-	// profile read lives under /scores until the players namespace lands
-	mux.HandleFunc("GET /api/v1/scores/{player_id}", players.HandleGetPlayer)
+	mux.HandleFunc("GET /api/v1/players/{player_id}", players.HandleGetPlayer)
 	// boards
 	mux.HandleFunc("PUT /api/v1/boards/{board_id}", boards.HandlePutBoard)
-	// mux.HandleFunc get boards
-	// scores
+	mux.HandleFunc("GET /api/v1/boards", boards.HandleListBoards)
+	mux.HandleFunc("GET /api/v1/boards/{board_id}", boards.HandleGetBoard)
+	// scores + ledger, board-scoped
 	mux.HandleFunc("PUT /api/v1/boards/{board_id}/scores/{player_id}", scores.HandlePutScore)
 	mux.HandleFunc("POST /api/v1/boards/{board_id}/scores/{player_id}/increment", scores.HandleIncrementScore)
-	mux.HandleFunc("GET /api/v1/scores/{player_id}/rank", scores.HandleGetRank)
+	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores", scores.HandleListScores)
+	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}", scores.HandleGetRank)
+	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}/history", scores.HandleGetHistory)
+	// legacy aliases for the main board (documented as such in api.yaml)
 	mux.HandleFunc("GET /api/v1/scores", scores.HandleListScores)
-	// ledger
+	mux.HandleFunc("GET /api/v1/scores/{player_id}/rank", scores.HandleGetRank)
 	mux.HandleFunc("GET /api/v1/scores/{player_id}/history", scores.HandleGetHistory)
 
 	return mux
+}
+
+// creates the default board if missing
+func createMainBoard(s storage.Storage) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := s.CreateBoard(ctx, &board.Board{
+		BoardId:   board.MainId,
+		BoardName: "main",
+		CreatedAt: apextime.Now(),
+	}, "seed-main")
+	if errors.Is(err, storage.ErrBoardExists) {
+		return nil
+	}
+	return err
 }
 
 func startServer(handler http.Handler) {
@@ -81,8 +104,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// the default board must exist before the server accepts writes
+	if err := createMainBoard(store); err != nil {
+		slog.Error("seeding main board failed", "error", err)
+		os.Exit(1)
+	}
+
 	mux := getMux(store)
 	startServer(loggingMiddleware(mux))
-
-	// TODO bootstrap: add main board
 }

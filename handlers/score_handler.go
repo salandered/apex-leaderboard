@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
 )
@@ -111,13 +110,12 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 
 // Returns one player's standing on the leaderboard (rank, score, total).
 func (h *ScoreHandler) HandleGetRank(w http.ResponseWriter, req *http.Request) {
-	playerId := player.ID(req.PathValue(playerIDPathValue))
-	if err := playerId.Validate(); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+	playerId, boardId, err := parsePlayerBoardPathValues(w, req)
+	if err != nil {
 		return
 	}
 
-	standing, total, err := h.Storage.GetStanding(req.Context(), playerId, board.MainId)
+	standing, total, err := h.Storage.GetStanding(req.Context(), playerId, boardId)
 	if err != nil {
 		writeStorageError(w, err)
 		return
@@ -143,8 +141,13 @@ func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}
+	boardId, err := boardIdFromPath(req)
+	if err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
 
-	scores, total, err := h.Storage.ListStandings(req.Context(), board.MainId, limit, offset)
+	scores, total, err := h.Storage.ListStandings(req.Context(), boardId, limit, offset)
 	if err != nil {
 		writeStorageError(w, err)
 		return
@@ -168,9 +171,8 @@ func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request
 }
 
 func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request) {
-	playerId := player.ID(req.PathValue(playerIDPathValue))
-	if err := playerId.Validate(); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+	playerId, boardId, err := parsePlayerBoardPathValues(w, req)
+	if err != nil {
 		return
 	}
 
@@ -180,7 +182,7 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	events, err := h.Storage.PlayerHistory(req.Context(), playerId, board.MainId, limit)
+	events, err := h.Storage.PlayerHistory(req.Context(), playerId, boardId, limit)
 	if err != nil {
 		writeStorageError(w, err)
 		return

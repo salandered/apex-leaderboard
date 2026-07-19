@@ -42,7 +42,7 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 		&player.Profile{
 			PlayerId:   player_id,
 			PlayerName: data.PlayerName,
-			CreatedAt:  apextime.ApexNow(),
+			CreatedAt:  apextime.Now(),
 		},
 		newRequestID())
 
@@ -56,7 +56,6 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 }
 
 // HandleGetPlayer returns a player's profile.
-// Served under /api/v1/scores/{player_id} until a players namespace lands.
 func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request) {
 	playerId := player.ID(req.PathValue(playerIDPathValue))
 	if err := playerId.Validate(); err != nil {

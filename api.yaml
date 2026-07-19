@@ -32,9 +32,24 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/boards:
+    get:
+      summary: Lists all boards, in creation order
+      responses:
+        "200":
+          description: All ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListBoardsResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/scores:
     get:
-      summary: Lists players by score, highest first (paginated)
+      summary: >
+        Lists players by score, highest first (paginated).
+        Legacy alias for /api/v1/boards/main/scores.
       parameters:
         - name: limit
           in: query
@@ -69,7 +84,7 @@ paths:
 
   /api/v1/boards/{board_id}:
     put:
-      summary: Create a new board.
+      summary: Create a new board. The id is client-chosen and immutable.
       requestBody:
         required: true
         content:
@@ -80,13 +95,72 @@ paths:
         - $ref: "#/components/parameters/BoardIdPath"
       responses:
         "201":
-          description: Board created (no body; the client chose the id).
+          description: Board created
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: A board with this id already exists
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    get:
+      summary: Get a board info by ID
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+      responses:
+        "200":
+          description: All ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: ID not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/boards/{board_id}/scores:
+    get:
+      summary: Lists players by score on a board, highest first
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+        - name: limit
+          in: query
+          required: false
+          description: Page size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          description: Number of higher-ranked rows to skip
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: All ok (an unknown or empty board reads as an empty list)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListScoresResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /api/v1/scores/{player_id}:
+  /api/v1/players/{player_id}:
     get:
       summary: Retrieves a player's info by ID
       parameters:
@@ -109,9 +183,36 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/boards/{board_id}/scores/{player_id}/history:
+    get:
+      summary: Lists a player's score events on a board (ledger), newest first
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+        - $ref: "#/components/parameters/PlayerIdPath"
+        - name: limit
+          in: query
+          required: false
+          description: Max number of events to return (positive integer)
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: All ok (empty list if the player has no events on the board)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/scores/{player_id}/rank:
     get:
-      summary: Retrieves a player's standing (rank, score, total)
+      summary: >
+        Retrieves a player's standing (rank, score, total).
+        Legacy alias for /api/v1/boards/main/scores/{player_id}.
       parameters:
         - name: player_id
           in: path
@@ -138,6 +239,28 @@ paths:
           $ref: "#/components/responses/InternalServerError"
 
   /api/v1/boards/{board_id}/scores/{player_id}:
+    get:
+      summary: Retrieves a player's standing on a board (rank, score, total)
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
+        - $ref: "#/components/parameters/PlayerIdPath"
+      responses:
+        "200":
+          description: All ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: ID not found (player not ranked on this board)
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     put:
       summary: Sets a player's absolute score
       requestBody:
@@ -195,7 +318,9 @@ paths:
 
   /api/v1/scores/{player_id}/history:
     get:
-      summary: Lists a player's score events (ledger), newest first
+      summary: >
+        Lists a player's score events (ledger), newest first.
+        Legacy alias for /api/v1/boards/main/scores/{player_id}/history.
       parameters:
         - $ref: "#/components/parameters/PlayerIdPath"
         - name: limit
@@ -236,6 +361,36 @@ components:
       properties:
         board_name:
           type: string
+
+    BoardResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - board_id
+        - board_name
+        - created_at
+      properties:
+        board_id:
+          type: string
+          description: Client-chosen immutable id (a readable slug, not a UUID)
+        board_name:
+          type: string
+          description: Mutable display name
+        created_at:
+          type: string
+          format: date-time
+
+    ListBoardsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - boards
+      properties:
+        boards:
+          type: array
+          description: All boards, in creation order
+          items:
+            $ref: "#/components/schemas/BoardResponse"
 
     IncrementScoreRequest:
       type: object

@@ -13,7 +13,6 @@ const (
 	profileCreatedAtField = "created_at"
 )
 
-// builds the profile Hash key
 func playerHashKey(id player.ID) string {
 	return "player:" + string(id)
 }
@@ -27,7 +26,7 @@ func (rs *redisStorage) CreatePlayerProfile(
 		ctx,
 		playerHashKey(profile.PlayerId),
 		profileNameField, profile.PlayerName,
-		profileCreatedAtField, apextime.ApexFormat(profile.CreatedAt),
+		profileCreatedAtField, apextime.Format(profile.CreatedAt),
 	).Err()
 	if err != nil {
 		return fmt.Errorf("storage put data: %w", err)
@@ -52,7 +51,7 @@ func (rs *redisStorage) GetPlayerProfile(ctx context.Context, playerId player.ID
 	if !ok {
 		return nil, fmt.Errorf("%w: player '%s' hash missing field '%s'", ErrInconsistent, playerId, profileCreatedAtField)
 	}
-	date, err := apextime.ApexParse(rawDate)
+	date, err := apextime.Parse(rawDate)
 	if err != nil {
 		return nil, fmt.Errorf("%w: player '%s' field '%s': parse %q: %v", StorageError, playerId, profileCreatedAtField, rawDate, err)
 	}

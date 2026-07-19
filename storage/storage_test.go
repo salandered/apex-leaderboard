@@ -13,6 +13,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
+	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/ledger"
 	"github.com/salandered/apex/player"
@@ -54,6 +55,12 @@ func (s *StorageSuite) SetupTest() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s.Require().NoError(s.rawClient.FlushDB(ctx).Err())
+	// every test starts from the deployed baseline: the main board seeded (as main.go does)
+	s.Require().NoError(s.storage.CreateBoard(ctx, &board.Board{
+		BoardId:   board.MainId,
+		BoardName: "main",
+		CreatedAt: getMockedTime(s),
+	}, "seed"))
 }
 
 func (s *StorageSuite) TestHistory() {
@@ -72,16 +79,16 @@ func (s *StorageSuite) TestHistory() {
 	bob := player.GenerateID()
 	s.Require().NoError(s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: bob, PlayerName: "bob"}, "b1"))
 
-	// all of alice's events, newest first
+	// all alice events, newest first
 	all, err := s.storage.PlayerHistory(ctx, aliceId, board.MainId, 0)
 	s.Require().NoError(err)
 	s.Require().Len(all, 3)
 	s.Require().Equal(ledger.EventIncrement, all[0].Type)
 	s.Require().Equal(10.0, all[0].Amount)
 	s.Require().Equal("a3", all[0].RequestID)
-	s.Require().Equal(ledger.EventSet, all[2].Type) // the seeding set event is oldest
+	s.Require().Equal(ledger.EventSet, all[2].Type)
 	s.Require().Equal(aliceId.String(), all[0].PlayerID)
-	s.Require().False(all[0].CreatedAt.IsZero()) // timestamp derived from the stream id
+	s.Require().False(all[0].CreatedAt.IsZero())
 
 	// limit caps the result
 	limited, err := s.storage.PlayerHistory(ctx, aliceId, board.MainId, 2)
@@ -99,7 +106,6 @@ func (s *StorageSuite) TestListScores() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// three players with distinct scores
 	seeds := []struct {
 		name  string
 		score float64
@@ -113,7 +119,7 @@ func (s *StorageSuite) TestListScores() {
 		ids[sd.name] = id
 	}
 
-	// first page: highest first, ranks 1..2; total is the whole board regardless of the page
+	// first page: highest first, ranks 1..2; total is the whole board
 	page, total, err := s.storage.ListStandings(ctx, board.MainId, 2, 0)
 	s.Require().NoError(err)
 	s.Require().Equal(int64(3), total)
@@ -124,7 +130,7 @@ func (s *StorageSuite) TestListScores() {
 	s.Require().Equal(ids["bob"].String(), page[1].PlayerID)
 	s.Require().Equal(int64(2), page[1].Rank)
 
-	// second page continues the ranking (offset skips the top rows)
+	// second page continues the ranking
 	page2, total, err := s.storage.ListStandings(ctx, board.MainId, 2, 2)
 	s.Require().NoError(err)
 	s.Require().Equal(int64(3), total)
@@ -132,7 +138,7 @@ func (s *StorageSuite) TestListScores() {
 	s.Require().Equal(ids["carol"].String(), page2[0].PlayerID)
 	s.Require().Equal(int64(3), page2[0].Rank)
 
-	// offset past the end -> empty (non-nil) slice, but total still reports the board size
+	// offset past the end -> empty slice, total still reports the board size
 	empty, total, err := s.storage.ListStandings(ctx, board.MainId, 10, 5)
 	s.Require().NoError(err)
 	s.Require().Equal(int64(3), total)
@@ -152,7 +158,9 @@ func (s *StorageSuite) TestGetStanding() {
 		id := player.GenerateID()
 		s.Require().NoError(s.storage.CreatePlayerProfile(ctx,
 			&player.Profile{PlayerId: id, PlayerName: sd.name}, "pr"+strconv.Itoa(i)))
-		s.Require().NoError(s.storage.SetScore(ctx, id, board.MainId, sd.score, "pr-set"+strconv.Itoa(i)))
+		s.Require().NoError(s.storage.SetScore(
+			ctx, id, board.MainId, sd.score, "pr-set"+strconv.Itoa(i)),
+		)
 		ids[sd.name] = id
 	}
 
@@ -183,7 +191,9 @@ func (s *StorageSuite) TestRebuild() {
 	alice := player.GenerateID()
 	s.Require().NoError(s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: alice, PlayerName: "alice"}, "a1"))
 	for i, delta := range []float64{3, 10, -4} {
-		_, err := s.storage.IncrementScore(ctx, alice, board.MainId, delta, "a"+strconv.Itoa(i+2))
+		_, err := s.storage.IncrementScore(
+			ctx, alice, board.MainId, delta, "a"+strconv.Itoa(i+2),
+		)
 		s.Require().NoError(err)
 	}
 	s.Require().NoError(s.storage.SetScore(ctx, alice, board.MainId, 50, "a5"))
@@ -194,15 +204,15 @@ func (s *StorageSuite) TestRebuild() {
 	s.Require().NoError(s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: bob, PlayerName: "bob"}, "b1"))
 	s.Require().NoError(s.storage.SetScore(ctx, bob, board.MainId, 42, "b2"))
 
-	// wipe the projection entirely, then rebuild from the stream
-	s.Require().NoError(s.rawClient.Del(ctx, leaderboardKey).Err())
+	// wipe the projection, then rebuild
+	s.Require().NoError(s.rawClient.Del(ctx, leaderboardKey(board.MainId)).Err())
 	s.Require().NoError(s.storage.ReplayLedger(ctx))
 
-	aliceScore, err := s.rawClient.ZScore(ctx, leaderboardKey, string(alice)).Result()
+	aliceScore, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(alice)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(56.0, aliceScore)
 
-	bobScore, err := s.rawClient.ZScore(ctx, leaderboardKey, string(bob)).Result()
+	bobScore, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(bob)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(42.0, bobScore)
 }
@@ -221,19 +231,72 @@ func (s *StorageSuite) TestVerifyProjection() {
 	s.Require().NoError(err)
 	s.Require().Empty(mismatches)
 
-	// the scratch key must not linger
-	exists, err := s.rawClient.Exists(ctx, verifyKey).Result()
+	exists, err := s.rawClient.Exists(ctx, boardVerifyKey(board.MainId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(int64(0), exists)
 
-	// corrupt the projection directly (bypassing the ledger) -> drift is detected
-	s.Require().NoError(s.rawClient.ZIncrBy(ctx, leaderboardKey, 1000, string(playerId)).Err())
+	// corrupt the projection directly -> drift is detected
+	s.Require().NoError(s.rawClient.ZIncrBy(ctx, leaderboardKey(board.MainId), 1000, string(playerId)).Err())
 	mismatches, err = s.storage.VerifyProjection(ctx)
 	s.Require().NoError(err)
 	s.Require().Len(mismatches, 1)
+	s.Require().Equal(string(board.MainId), mismatches[0].BoardID)
 	s.Require().Equal(string(playerId), mismatches[0].PlayerID)
 	s.Require().Equal(1040.0, mismatches[0].LiveScore) // 34 + 6 + 1000
 	s.Require().Equal(40.0, mismatches[0].ReplayScore)
+}
+
+func (s *StorageSuite) TestVerifyProjectionOneBoardCorruptedOtherOk() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	playerId := createPlayer(s, "bob")
+	s.createBoard("weekly", "Weekly")
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 10, "v-m"))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.ID("weekly"), 20, "v-w"))
+
+	// corrupt only the weekly board
+	s.Require().NoError(
+		s.rawClient.ZIncrBy(ctx, leaderboardKey("weekly"), 5, string(playerId)).Err(),
+	)
+
+	mismatches, err := s.storage.VerifyProjection(ctx)
+	s.Require().NoError(err)
+	s.Require().Len(mismatches, 1)
+	s.Require().Equal("weekly", mismatches[0].BoardID)
+	s.Require().Equal(25.0, mismatches[0].LiveScore)
+	s.Require().Equal(20.0, mismatches[0].ReplayScore)
+}
+
+// the same player's scores on two boards move independently over one ledger
+func (s *StorageSuite) TestTwoBoardsOnePlayer() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	playerId := createPlayer(s, "bob")
+	s.createBoard("weekly", "Weekly")
+
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 10, "r1"))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.ID("weekly"), 100, "r2"))
+	_, err := s.storage.IncrementScore(ctx, playerId, board.ID("weekly"), 5, "r3")
+	s.Require().NoError(err)
+
+	mainStanding, mainTotal, err := s.storage.GetStanding(ctx, playerId, board.MainId)
+	s.Require().NoError(err)
+	s.Require().Equal(10.0, mainStanding.Score)
+	s.Require().Equal(int64(1), mainTotal)
+
+	weeklyStanding, _, err := s.storage.GetStanding(ctx, playerId, board.ID("weekly"))
+	s.Require().NoError(err)
+	s.Require().Equal(105.0, weeklyStanding.Score)
+
+	// per-board history: the shared request ids never cross board boundaries
+	weeklyHistory, err := s.storage.PlayerHistory(ctx, playerId, board.ID("weekly"), 0)
+	s.Require().NoError(err)
+	s.Require().Len(weeklyHistory, 2)
+	mainHistory, err := s.storage.PlayerHistory(ctx, playerId, board.MainId, 0)
+	s.Require().NoError(err)
+	s.Require().Len(mainHistory, 1)
 }
 
 func createPlayer(s *StorageSuite, name string) player.ID {
@@ -257,7 +320,7 @@ func (s *StorageSuite) requireStreamLen(ctx context.Context, n int64) {
 	s.Require().Equal(n, actual)
 }
 
-// lastEvent returns the field/value map of the newest ledger entry.
+// returns the field/value map of the newest ledger entry
 func (s *StorageSuite) lastEvent(ctx context.Context) map[string]string {
 	entries, err := s.rawClient.XRevRangeN(ctx, ledgerKey, "+", "-", 1).Result()
 	s.Require().NoError(err)
@@ -267,4 +330,24 @@ func (s *StorageSuite) lastEvent(ctx context.Context) map[string]string {
 		out[k] = v.(string)
 	}
 	return out
+}
+
+const (
+	mockedTime = "2026-01-17T12:30:00.000Z"
+)
+
+func getMockedTime(s *StorageSuite) time.Time {
+	time, err := apextime.Parse(mockedTime)
+	s.Require().NoError(err)
+	return time
+}
+
+func (s *StorageSuite) createBoard(id board.ID, name string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s.Require().NoError(s.storage.CreateBoard(ctx, &board.Board{
+		BoardId:   id,
+		BoardName: name,
+		CreatedAt: getMockedTime(s),
+	}, "seed-"+string(id)))
 }
