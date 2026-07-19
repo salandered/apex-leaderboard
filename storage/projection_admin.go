@@ -3,10 +3,13 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/ledger"
+	"github.com/salandered/apex/player"
 )
 
 // Present flags distinguish "wrong score" from "missing on one side".
@@ -25,75 +28,134 @@ func boardVerifyKey(id board.ID) string {
 	return leaderboardKey(id) + ":tmp:verify"
 }
 
-// Drops every leaderboard projection and replays the whole ledger into them.
-func (rs *redisStorage) ReplayLedger(ctx context.Context) error {
-	events, err := rs.readLedger(ctx)
+// Drops one board's projection and rebuilds it from its events in the global ledger.
+func (rs *redisStorage) RebuildProjection(ctx context.Context, boardId board.ID) error {
+	if err := rs.requireBoard(ctx, boardId); err != nil {
+		return err
+	}
+	events, err := rs.readBoardEvents(ctx, boardId)
 	if err != nil {
 		return err
 	}
-	boards, err := rs.affectedBoards(ctx, events)
-	if err != nil {
-		return err
-	}
-	return rs.foldInto(ctx, events, boards, leaderboardKey)
+	return rs.foldInto(ctx, events, boardId, leaderboardKey)
 }
 
-// Reads the whole ledger, oldest first.
+func (rs *redisStorage) requireBoard(ctx context.Context, boardId board.ID) error {
+	exists, err := rs.client.Exists(ctx, boardHashKey(boardId)).Result()
+	if err != nil {
+		return fmt.Errorf("storage projection admin: check board '%s': %w", boardId, err)
+	}
+	if exists == 0 {
+		return ErrBoardNotFound
+	}
+	return nil
+}
+
+// Reads the whole ledger, oldest first, retaining only one board's events.
 // MVP: one XRANGE reads the whole stream; pagination with COUNT batches is deferred.
-func (rs *redisStorage) readLedger(ctx context.Context) ([]ledger.Event, error) {
+func (rs *redisStorage) readBoardEvents(
+	ctx context.Context, boardId board.ID,
+) ([]ledger.Event, error) {
 	entries, err := rs.client.XRange(ctx, ledgerKey, "-", "+").Result()
 	if err != nil {
 		return nil, fmt.Errorf("storage rebuild: read ledger: %w", err)
 	}
-	events := make([]ledger.Event, 0, len(entries))
+	events := make([]ledger.Event, 0)
 	for _, entry := range entries {
-		events = append(events, entryToEvent(entry))
+		if getStreamEntryValue(entry, entryFieldBoardID) != string(boardId) {
+			continue
+		}
+		event, err := projectionEvent(entry)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
 	}
 	return events, nil
 }
 
-func (rs *redisStorage) affectedBoards(ctx context.Context, events []ledger.Event) ([]board.ID, error) {
-	seen := make(map[board.ID]bool)
-	out := make([]board.ID, 0)
+func projectionEvent(entry redis.XMessage) (ledger.Event, error) {
+	required := func(field string) (string, error) {
+		value := getStreamEntryValue(entry, field)
+		if value == "" {
+			return "", fmt.Errorf(
+				"%w: ledger event '%s' missing field '%s'", ErrInconsistent, entry.ID, field,
+			)
+		}
+		return value, nil
+	}
 
-	registered, err := rs.client.ZRange(ctx, boardsRegistryKey, 0, -1).Result()
+	rawType, err := required(entryFieldType)
 	if err != nil {
-		return nil, fmt.Errorf("storage rebuild: read registry: %w", err)
+		return ledger.Event{}, err
 	}
-	for _, boardId := range registered {
-		if !seen[board.ID(boardId)] {
-			seen[board.ID(boardId)] = true
-			out = append(out, board.ID(boardId))
-		}
+	eventType := ledger.EventType(rawType)
+	if eventType != ledger.EventSet && eventType != ledger.EventIncrement {
+		return ledger.Event{}, fmt.Errorf(
+			"%w: ledger event '%s' has unknown type %q", ErrInconsistent, entry.ID, rawType,
+		)
 	}
-	for _, e := range events {
-		if !seen[board.ID(e.BoardID)] {
-			seen[board.ID(e.BoardID)] = true
-			out = append(out, board.ID(e.BoardID))
-		}
+	playerId, err := required(entryFieldPlayerID)
+	if err != nil {
+		return ledger.Event{}, err
 	}
-	return out, nil
+	if err := player.ID(playerId).Validate(); err != nil {
+		return ledger.Event{}, fmt.Errorf(
+			"%w: ledger event '%s' has invalid player id: %v", ErrInconsistent, entry.ID, err,
+		)
+	}
+	boardId, err := required(entryFieldBoardID)
+	if err != nil {
+		return ledger.Event{}, err
+	}
+	rawAmount, err := required(entryFieldAmount)
+	if err != nil {
+		return ledger.Event{}, err
+	}
+	amount, err := strconv.ParseFloat(rawAmount, 64)
+	if err != nil || math.IsNaN(amount) {
+		return ledger.Event{}, fmt.Errorf(
+			"%w: ledger event '%s' has invalid amount %q", ErrInconsistent, entry.ID, rawAmount,
+		)
+	}
+	requestId, err := required(entryFieldRequestID)
+	if err != nil {
+		return ledger.Event{}, err
+	}
+
+	return ledger.Event{
+		ID:        entry.ID,
+		Type:      eventType,
+		PlayerID:  playerId,
+		BoardID:   boardId,
+		Amount:    amount,
+		RequestID: requestId,
+		CreatedAt: eventTime(entry.ID),
+	}, nil
 }
 
-// Drops keyFor(board) for every affected board, then folds the events forward:
+// Drops keyFor(board), then folds that board's events forward:
 // `set` assigns the absolute score, `increment` adds the delta.
 func (rs *redisStorage) foldInto(
-	ctx context.Context, events []ledger.Event, boards []board.ID, keyFor func(board.ID) string,
+	ctx context.Context, events []ledger.Event, boardId board.ID, keyFor func(board.ID) string,
 ) error {
-	for _, b := range boards {
-		if err := rs.client.Del(ctx, keyFor(b)).Err(); err != nil {
-			return fmt.Errorf("storage rebuild: drop %q: %w", keyFor(b), err)
-		}
+	if err := rs.client.Del(ctx, keyFor(boardId)).Err(); err != nil {
+		return fmt.Errorf("storage rebuild: drop %q: %w", keyFor(boardId), err)
 	}
 
 	for _, event := range events {
-		destKey := keyFor(board.ID(event.BoardID))
+		destKey := keyFor(boardId)
 		var err error
 		switch event.Type {
 		case ledger.EventSet:
 			err = rs.client.ZAdd(ctx, destKey, redis.Z{Score: event.Amount, Member: event.PlayerID}).Err()
 		case ledger.EventIncrement:
 			err = rs.client.ZIncrBy(ctx, destKey, event.Amount, event.PlayerID).Err()
+		default:
+			return fmt.Errorf(
+				"%w: ledger event '%s' has unknown type %q",
+				ErrInconsistent, event.ID, event.Type,
+			)
 		}
 		if err != nil {
 			return fmt.Errorf("storage rebuild: apply event %s: %w", event.ID, err)
@@ -102,37 +164,26 @@ func (rs *redisStorage) foldInto(
 	return nil
 }
 
-// VerifyProjection replays the ledger into per-board scratch keys and diffs every
-// affected board against its live projection. Empty result means no drift.
-func (rs *redisStorage) VerifyProjection(ctx context.Context) ([]ScoreMismatch, error) {
-	events, err := rs.readLedger(ctx)
-	if err != nil {
+// VerifyProjection replays one board's events into a scratch key and diffs it against
+// that board's live projection. Empty result means no drift.
+func (rs *redisStorage) VerifyProjection(
+	ctx context.Context, boardId board.ID,
+) ([]ScoreMismatch, error) {
+	if err := rs.requireBoard(ctx, boardId); err != nil {
 		return nil, err
 	}
-	boards, err := rs.affectedBoards(ctx, events)
+	events, err := rs.readBoardEvents(ctx, boardId)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := rs.foldInto(ctx, events, boards, boardVerifyKey); err != nil {
+	if err := rs.foldInto(ctx, events, boardId, boardVerifyKey); err != nil {
 		return nil, err
 	}
-	// best-effort cleanup with a fresh context so a cancelled ctx doesn't leak scratch keys
-	defer func() {
-		for _, b := range boards {
-			rs.client.Del(context.Background(), boardVerifyKey(b))
-		}
-	}()
+	// best-effort cleanup with a fresh context so a cancelled ctx doesn't leak the scratch key
+	defer rs.client.Del(context.Background(), boardVerifyKey(boardId))
 
-	var mismatches []ScoreMismatch
-	for _, b := range boards {
-		boardMismatches, err := rs.diffBoard(ctx, b)
-		if err != nil {
-			return nil, err
-		}
-		mismatches = append(mismatches, boardMismatches...)
-	}
-	return mismatches, nil
+	return rs.diffBoard(ctx, boardId)
 }
 
 func (rs *redisStorage) diffBoard(ctx context.Context, b board.ID) ([]ScoreMismatch, error) {

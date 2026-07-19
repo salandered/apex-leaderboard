@@ -35,7 +35,9 @@ enrolls them there.
 rather than UUIDs. They are readable and appear in URLs. For simplicity the board id is **immutable forever** (ids are written into ledger events), however, a mutable display name lives
 alongside. A registry keeps the list of boards in creation order. The default board `main` is
 created at startup.
-Boards currently cannot be closed or deleted; a lifecycle (open/closed status) is a planned extension.
+Boards carry an `active`/`closed` status - board metadata living outside the ledger. A closed
+board rejects score writes with `409` while reads and ledger replay are unaffected; opening is
+supported. Boards cannot be deleted.
 
 **The ledger.** One global stream for all boards containing events like a score increment.
 Event is recorded only if the operation was succesfully applied (fact-only).
@@ -48,7 +50,7 @@ which is just its index (1-based), so standing is a (score, player_id, rank). Al
 top-N pages, a single player's rank - are cheap sorted-set operations. Listing uses plain
 limit/offset pagination.
 
-**Idempotency (applied table).** Non-idempotent writes (`increment`) carry a request id via a
+**Idempotency table.** Non-idempotent writes (`increment`) carry a request id via a
 `Idempotency-Key` header; the write operation records each applied id and turns a retry into a no-op returning the original result.
 
 ## The write operation
@@ -59,9 +61,10 @@ Every score write runs one Lua script executing atomically: dedupe check → pla
 liveness checks → apply to the projection → append the event → record the request id. Projection
 and ledger move together or not at all. See also [lua_scripting.md](lua_scripting.md).
 
-Replay and verification are the operational counterpart: an admin-side rebuild folds the ledger
-into fresh projections, and a verify pass replays it into a scratch key and diffs it against the
-live boards.
+Rebuild and verification are the operational counterpart. Both are scoped to one board: rebuild
+folds that board's ledger events into its projection, while verification folds them into a scratch
+key and diffs it against the live projection. They scan the global ledger but do not touch other
+boards.
 
 ## How it got here
 

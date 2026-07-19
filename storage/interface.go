@@ -19,6 +19,8 @@ type BoardRepo interface {
 	// Create-or-conflict: an existing board id yields ErrBoardExists (never overwrites).
 	CreateBoard(ctx context.Context, board *board.Board, requestID string) error
 	GetBoard(ctx context.Context, boardId board.ID) (*board.Board, error)
+	// Idempotent state change.
+	SetBoardState(ctx context.Context, boardId board.ID, state board.BoardState) error
 	// Boards in creation order.
 	ListBoards(ctx context.Context) ([]board.Board, error)
 }
@@ -40,12 +42,12 @@ type ScoreRepo interface {
 
 // Ops tooling over ledger + projection
 type ProjectionAdmin interface {
-	// Drops the projection and replays the whole ledger into it.
-	ReplayLedger(ctx context.Context) error
+	// Drops one board's projection and rebuilds it from the ledger.
+	RebuildProjection(ctx context.Context, boardId board.ID) error
 
-	// Replays the ledger into a scratch key and compares with an actual board.
+	// Replays one board's ledger events into a scratch key and compares with its projection.
 	// Empty result means projection matches.
-	VerifyProjection(ctx context.Context) ([]ScoreMismatch, error)
+	VerifyProjection(ctx context.Context, boardId board.ID) ([]ScoreMismatch, error)
 }
 
 type Storage interface {

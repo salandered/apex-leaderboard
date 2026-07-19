@@ -162,7 +162,7 @@ const (
 	applyCodeDeduped        = 0  // request_id seen before: original result returned
 	applyCodePlayerNotFound = -1 // player hash missing
 	applyCodeBoardNotFound  = -2 // board hash missing
-	// -3 reserved for "board closed" when the lifecycle feature lands
+	applyCodeBoardClosed    = -3 // board state is "closed": writes rejected
 )
 
 // Runs the write script and returns the player's score on the board.
@@ -190,6 +190,8 @@ func (rs *redisStorage) applyEvent(
 		return 0, ErrNotFound
 	case applyCodeBoardNotFound:
 		return 0, ErrBoardNotFound
+	case applyCodeBoardClosed:
+		return 0, ErrBoardClosed
 	default:
 		return 0, fmt.Errorf("storage apply %s event: unexpected script code %d", etype, code)
 	}

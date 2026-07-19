@@ -25,6 +25,10 @@ func (b *boardRepoStub) GetBoard(context.Context, board.ID) (*board.Board, error
 	return nil, nil
 }
 
+func (b *boardRepoStub) SetBoardState(context.Context, board.ID, board.BoardState) error {
+	return nil
+}
+
 func (b *boardRepoStub) ListBoards(context.Context) ([]board.Board, error) {
 	return nil, nil
 }

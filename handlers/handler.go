@@ -142,6 +142,10 @@ func writeStorageError(w http.ResponseWriter, err error) {
 		writeErrorToResponse(w, fmt.Errorf("board already exists"), http.StatusConflict)
 		return
 	}
+	if errors.Is(err, storage.ErrBoardClosed) {
+		writeErrorToResponse(w, fmt.Errorf("board closed"), http.StatusConflict)
+		return
+	}
 	slog.Error("internal storage error", "error", err)
 	writeErrorToResponse(w, fmt.Errorf("internal server error"), http.StatusInternalServerError)
 }

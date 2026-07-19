@@ -2,18 +2,18 @@
 
 ## Language (aiming for this)
 
-| Term             | Means                                                          | Context                   |
-| ---------------- | -------------------------------------------------------------- | ------------------------- |
-| **event**        | one applied operation (a fact)                                 | all                       |
-| **ledger**       | append-only record of score **events**                         | all                       |
-| **tombstone**    | the delete **event**                                           | app, API uses "delete"?   |
-| **board**        | named score container with lifecycle.                          | all                       |
-| projection       | content of the **board** (derived view of the **ledger**)      | app                       |
-| standing         | **projection** read model: (playerId, boardId, value, rank)    | API uses generic "score"? |
-| **replay**       | Build a **projection** using the **ledger**                    | app                       |
-| applied table    | idempotency records: what reqIds were applied using **events** | app                       |
-| **profile**      | player's info (no score)                                       | all                       |
-| **stream entry** | Redis Stream item (raw **event**)                              | redis                     |
+| Term              | Means                                                          | Context                   |
+| ----------------- | -------------------------------------------------------------- | ------------------------- |
+| **event**         | one applied operation (a fact)                                 | all                       |
+| **ledger**        | append-only record of score **events**                         | all                       |
+| **tombstone**     | the delete **event**                                           | app, API uses "delete"?   |
+| **board**         | named score container with lifecycle.                          | all                       |
+| projection        | content of the **board** (derived view of the **ledger**)      | app                       |
+| standing          | **projection** read model: (playerId, boardId, value, rank)    | API uses generic "score"? |
+| **replay**        | Build a **projection** using the **ledger**                    | app                       |
+| idempotency table | idempotency records: what reqIds were applied using **events** | app                       |
+| **profile**       | player's info (no score)                                       | all                       |
+| **stream entry**  | Redis Stream item (raw **event**)                              | redis                     |
 
 Contexts:
 

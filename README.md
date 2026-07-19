@@ -103,6 +103,12 @@ curl -X PUT http://localhost:8090/api/v1/boards/summer-contest \
 curl http://localhost:8090/api/v1/boards
 # {"boards":[{"board_id":"main",...},{"board_id":"summer-contest",...}]}
 
+# Close a board: score writes start returning 409, reads keep working (idempotent, 204)
+curl -X POST http://localhost:8090/api/v1/boards/summer-contest/close
+
+# Open a closed board (idempotent, 204)
+curl -X POST http://localhost:8090/api/v1/boards/summer-contest/open
+
 # Set an absolute score on a board (a player's first write enrolls them there)
 curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
   -H "Content-Type: application/json" \

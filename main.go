@@ -49,6 +49,8 @@ func getMux(s apiStorage) *http.ServeMux {
 	mux.HandleFunc("PUT /api/v1/boards/{board_id}", boards.HandlePutBoard)
 	mux.HandleFunc("GET /api/v1/boards", boards.HandleListBoards)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}", boards.HandleGetBoard)
+	mux.HandleFunc("POST /api/v1/boards/{board_id}/close", boards.HandleCloseBoard)
+	mux.HandleFunc("POST /api/v1/boards/{board_id}/open", boards.HandleOpenBoard)
 	// scores + ledger, board-scoped
 	mux.HandleFunc("PUT /api/v1/boards/{board_id}/scores/{player_id}", scores.HandlePutScore)
 	mux.HandleFunc("POST /api/v1/boards/{board_id}/scores/{player_id}/increment", scores.HandleIncrementScore)
@@ -71,6 +73,7 @@ func createMainBoard(s storage.BoardRepo) error {
 	err := s.CreateBoard(ctx, &board.Board{
 		BoardId:   board.MainId,
 		BoardName: "main",
+		State:     board.BoardActive,
 		CreatedAt: apextime.Now(),
 	}, "seed-main")
 	if errors.Is(err, storage.ErrBoardExists) {

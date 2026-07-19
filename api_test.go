@@ -26,6 +26,8 @@ import (
 
 var MockedPlayerId = "698057b7-eb86-4f63-a228-100304c6ca0a"
 var MockedBoardId = "main"
+var MockedUnknownBoardId = "ghost-board" // the mock answers ErrBoardNotFound
+var MockedClosedBoardId = "closed-board" // the mock rejects score writes with ErrBoardClosed
 
 //go:embed api.yaml
 var apiSpec []byte
@@ -134,6 +136,7 @@ func (s *APISuite) TestGetBoard() {
 	s.decodeJSON(resp, &result)
 	s.Require().Equal(MockedBoardId, result.BoardId)
 	s.Require().NotEmpty(result.BoardName)
+	s.Require().Equal("active", result.State)
 	s.Require().NotEmpty(result.CreatedAt)
 }
 
@@ -145,6 +148,46 @@ func (s *APISuite) TestListBoards() {
 	s.decodeJSON(resp, &result)
 	s.Require().Len(result.Boards, 2)
 	s.Require().Equal("main", result.Boards[0].BoardId) // creation order
+	s.Require().Equal("active", result.Boards[0].State)
+	s.Require().Equal("closed", result.Boards[1].State)
+}
+
+func (s *APISuite) TestCloseBoard() {
+	resp := s.post("/api/v1/boards/" + MockedBoardId + "/close")
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
+}
+
+func (s *APISuite) TestOpenBoard() {
+	resp := s.post("/api/v1/boards/" + MockedBoardId + "/open")
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
+}
+
+func (s *APISuite) TestCloseBoardUnknownId() {
+	resp := s.post("/api/v1/boards/" + MockedUnknownBoardId + "/close")
+	s.Require().Equal(http.StatusNotFound, resp.StatusCode)
+}
+
+func (s *APISuite) TestCloseBoardInvalidId() {
+	resp := s.post("/api/v1/boards/Bad_Id/close")
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreClosedBoard() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedClosedBoardId+"/scores/"+MockedPlayerId,
+		handlers.PutScoreReq{
+			PlayerScore: 98.0,
+		})
+	s.Require().Equal(http.StatusConflict, resp.StatusCode)
+}
+
+func (s *APISuite) TestIncrementScoreClosedBoard() {
+	resp := s.postJSON(
+		"/api/v1/boards/"+MockedClosedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		handlers.IncrementScoreReq{
+			Amount: 12.0,
+		})
+	s.Require().Equal(http.StatusConflict, resp.StatusCode)
 }
 
 func (s *APISuite) TestListScoresOnBoard() {
@@ -298,6 +341,15 @@ func (s *APISuite) get(path string) *http.Response {
 	return resp
 }
 
+// a bodyless POST (close/open style endpoints)
+func (s *APISuite) post(path string) *http.Response {
+	resp, err := s.client.Post(s.server.URL+path, "", nil)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { resp.Body.Close() })
+	s.validateAgainstSpec(resp)
+	return resp
+}
+
 func (s *APISuite) postJSON(path string, payload any) *http.Response {
 	body, err := json.Marshal(payload)
 	s.Require().NoError(err)
@@ -358,26 +410,41 @@ func (ms *mockStorage) CreateBoard(
 	return nil
 }
 
+func (ms *mockStorage) SetBoardState(c context.Context, boardId board.ID, state board.BoardState) error {
+	fmt.Printf("setting board %v state %v in mocked storage", boardId, state)
+	if boardId == board.ID(MockedUnknownBoardId) {
+		return storage.ErrBoardNotFound
+	}
+	return nil
+}
+
 func (ms *mockStorage) GetBoard(c context.Context, boardId board.ID) (*board.Board, error) {
 	return &board.Board{
 		BoardId:   boardId,
 		BoardName: "Mocked Board",
+		State:     board.BoardActive,
 		CreatedAt: time.UnixMilli(100),
 	}, nil
 }
 
 func (ms *mockStorage) ListBoards(c context.Context) ([]board.Board, error) {
 	return []board.Board{
-		{BoardId: board.MainId, BoardName: "main", CreatedAt: time.UnixMilli(100)},
-		{BoardId: "summer-contest", BoardName: "Summer Contest", CreatedAt: time.UnixMilli(200)},
+		{BoardId: board.MainId, BoardName: "main", State: board.BoardActive, CreatedAt: time.UnixMilli(100)},
+		{BoardId: "summer-contest", BoardName: "Summer Contest", State: board.BoardClosed, CreatedAt: time.UnixMilli(200)},
 	}, nil
 }
 
 func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, boardId board.ID, amount float64, requestID string) (float64, error) {
+	if boardId == board.ID(MockedClosedBoardId) {
+		return 0, storage.ErrBoardClosed
+	}
 	return 12.0, nil
 }
 
 func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, boardId board.ID, score float64, requestID string) error {
+	if boardId == board.ID(MockedClosedBoardId) {
+		return storage.ErrBoardClosed
+	}
 	return nil
 }
 

@@ -7,18 +7,18 @@ import (
 
 type ID string
 
-type BoardStatus string
+type BoardState string
 
 const (
-	BoardActive BoardStatus = "Active"
-	BoardClosed BoardStatus = "Closed"
-	MainId      ID          = "main"
+	BoardActive BoardState = "active"
+	BoardClosed BoardState = "closed"
+	MainId      ID         = "main"
 )
 
 type Board struct {
 	BoardId   ID
 	BoardName string
-	Status    BoardStatus
+	State     BoardState
 	CreatedAt time.Time
 }
 
@@ -50,4 +50,13 @@ func (id ID) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (state BoardState) Validate() error {
+	switch state {
+	case BoardActive, BoardClosed:
+		return nil
+	default:
+		return fmt.Errorf("invalid board state %q", state)
+	}
 }

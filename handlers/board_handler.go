@@ -21,6 +21,7 @@ type PutBoardReq struct {
 type BoardResp struct {
 	BoardId   string `json:"board_id"`
 	BoardName string `json:"board_name"`
+	State     string `json:"status"` // deliberate state - status
 	CreatedAt string `json:"created_at"`
 }
 
@@ -45,6 +46,7 @@ func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) 
 		&board.Board{
 			BoardId:   boardId,
 			BoardName: data.BoardName,
+			State:     board.BoardActive,
 			CreatedAt: apextime.Now(),
 		},
 		newRequestID())
@@ -87,10 +89,34 @@ func (h *BoardHandler) HandleListBoards(w http.ResponseWriter, req *http.Request
 	writeJSONToResponse(w, http.StatusOK, response)
 }
 
+func (h *BoardHandler) HandleCloseBoard(w http.ResponseWriter, req *http.Request) {
+	h.handleSetState(w, req, board.BoardClosed)
+}
+
+func (h *BoardHandler) HandleOpenBoard(w http.ResponseWriter, req *http.Request) {
+	h.handleSetState(w, req, board.BoardActive)
+}
+
+func (h *BoardHandler) handleSetState(w http.ResponseWriter, req *http.Request, state board.BoardState) {
+	boardId := board.ID(req.PathValue(boardIDPathValue))
+	if err := boardId.Validate(); err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Storage.SetBoardState(req.Context(), boardId, state); err != nil {
+		writeStorageError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func boardToResp(b *board.Board) BoardResp {
 	return BoardResp{
 		BoardId:   string(b.BoardId),
 		BoardName: b.BoardName,
+		State:     string(b.State),
 		CreatedAt: apextime.Format(b.CreatedAt),
 	}
 }

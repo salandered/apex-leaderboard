@@ -20,8 +20,7 @@
 
 	Returns: { code, new_score (string), stream_id }
 		code:  1 applied | 0 deduped (original result)
-		      -1 player not found | -2 board not found
-		      (-3 reserved for "board closed")
+		      -1 player not found | -2 board not found | -3 board closed
 
 	A rejected write (negative code) appends nothing: events record facts only (rule 2).
 	Result codes must match the applyCode* constants in storage.go.
@@ -46,6 +45,9 @@ if redis.call('EXISTS', profile_key) == 0 then
 end
 if redis.call('EXISTS', board_key) == 0 then
 	return { -2, '', '' }
+end
+if redis.call('HGET', board_key, 'board_state') == 'closed' then
+	return { -3, '', '' }
 end
 
 -- Apply to the projection

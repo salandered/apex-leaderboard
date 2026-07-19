@@ -110,16 +110,22 @@ func (s *StorageSuite) createBoard(id board.ID, name string, createdAt time.Time
 	s.Require().NoError(s.storage.CreateBoard(ctx, &board.Board{
 		BoardId:   id,
 		BoardName: name,
+		State:     board.BoardActive,
 		CreatedAt: createdAt,
 	}, reqId))
 }
 
-func (s *StorageSuite) requireEqualBoardHash(boardId board.ID, eName string, eCreatedAt string) {
+func (s *StorageSuite) closeBoard(id board.ID) {
+	s.Require().NoError(s.storage.SetBoardState(s.ctx(), id, board.BoardClosed))
+}
+
+func (s *StorageSuite) requireEqualBoardHash(boardId board.ID, eName string, eCreatedAt string, eState board.BoardState) {
 	fields, err := s.rawClient.HGetAll(s.ctx(), boardHashKey(boardId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(map[string]string{
 		boardNameField:      eName,
 		boardCreatedAtField: eCreatedAt,
+		boardStateField:     string(eState),
 	},
 		fields,
 	)

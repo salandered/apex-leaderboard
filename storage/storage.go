@@ -14,11 +14,12 @@ import (
 
 var (
 	StorageError     = errors.New("storage")
-	ErrNotFound      = fmt.Errorf("%w.not found", StorageError)
-	ErrInconsistent  = fmt.Errorf("%w.inconsistent", StorageError)
-	ErrPlayerExists  = fmt.Errorf("%w.player exists", StorageError)
-	ErrBoardExists   = fmt.Errorf("%w.board exists", StorageError)
-	ErrBoardNotFound = fmt.Errorf("%w.board not found", StorageError)
+	ErrNotFound      = fmt.Errorf("%w: not found", StorageError)
+	ErrInconsistent  = fmt.Errorf("%w: inconsistent", StorageError)
+	ErrPlayerExists  = fmt.Errorf("%w: player exists", StorageError)
+	ErrBoardExists   = fmt.Errorf("%w: board exists", StorageError)
+	ErrBoardNotFound = fmt.Errorf("%w: board not found", StorageError)
+	ErrBoardClosed   = fmt.Errorf("%w: board closed", StorageError)
 )
 
 type redisStorage struct {

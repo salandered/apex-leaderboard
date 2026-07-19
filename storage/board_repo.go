@@ -16,6 +16,7 @@ const (
 	boardsRegistryKey   = "boards" // ZSET registry: member=board_id, score=created_at unix
 	boardNameField      = "board_name"
 	boardCreatedAtField = "created_at"
+	boardStateField     = "board_state"
 )
 
 func boardHashKey(id board.ID) string {
@@ -32,15 +33,45 @@ func (rs *redisStorage) CreateBoard(
 	board *board.Board,
 	requestID string,
 ) error {
+	if err := board.State.Validate(); err != nil {
+		return fmt.Errorf("%w: create board '%s': invalid state %q", StorageError, board.BoardId, board.State)
+	}
 	created, err := createBoardScript.Run(ctx, rs.client,
 		[]string{boardHashKey(board.BoardId), boardsRegistryKey},
 		string(board.BoardId), board.BoardName, apextime.Format(board.CreatedAt), board.CreatedAt.Unix(),
+		string(board.State),
 	).Int()
 	if err != nil {
 		return fmt.Errorf("storage create board: %w", err)
 	}
 	if created == 0 {
 		return ErrBoardExists
+	}
+	return nil
+}
+
+//go:embed scripts/set_board_state.lua
+var setBoardStateLua string
+
+var setBoardStateScript = redis.NewScript(setBoardStateLua)
+
+func (rs *redisStorage) SetBoardState(
+	ctx context.Context,
+	boardId board.ID,
+	state board.BoardState,
+) error {
+	if err := state.Validate(); err != nil {
+		return fmt.Errorf("%w: set board '%s' state: invalid state %q", StorageError, boardId, state)
+	}
+	updated, err := setBoardStateScript.Run(ctx, rs.client,
+		[]string{boardHashKey(boardId)},
+		string(state),
+	).Int()
+	if err != nil {
+		return fmt.Errorf("storage set board state: %w", err)
+	}
+	if updated == 0 {
+		return ErrBoardNotFound
 	}
 	return nil
 }
@@ -123,9 +154,23 @@ func boardFromFields(id board.ID, fields map[string]string) (*board.Board, error
 			StorageError, id, boardCreatedAtField, rawDate, err)
 	}
 
+	rawState, ok := fields[boardStateField]
+	if !ok {
+		return nil, fmt.Errorf(
+			"%w: board '%s' hash missing field '%s'",
+			ErrInconsistent, id, boardStateField)
+	}
+	state := board.BoardState(rawState)
+	if err := state.Validate(); err != nil {
+		return nil, fmt.Errorf(
+			"%w: board '%s' field '%s': unknown value %q",
+			ErrInconsistent, id, boardStateField, rawState)
+	}
+
 	return &board.Board{
 		BoardId:   id,
 		BoardName: name,
+		State:     state,
 		CreatedAt: date,
 	}, nil
 }

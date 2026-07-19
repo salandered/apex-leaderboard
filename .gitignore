@@ -30,7 +30,9 @@ go.work.sum
 
 # ai
 .claude/
+.agents/
 CLAUDE.md
+AGENTS.md
 
 # custom
 *__internal*

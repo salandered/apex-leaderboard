@@ -139,7 +139,7 @@ func TestSetupUnknownTimeFormatReturnsError(t *testing.T) {
 	require.Error(t, err)
 }
 
-// put global default logger back when the test ends
+// puts global default logger back when the test ends
 func restoreDefaultLogger(t *testing.T) {
 	previous := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(previous) })
