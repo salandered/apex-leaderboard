@@ -68,17 +68,3 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 	t.Time = parsed
 	return nil
 }
-
-// func TestFormatParseRoundTrip(t *testing.T) {
-//     for _, in := range []string{
-//         "2026-01-17T12:30:00.000Z",
-//         "2026-01-17T12:30:00.123Z",
-//         "2026-01-17T12:30:00.500Z",
-//     } {
-//         parsed, err := Parse(in)
-//         if err != nil { t.Fatal(err) }
-//         if got := Format(parsed); got != in {
-//             t.Errorf("round trip: %s -> %s", in, got)
-//         }
-//     }
-// }

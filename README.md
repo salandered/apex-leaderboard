@@ -1,5 +1,7 @@
 # Apex
 
+![alt text](logo.png)
+
 Apex is the backend web service implementing the Leaderboard functionality. A lightweight HTTP API for storing and retrieving player scores using Redis (inspired by https://redis.io/solutions/leaderboards/).
 
 ## 🚀 Quick Start

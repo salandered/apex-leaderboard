@@ -3,67 +3,68 @@
 package storage
 
 import (
-	"context"
 	"time"
 
 	"github.com/salandered/apex/player"
 )
 
-func (s *StorageSuite) TestCreatePlayer() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (s *StorageSuite) TestCreatePlayerProfile() {
+	ctx := s.ctx()
 
 	playerId := player.GenerateID()
 
 	// when
-	err := s.storage.CreatePlayerProfile(
-		ctx,
-		&player.Profile{
-			PlayerId:   playerId,
-			PlayerName: "alice",
-			CreatedAt:  getMockedTime(s),
-		},
-		"r-create",
-	)
+	err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
+		PlayerId:   playerId,
+		PlayerName: "alice",
+		CreatedAt:  mockedTime,
+	}, "r-create")
 
 	// then
 	s.Require().NoError(err)
-
-	name, err := s.rawClient.HGet(ctx, playerHashKey(playerId), "player_name").Result()
-	s.Require().NoError(err)
-	s.Require().Equal("alice", name)
-
-	timestamp, err := s.rawClient.HGet(ctx, playerHashKey(playerId), "created_at").Result()
-	s.Require().NoError(err)
-	s.Require().Equal(mockedTime, timestamp)
+	s.requireEqualPlayerHash(playerId, "alice", mockedTimeStr)
 
 	// creating a profile is not a score operation: nothing is appended to the ledger
 	s.requireStreamLen(ctx, 0)
 }
 
-func (s *StorageSuite) TestGetPlayer() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (s *StorageSuite) TestCreatePlayerProfileConflict() {
+	ctx := s.ctx()
 
-	playerId := createPlayer(s, "bob")
+	playerId := player.GenerateID()
+	s.Require().NoError(s.storage.CreatePlayerProfile(ctx, &player.Profile{
+		PlayerId:   playerId,
+		PlayerName: "alice",
+		CreatedAt:  mockedTime,
+	}, "r-create"))
 
 	// when
-	profile, err := s.storage.GetPlayerProfile(ctx, playerId)
+	err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
+		PlayerId:   playerId, // same id
+		PlayerName: "impostor",
+		CreatedAt:  mockedTime.Add(time.Hour),
+	}, "r-create-2")
+
+	// then
+	s.Require().ErrorIs(err, ErrPlayerExists)
+	s.requireEqualPlayerHash(playerId, "alice", mockedTimeStr)
+	s.requireStreamLen(ctx, 0)
+}
+
+func (s *StorageSuite) TestGetPlayerProfile() {
+	playerId := s.createPlayer("bob")
+
+	// when
+	profile, err := s.storage.GetPlayerProfile(s.ctx(), playerId)
 
 	// then
 	s.Require().NoError(err)
 	s.Require().Equal(playerId, profile.PlayerId)
 	s.Require().Equal("bob", profile.PlayerName)
-	s.Require().Equal(getMockedTime(s), profile.CreatedAt)
+	s.Require().Equal(mockedTime, profile.CreatedAt)
 }
 
-func (s *StorageSuite) TestGetPlayerMissingReturnsNotFound() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// when
-	_, err := s.storage.GetPlayerProfile(ctx, player.GenerateID())
-
-	// then
+func (s *StorageSuite) TestGetPlayerProfileMissingReturnsNotFound() {
+	_, err := s.storage.GetPlayerProfile(s.ctx(), player.GenerateID())
 	s.Require().ErrorIs(err, ErrNotFound)
 }

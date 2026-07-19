@@ -9,6 +9,8 @@ import (
 )
 
 type PlayerRepo interface {
+	// Create-or-conflict: an existing player id yields ErrPlayerExists (never overwrites).
+	// Ids are server-generated, so a conflict signals a collision/bug, not a client error.
 	CreatePlayerProfile(ctx context.Context, profile *player.Profile, requestID string) error
 	GetPlayerProfile(ctx context.Context, playerId player.ID) (*player.Profile, error)
 }

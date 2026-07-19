@@ -56,7 +56,7 @@ func (rs *redisStorage) affectedBoards(ctx context.Context, events []ledger.Even
 	seen := make(map[board.ID]bool)
 	out := make([]board.ID, 0)
 
-	registered, err := rs.client.ZRange(ctx, boardsKey, 0, -1).Result()
+	registered, err := rs.client.ZRange(ctx, boardsRegistryKey, 0, -1).Result()
 	if err != nil {
 		return nil, fmt.Errorf("storage rebuild: read registry: %w", err)
 	}

@@ -2,8 +2,10 @@ package storage
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/player"
 )
@@ -17,19 +19,27 @@ func playerHashKey(id player.ID) string {
 	return "player:" + string(id)
 }
 
+//go:embed scripts/create_player.lua
+var createPlayerLua string
+
+var createPlayerScript = redis.NewScript(createPlayerLua)
+
+// TODO: requestID is unused until real idempotency lands (client-supplied Idempotency-Key);
+// profile creation is not event-sourced, so nothing records it yet.
 func (rs *redisStorage) CreatePlayerProfile(
 	ctx context.Context,
 	profile *player.Profile,
 	requestID string,
 ) error {
-	err := rs.client.HSet(
-		ctx,
-		playerHashKey(profile.PlayerId),
-		profileNameField, profile.PlayerName,
-		profileCreatedAtField, apextime.Format(profile.CreatedAt),
-	).Err()
+	created, err := createPlayerScript.Run(ctx, rs.client,
+		[]string{playerHashKey(profile.PlayerId)},
+		profile.PlayerName, apextime.Format(profile.CreatedAt),
+	).Int()
 	if err != nil {
-		return fmt.Errorf("storage put data: %w", err)
+		return fmt.Errorf("storage create player: %w", err)
+	}
+	if created == 0 {
+		return ErrPlayerExists
 	}
 	return nil
 }

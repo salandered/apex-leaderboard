@@ -31,8 +31,12 @@ const (
 // Defaults to "dev" for plain `go run`/`go build`.
 var version = "dev"
 
+func GetVersion() string {
+	return version
+}
+
 func HandleRoot(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, "apex %s — see /api/v1/scores\n", version)
+	fmt.Fprintf(w, "apex %s — see /api/v1/scores\n", GetVersion())
 }
 
 // TODO: accept a client-supplied key (Idempotency-Key header).

@@ -14,11 +14,10 @@ func TestIDValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "simple id", id: "main"},
-		{name: "multi-word with hyphens", id: "summer-contest-2026"},
-		{name: "digit start", id: "2026-season"},
 		{name: "all digits", id: "2026"},
-		{name: "min length", id: "abc"},
-		{name: "max length", id: strings.Repeat("a", 32)},
+		{name: "with hyphens", id: "summer-contest-2026"},
+		{name: "digit start", id: "1main"},
+		{name: "digit end", id: "main1"},
 
 		{name: "too short", id: "ab", wantErr: true},
 		{name: "too long", id: strings.Repeat("a", 33), wantErr: true},
@@ -30,6 +29,7 @@ func TestIDValidate(t *testing.T) {
 		{name: "leading hyphen", id: "-abc", wantErr: true},
 		{name: "trailing hyphen", id: "abc-", wantErr: true},
 		{name: "consecutive hyphens", id: "a--b", wantErr: true},
+		{name: "consecutive hyphens many", id: "a-----b", wantErr: true},
 		{name: "non-ascii", id: "café-board", wantErr: true},
 	}
 

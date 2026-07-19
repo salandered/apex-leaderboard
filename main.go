@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,6 +18,13 @@ import (
 )
 
 const defaultRedisURL = "redis://localhost:6379/0"
+
+const banner = `
+       _________        _________        _________        _________
+      /    A    /\     /    P    /\     /    E    /\     /    X    /\
+     /_________/  \___/_________/  \___/_________/  \___/_________/  \
+     \         \  /   \         \  /   \         \  /   \         \  /
+      \_________\/     \_________\/     \_________\/     \_________\/`
 
 // storage.ProjectionAdmin is absent - admin ops (replay/verify) are not
 // reachable from these routes; a future admin surface declares it separately.
@@ -56,7 +64,7 @@ func getMux(s apiStorage) *http.ServeMux {
 }
 
 // creates the default board if missing
-func createMainBoard(s storage.Storage) error {
+func createMainBoard(s storage.BoardRepo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -85,6 +93,8 @@ func startServer(handler http.Handler) {
 }
 
 func main() {
+	fmt.Printf("apex version %v %v \n\n", handlers.GetVersion(), banner)
+
 	logCloser, err := logging.Setup()
 	if err != nil {
 		// logger isn't ready yet, report to stderr directly

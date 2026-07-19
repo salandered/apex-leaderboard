@@ -28,7 +28,6 @@ func (id ID) String() string {
 
 // Allowed: lowercase a-z, 0-9 and inner single hyphens; len is 3-32
 func (id ID) Validate() error {
-	// TODO: unit (and playerID)
 	if len(id) < 3 || len(id) > 32 {
 		return fmt.Errorf("invalid board id %q: length must be in [3, 32]", string(id))
 	}

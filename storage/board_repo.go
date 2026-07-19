@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	boardsKey           = "boards" // ZSET registry: member=board_id, score=created_at unix
+	boardsRegistryKey   = "boards" // ZSET registry: member=board_id, score=created_at unix
 	boardNameField      = "board_name"
 	boardCreatedAtField = "created_at"
 )
@@ -33,7 +33,7 @@ func (rs *redisStorage) CreateBoard(
 	requestID string,
 ) error {
 	created, err := createBoardScript.Run(ctx, rs.client,
-		[]string{boardHashKey(board.BoardId), boardsKey},
+		[]string{boardHashKey(board.BoardId), boardsRegistryKey},
 		string(board.BoardId), board.BoardName, apextime.Format(board.CreatedAt), board.CreatedAt.Unix(),
 	).Int()
 	if err != nil {
@@ -59,7 +59,7 @@ func (rs *redisStorage) GetBoard(ctx context.Context, boardId board.ID) (*board.
 // Boards are few by assumption, all hashes are fetched at once:
 // consider adding pagination.
 func (rs *redisStorage) ListBoards(ctx context.Context) ([]board.Board, error) {
-	boardIds, err := rs.client.ZRange(ctx, boardsKey, 0, -1).Result()
+	boardIds, err := rs.client.ZRange(ctx, boardsRegistryKey, 0, -1).Result()
 	if err != nil {
 		return nil, fmt.Errorf("storage list boards: %w", err)
 	}
