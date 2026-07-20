@@ -11,14 +11,9 @@ import (
 )
 
 const (
-	profileNameField         = "player_name"
-	profileCreatedAtField    = "created_at"
-	playerIdempotencyHashKey = "player:idempotency" // HASH client key -> "player_id|player_name"
+	profileNameField      = "player_name"
+	profileCreatedAtField = "created_at"
 )
-
-func playerHashKey(id player.ID) string {
-	return "player:" + string(id)
-}
 
 //go:embed scripts/create_player.lua
 var createPlayerLua string
@@ -39,7 +34,7 @@ func (rs *redisStorage) CreatePlayerProfile(
 	idempotencyKey string,
 ) (player.ID, error) {
 	result, err := createPlayerScript.Run(ctx, rs.client,
-		[]string{playerHashKey(profile.PlayerId), playerIdempotencyHashKey},
+		[]string{playerProfileKey(profile.PlayerId), playerIdempotencyHashKey},
 		profile.PlayerName, apextime.Format(profile.CreatedAt), string(profile.PlayerId), idempotencyKey,
 	).Slice()
 	if err != nil {
@@ -69,7 +64,7 @@ func (rs *redisStorage) CreatePlayerProfile(
 }
 
 func (rs *redisStorage) GetPlayerProfile(ctx context.Context, playerId player.ID) (*player.Profile, error) {
-	fields, err := rs.client.HGetAll(ctx, playerHashKey(playerId)).Result()
+	fields, err := rs.client.HGetAll(ctx, playerProfileKey(playerId)).Result()
 	if err != nil {
 		return nil, fmt.Errorf("storage get profile: %w", err)
 	}

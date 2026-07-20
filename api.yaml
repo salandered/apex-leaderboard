@@ -297,7 +297,7 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKeyHeader"
       responses:
         "204":
-          description: Score incremented. 
+          description: Score incremented.
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -555,7 +555,7 @@ components:
           type: integer
         total:
           type: integer
-          description: Total ranked players on the board (ZCARD)
+          description: Total ranked players on the board
 
     ProjectionMismatch:
       type: object

@@ -3,8 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
+	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
 )
@@ -210,7 +210,7 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 			Type:      string(e.Type),
 			Amount:    e.Amount,
 			RequestId: e.RequestID,
-			CreatedAt: e.CreatedAt.UTC().Format(time.RFC3339),
+			CreatedAt: apextime.Format(e.CreatedAt),
 		})
 	}
 

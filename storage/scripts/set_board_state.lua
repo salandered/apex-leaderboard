@@ -2,7 +2,7 @@
 	Sets the board lifecycle state, only if the board exists:
 	an unknown board must not materialize as a state-only hash.
 
-	KEYS[1] = board hash key  (board:{board_id})
+	KEYS[1] = board hash key  (app:board:profile:{board_id})
 
 	ARGV[1] = board_state     ("active" | "closed")
 

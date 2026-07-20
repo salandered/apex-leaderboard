@@ -66,7 +66,7 @@ func (s *StorageSuite) createPlayer(name string) player.ID {
 	ctx := s.ctx()
 	err := s.rawClient.HSet(
 		ctx,
-		playerHashKey(playerId),
+		playerProfileKey(playerId),
 		profileNameField, name,
 		profileCreatedAtField, mockedTimeStr,
 	).Err()
@@ -120,7 +120,7 @@ func (s *StorageSuite) closeBoard(id board.ID) {
 }
 
 func (s *StorageSuite) requireEqualBoardHash(boardId board.ID, eName string, eCreatedAt string, eState board.BoardState) {
-	fields, err := s.rawClient.HGetAll(s.ctx(), boardHashKey(boardId)).Result()
+	fields, err := s.rawClient.HGetAll(s.ctx(), boardProfileKey(boardId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(map[string]string{
 		boardNameField:      eName,
@@ -132,7 +132,7 @@ func (s *StorageSuite) requireEqualBoardHash(boardId board.ID, eName string, eCr
 }
 
 func (s *StorageSuite) requireEqualPlayerHash(playerId player.ID, eName string, eCreatedAt string) {
-	fields, err := s.rawClient.HGetAll(s.ctx(), playerHashKey(playerId)).Result()
+	fields, err := s.rawClient.HGetAll(s.ctx(), playerProfileKey(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(map[string]string{
 		profileNameField:      eName,
@@ -143,7 +143,7 @@ func (s *StorageSuite) requireEqualPlayerHash(playerId player.ID, eName string, 
 }
 
 func (s *StorageSuite) requireEqualBoardRegistry(eboardIds []string) {
-	boardIds, err := s.rawClient.ZRange(s.ctx(), boardsRegistryKey, 0, -1).Result()
+	boardIds, err := s.rawClient.ZRange(s.ctx(), boardIndexKey, 0, -1).Result()
 	s.Require().NoError(err)
 	s.Require().ElementsMatch(eboardIds, boardIds)
 }

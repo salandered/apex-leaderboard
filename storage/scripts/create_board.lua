@@ -3,8 +3,8 @@
 		- reject if the board already exists
 		- write the board hash and register the board id
 
-	KEYS[1] = board hash key    (board:{board_id})
-	KEYS[2] = registry zset     (boards)
+	KEYS[1] = board hash key    (app:board:profile:{board_id})
+	KEYS[2] = registry zset     (app:board:index)
 
 	ARGV[1] = board_id          (the registry member)
 	ARGV[2] = board_name        (mutable display name)

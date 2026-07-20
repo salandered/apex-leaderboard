@@ -6,8 +6,8 @@
 		- write the profile hash
 		- (if idempotency key) record the idempotency key with a TTL
 
-	KEYS[1] = player profile hash     (player:{candidate_id})
-	KEYS[2] = player idempotency hash (player:idempotency)
+	KEYS[1] = player profile hash     (app:player:profile:{candidate_id})
+	KEYS[2] = player idempotency hash (app:player:idempotency)
 
 	ARGV[1] = player_name
 	ARGV[2] = created_at

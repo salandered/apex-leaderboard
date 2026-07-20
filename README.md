@@ -125,6 +125,18 @@ curl http://localhost:8090/api/v1/boards
 
 # Rebuild a leaderboard
 curl -X POST http://localhost:8090/api/v1/admin/boards/main/projection/rebuild
+
+# Verify a leaderboard's projection against its ledger (empty mismatches means no drift)
+curl http://localhost:8090/api/v1/admin/boards/main/projection/verify
+# {"mismatches":[]}
+```
+
+### API Walk
+
+Exercises every endpoint once against a running server and prints each request/response:
+
+```bash
+go run ./apiscripts/apiwalk -base-url http://localhost:8090 -board demo-cup
 ```
 
 ### Run Tests

@@ -74,7 +74,7 @@ func (s *StorageSuite) TestRebuildProjectionDoesNotConsultBoardRegistry() {
 	s.createBoard("weekly", "Weekly", mockedTime)
 	playerId := s.createPlayer("alice")
 	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "r1", ""))
-	s.Require().NoError(s.rawClient.ZRem(ctx, boardsRegistryKey, "weekly").Err())
+	s.Require().NoError(s.rawClient.ZRem(ctx, boardIndexKey, "weekly").Err())
 	s.Require().NoError(s.rawClient.Del(ctx, leaderboardKey("weekly")).Err())
 
 	s.Require().NoError(s.storage.RebuildProjection(ctx, "weekly"))
@@ -87,7 +87,7 @@ func (s *StorageSuite) TestRebuildProjectionDoesNotConsultBoardRegistry() {
 func (s *StorageSuite) TestRebuildProjectionUnknownBoard() {
 	ctx := s.ctx()
 	s.Require().NoError(s.rawClient.ZAdd(
-		ctx, boardsRegistryKey, redis.Z{Score: 1, Member: "ghost"},
+		ctx, boardIndexKey, redis.Z{Score: 1, Member: "ghost"},
 	).Err())
 
 	err := s.storage.RebuildProjection(ctx, "ghost")
@@ -212,7 +212,7 @@ func (s *StorageSuite) TestVerifyProjectionDoesNotConsultBoardRegistry() {
 	s.createBoard("weekly", "Weekly", mockedTime)
 	playerId := s.createPlayer("alice")
 	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "r1", ""))
-	s.Require().NoError(s.rawClient.ZRem(ctx, boardsRegistryKey, "weekly").Err())
+	s.Require().NoError(s.rawClient.ZRem(ctx, boardIndexKey, "weekly").Err())
 
 	mismatches, err := s.storage.VerifyProjection(ctx, "weekly")
 

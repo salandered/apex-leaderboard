@@ -13,15 +13,10 @@ import (
 )
 
 const (
-	boardsRegistryKey   = "boards" // ZSET registry: member=board_id, score=created_at unix
 	boardNameField      = "board_name"
 	boardCreatedAtField = "created_at"
 	boardStateField     = "board_state"
 )
-
-func boardHashKey(id board.ID) string {
-	return "board:" + string(id)
-}
 
 //go:embed scripts/create_board.lua
 var createBoardLua string
@@ -36,7 +31,7 @@ func (rs *redisStorage) CreateBoard(
 		return fmt.Errorf("%w: create board '%s': invalid state %q", StorageError, board.BoardId, board.State)
 	}
 	created, err := createBoardScript.Run(ctx, rs.client,
-		[]string{boardHashKey(board.BoardId), boardsRegistryKey},
+		[]string{boardProfileKey(board.BoardId), boardIndexKey},
 		string(board.BoardId), board.BoardName, apextime.Format(board.CreatedAt), board.CreatedAt.Unix(),
 		string(board.State),
 	).Int()
@@ -63,7 +58,7 @@ func (rs *redisStorage) SetBoardState(
 		return fmt.Errorf("%w: set board '%s' state: invalid state %q", StorageError, boardId, state)
 	}
 	updated, err := setBoardStateScript.Run(ctx, rs.client,
-		[]string{boardHashKey(boardId)},
+		[]string{boardProfileKey(boardId)},
 		string(state),
 	).Int()
 	if err != nil {
@@ -76,7 +71,7 @@ func (rs *redisStorage) SetBoardState(
 }
 
 func (rs *redisStorage) GetBoard(ctx context.Context, boardId board.ID) (*board.Board, error) {
-	fields, err := rs.client.HGetAll(ctx, boardHashKey(boardId)).Result()
+	fields, err := rs.client.HGetAll(ctx, boardProfileKey(boardId)).Result()
 	if err != nil {
 		return nil, fmt.Errorf("storage get board: %w", err)
 	}
@@ -88,7 +83,7 @@ func (rs *redisStorage) GetBoard(ctx context.Context, boardId board.ID) (*board.
 
 // TODO: MVP: Boards are few by assumption, all hashes are fetched at once. Add pagination.
 func (rs *redisStorage) ListBoards(ctx context.Context) ([]board.Board, error) {
-	boardIds, err := rs.client.ZRange(ctx, boardsRegistryKey, 0, -1).Result()
+	boardIds, err := rs.client.ZRange(ctx, boardIndexKey, 0, -1).Result()
 	if err != nil {
 		return nil, fmt.Errorf("storage list boards: %w", err)
 	}
@@ -96,7 +91,7 @@ func (rs *redisStorage) ListBoards(ctx context.Context) ([]board.Board, error) {
 	pipe := rs.client.Pipeline()
 	cmds := make([]*redis.MapStringStringCmd, 0, len(boardIds))
 	for _, boardId := range boardIds {
-		cmds = append(cmds, pipe.HGetAll(ctx, boardHashKey(board.ID(boardId))))
+		cmds = append(cmds, pipe.HGetAll(ctx, boardProfileKey(board.ID(boardId))))
 	}
 	_, err = pipe.Exec(ctx)
 	if err != nil {

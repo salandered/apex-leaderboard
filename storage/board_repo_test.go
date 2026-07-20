@@ -106,7 +106,7 @@ func (s *StorageSuite) TestSetBoardStateIdempotent() {
 	s.Require().NoError(s.storage.SetBoardState(s.ctx(), "weekly", board.BoardClosed))
 
 	// then
-	state, err := s.rawClient.HGet(s.ctx(), boardHashKey("weekly"), boardStateField).Result()
+	state, err := s.rawClient.HGet(s.ctx(), boardProfileKey("weekly"), boardStateField).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(string(board.BoardClosed), state)
 
@@ -114,7 +114,7 @@ func (s *StorageSuite) TestSetBoardStateIdempotent() {
 	s.Require().NoError(s.storage.SetBoardState(s.ctx(), "weekly", board.BoardClosed))
 
 	// then (same)
-	state, err = s.rawClient.HGet(s.ctx(), boardHashKey("weekly"), boardStateField).Result()
+	state, err = s.rawClient.HGet(s.ctx(), boardProfileKey("weekly"), boardStateField).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(string(board.BoardClosed), state)
 }
@@ -126,7 +126,7 @@ func (s *StorageSuite) TestSetBoardStateOpenClose() {
 	s.Require().NoError(s.storage.SetBoardState(s.ctx(), "weekly", board.BoardClosed))
 
 	// then
-	state, err := s.rawClient.HGet(s.ctx(), boardHashKey("weekly"), boardStateField).Result()
+	state, err := s.rawClient.HGet(s.ctx(), boardProfileKey("weekly"), boardStateField).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(string(board.BoardClosed), state)
 
@@ -134,7 +134,7 @@ func (s *StorageSuite) TestSetBoardStateOpenClose() {
 	s.Require().NoError(s.storage.SetBoardState(s.ctx(), "weekly", board.BoardActive))
 
 	// then
-	state, err = s.rawClient.HGet(s.ctx(), boardHashKey("weekly"), boardStateField).Result()
+	state, err = s.rawClient.HGet(s.ctx(), boardProfileKey("weekly"), boardStateField).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(string(board.BoardActive), state)
 }

@@ -19,12 +19,6 @@ type ScoreMismatch struct {
 	ReplayPresent bool
 }
 
-// per-board ZSET scratch: transient rebuild target for VerifyProjection.
-// Board id contains no ':' so this can never collide with another board.
-func boardVerifyKey(id board.ID) string {
-	return leaderboardKey(id) + ":tmp:verify"
-}
-
 // Drops one board's projection and rebuilds it from its events in the global ledger.
 func (rs *redisStorage) RebuildProjection(ctx context.Context, boardId board.ID) error {
 	if err := rs.requireBoard(ctx, boardId); err != nil {
@@ -38,7 +32,7 @@ func (rs *redisStorage) RebuildProjection(ctx context.Context, boardId board.ID)
 }
 
 func (rs *redisStorage) requireBoard(ctx context.Context, boardId board.ID) error {
-	exists, err := rs.client.Exists(ctx, boardHashKey(boardId)).Result()
+	exists, err := rs.client.Exists(ctx, boardProfileKey(boardId)).Result()
 	if err != nil {
 		return fmt.Errorf("storage projection admin: check board '%s': %w", boardId, err)
 	}

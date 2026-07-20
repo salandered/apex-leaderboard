@@ -12,11 +12,6 @@ import (
 	"github.com/salandered/apex/player"
 )
 
-const (
-	ledgerKey          = "ledger:events"      // STREAM
-	idempotencyHashKey = "ledger:idempotency" // HASH {board_id}:{player_id}:{idempotency_key} -> "entry_id|op|amount"
-)
-
 // Rank is 1-based (rank 1 means highest score).
 type Standing struct {
 	// consider moving out of storage
@@ -29,11 +24,6 @@ type Standing struct {
 var applyScoreLua string
 
 var applyScoreScript = redis.NewScript(applyScoreLua)
-
-// per-board ZSET projection
-func leaderboardKey(id board.ID) string {
-	return "leaderboard:" + string(id)
-}
 
 // Sets an absolute score.
 // An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
@@ -176,7 +166,7 @@ func (rs *redisStorage) applyEvent(
 	idempotencyKey string,
 ) error {
 	result, err := applyScoreScript.Run(ctx, rs.client,
-		[]string{leaderboardKey(boardId), ledgerKey, idempotencyHashKey, playerHashKey(playerId), boardHashKey(boardId)},
+		[]string{leaderboardKey(boardId), ledgerKey, idempotencyHashKey, playerProfileKey(playerId), boardProfileKey(boardId)},
 		string(etype), string(playerId), amount, requestID, string(boardId), idempotencyKey,
 	).Slice()
 	if err != nil {

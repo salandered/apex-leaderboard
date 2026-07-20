@@ -6,11 +6,11 @@
 		- append event
 		- (if idempotency key) record the idempotency key
 
-	KEYS[1] = projection zset      (leaderboard:{board_id})
-	KEYS[2] = event stream         (ledger:events)
-	KEYS[3] = idempotency hash     (ledger:idempotency)
-	KEYS[4] = player profile hash  (player:{player_id})
-	KEYS[5] = board hash           (board:{board_id})
+	KEYS[1] = projection zset      (app:view:leaderboard:{board_id})
+	KEYS[2] = event stream         (app:ledger:events)
+	KEYS[3] = idempotency hash     (app:ledger:idempotency)
+	KEYS[4] = player profile hash  (app:player:profile:{player_id})
+	KEYS[5] = board hash           (app:board:profile:{board_id})
 
 	ARGV[1] = operation type       ("set" | "increment")
 	ARGV[2] = player_id           

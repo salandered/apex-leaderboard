@@ -27,8 +27,8 @@ import (
 
 var MockedPlayerId = "698057b7-eb86-4f63-a228-100304c6ca0a"
 var MockedBoardId = "main"
-var MockedUnknownBoardId = "ghost-board" // the mock answers ErrBoardNotFound
-var MockedClosedBoardId = "closed-board" // the mock rejects score writes with ErrBoardClosed
+var MockedUnknownBoardId = "ghost-board"          // the mock answers ErrBoardNotFound
+var MockedClosedBoardId = "closed-board"          // the mock rejects score writes with ErrBoardClosed
 var MockedConflictIdempotencyKey = "conflict-key" // the mock answers ErrIdempotencyConflict on player create
 
 //go:embed api.yaml
