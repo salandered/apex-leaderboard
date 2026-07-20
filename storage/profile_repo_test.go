@@ -14,14 +14,15 @@ func (s *StorageSuite) TestCreatePlayerProfile() {
 	playerId := player.GenerateID()
 
 	// when
-	err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
+	id, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
 		PlayerId:   playerId,
 		PlayerName: "alice",
 		CreatedAt:  mockedTime,
-	}, "r-create")
+	}, "")
 
 	// then
 	s.Require().NoError(err)
+	s.Require().Equal(playerId, id)
 	s.requireEqualPlayerHash(playerId, "alice", mockedTimeStr)
 
 	// creating a profile is not a score operation: nothing is appended to the ledger
@@ -32,23 +33,66 @@ func (s *StorageSuite) TestCreatePlayerProfileConflict() {
 	ctx := s.ctx()
 
 	playerId := player.GenerateID()
-	s.Require().NoError(s.storage.CreatePlayerProfile(ctx, &player.Profile{
+	_, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
 		PlayerId:   playerId,
 		PlayerName: "alice",
 		CreatedAt:  mockedTime,
-	}, "r-create"))
+	}, "")
+	s.Require().NoError(err)
 
-	// when
-	err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
+	// when: same candidate id (a UUID collision)
+	_, err = s.storage.CreatePlayerProfile(ctx, &player.Profile{
 		PlayerId:   playerId, // same id
 		PlayerName: "impostor",
 		CreatedAt:  mockedTime.Add(time.Hour),
-	}, "r-create-2")
+	}, "")
 
 	// then
 	s.Require().ErrorIs(err, ErrPlayerExists)
 	s.requireEqualPlayerHash(playerId, "alice", mockedTimeStr)
 	s.requireStreamLen(ctx, 0)
+}
+
+func (s *StorageSuite) TestCreatePlayerIsIdempotent() {
+	ctx := s.ctx()
+
+	firstId, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
+		PlayerId: player.GenerateID(), PlayerName: "alice", CreatedAt: mockedTime,
+	}, "r-1")
+	s.Require().NoError(err)
+
+	retryId, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
+		PlayerId: player.GenerateID(), PlayerName: "alice", CreatedAt: mockedTime, // same name
+	}, "r-1")
+	s.Require().NoError(err)
+	s.Require().Equal(firstId, retryId) // original id, not the retry's candidate
+}
+
+func (s *StorageSuite) TestCreatePlayerIdempotencyKeyConflict() {
+	ctx := s.ctx()
+
+	_, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
+		PlayerId: player.GenerateID(), PlayerName: "alice", CreatedAt: mockedTime,
+	}, "r1")
+	s.Require().NoError(err)
+
+	_, err = s.storage.CreatePlayerProfile(ctx, &player.Profile{
+		PlayerId: player.GenerateID(), PlayerName: "bob", CreatedAt: mockedTime, // different name
+	}, "r1")
+	s.Require().ErrorIs(err, ErrIdempotencyConflict)
+}
+
+func (s *StorageSuite) TestCreatePlayerNoKeyLeavesHashEmpty() {
+	ctx := s.ctx()
+
+	_, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{
+		PlayerId: player.GenerateID(), PlayerName: "alice", CreatedAt: mockedTime,
+	}, "")
+	s.Require().NoError(err)
+
+	hlen, err := s.rawClient.HLen(ctx, playerIdempotencyHashKey).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(int64(0), hlen)
 }
 
 func (s *StorageSuite) TestGetPlayerProfile() {

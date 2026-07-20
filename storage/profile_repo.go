@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	profileNameField      = "player_name"
-	profileCreatedAtField = "created_at"
+	profileNameField         = "player_name"
+	profileCreatedAtField    = "created_at"
+	playerIdempotencyHashKey = "player:idempotency" // HASH client key -> "player_id|player_name"
 )
 
 func playerHashKey(id player.ID) string {
@@ -24,24 +25,47 @@ var createPlayerLua string
 
 var createPlayerScript = redis.NewScript(createPlayerLua)
 
-// TODO: requestID is unused until real idempotency lands (client-supplied Idempotency-Key);
-// profile creation is not event-sourced, so nothing records it yet.
+// create_player.lua result codes. Must match the script.
+const (
+	createCodeCreated             = 1  // profile written under the candidate id
+	createCodeDeduped             = 0  // idempotency key seen before with a matching name
+	createCodeExists              = -1 // candidate id already exists (UUID collision)
+	createCodeIdempotencyConflict = -4 // key reused with a different payload
+)
+
 func (rs *redisStorage) CreatePlayerProfile(
 	ctx context.Context,
 	profile *player.Profile,
-	requestID string,
-) error {
-	created, err := createPlayerScript.Run(ctx, rs.client,
-		[]string{playerHashKey(profile.PlayerId)},
-		profile.PlayerName, apextime.Format(profile.CreatedAt),
-	).Int()
+	idempotencyKey string,
+) (player.ID, error) {
+	result, err := createPlayerScript.Run(ctx, rs.client,
+		[]string{playerHashKey(profile.PlayerId), playerIdempotencyHashKey},
+		profile.PlayerName, apextime.Format(profile.CreatedAt), string(profile.PlayerId), idempotencyKey,
+	).Slice()
 	if err != nil {
-		return fmt.Errorf("storage create player: %w", err)
+		return "", fmt.Errorf("storage create player: %w", err)
 	}
-	if created == 0 {
-		return ErrPlayerExists
+	if len(result) == 0 {
+		return "", fmt.Errorf("storage create player: empty script result")
 	}
-	return nil
+	code, ok := result[0].(int64)
+	if !ok {
+		return "", fmt.Errorf("storage create player: non-integer script code %v", result[0])
+	}
+	switch code {
+	case createCodeCreated, createCodeDeduped:
+		id, ok := result[1].(string)
+		if !ok {
+			return "", fmt.Errorf("storage create player: non-string player id %v", result[1])
+		}
+		return player.ID(id), nil
+	case createCodeExists:
+		return "", ErrPlayerExists
+	case createCodeIdempotencyConflict:
+		return "", ErrIdempotencyConflict
+	default:
+		return "", fmt.Errorf("storage create player: unexpected script code %d", code)
+	}
 }
 
 func (rs *redisStorage) GetPlayerProfile(ctx context.Context, playerId player.ID) (*player.Profile, error) {

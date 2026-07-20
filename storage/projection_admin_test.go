@@ -18,20 +18,20 @@ func (s *StorageSuite) TestRebuildProjection() {
 
 	// alice replays the doc sequence to 56; bob is a second player with a plain score
 	alice := player.GenerateID()
-	s.Require().NoError(s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: alice, PlayerName: "alice"}, "a1"))
-	for i, delta := range []float64{3, 10, -4} {
-		_, err := s.storage.IncrementScore(
-			ctx, alice, board.MainId, delta, "a"+strconv.Itoa(i+2),
-		)
-		s.Require().NoError(err)
-	}
-	s.Require().NoError(s.storage.SetScore(ctx, alice, board.MainId, 50, "a5"))
-	_, err := s.storage.IncrementScore(ctx, alice, board.MainId, 6, "a6")
+	_, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: alice, PlayerName: "alice"}, "")
 	s.Require().NoError(err)
+	for i, delta := range []float64{3, 10, -4} {
+		s.Require().NoError(s.storage.IncrementScore(
+			ctx, alice, board.MainId, delta, "a"+strconv.Itoa(i+2), "",
+		))
+	}
+	s.Require().NoError(s.storage.SetScore(ctx, alice, board.MainId, 50, "a5", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, alice, board.MainId, 6, "a6", ""))
 
 	bob := player.GenerateID()
-	s.Require().NoError(s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: bob, PlayerName: "bob"}, "b1"))
-	s.Require().NoError(s.storage.SetScore(ctx, bob, board.MainId, 42, "b2"))
+	_, err = s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: bob, PlayerName: "bob"}, "")
+	s.Require().NoError(err)
+	s.Require().NoError(s.storage.SetScore(ctx, bob, board.MainId, 42, "b2", ""))
 
 	// wipe the projection, then rebuild
 	s.Require().NoError(s.rawClient.Del(ctx, leaderboardKey(board.MainId)).Err())
@@ -49,10 +49,10 @@ func (s *StorageSuite) TestRebuildProjection() {
 func (s *StorageSuite) TestRebuildProjectionOnlyAffectsRequestedBoard() {
 	ctx := s.ctx()
 	s.createMainBoard()
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	playerId := s.createPlayer("alice")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 10, "r1"))
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "r2"))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 10, "r1", ""))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "r2", ""))
 
 	s.Require().NoError(
 		s.rawClient.ZAdd(ctx, leaderboardKey(board.MainId), redis.Z{Score: 999, Member: string(playerId)}).Err(),
@@ -71,9 +71,9 @@ func (s *StorageSuite) TestRebuildProjectionOnlyAffectsRequestedBoard() {
 
 func (s *StorageSuite) TestRebuildProjectionDoesNotConsultBoardRegistry() {
 	ctx := s.ctx()
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	playerId := s.createPlayer("alice")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "r1"))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "r1", ""))
 	s.Require().NoError(s.rawClient.ZRem(ctx, boardsRegistryKey, "weekly").Err())
 	s.Require().NoError(s.rawClient.Del(ctx, leaderboardKey("weekly")).Err())
 
@@ -97,7 +97,7 @@ func (s *StorageSuite) TestRebuildProjectionUnknownBoard() {
 
 func (s *StorageSuite) TestRebuildProjectionEmptyBoardDropsUnexpectedProjection() {
 	ctx := s.ctx()
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	s.Require().NoError(s.rawClient.ZAdd(
 		ctx, leaderboardKey("weekly"), redis.Z{Score: 10, Member: string(player.GenerateID())},
 	).Err())
@@ -111,7 +111,7 @@ func (s *StorageSuite) TestRebuildProjectionEmptyBoardDropsUnexpectedProjection(
 
 func (s *StorageSuite) TestRebuildProjectionRejectsUnknownMatchingEventTypeBeforeDroppingProjection() {
 	ctx := s.ctx()
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	playerId := s.createPlayer("alice")
 	s.Require().NoError(s.rawClient.ZAdd(
 		ctx, leaderboardKey("weekly"), redis.Z{Score: 15, Member: string(playerId)},
@@ -137,7 +137,7 @@ func (s *StorageSuite) TestRebuildProjectionRejectsUnknownMatchingEventTypeBefor
 
 func (s *StorageSuite) TestRebuildProjectionRejectsMalformedMatchingEvent() {
 	ctx := s.ctx()
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	playerId := s.createPlayer("alice")
 	s.Require().NoError(s.rawClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: ledgerKey,
@@ -159,9 +159,8 @@ func (s *StorageSuite) TestVerifyProjection() {
 
 	s.createMainBoard()
 	playerId := s.createPlayer("bob")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 34, "v0"))
-	_, err := s.storage.IncrementScore(ctx, playerId, board.MainId, 6, "v1")
-	s.Require().NoError(err)
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 34, "v0", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, board.MainId, 6, "v1", ""))
 
 	// consistent: every write went through the script
 	mismatches, err := s.storage.VerifyProjection(ctx, board.MainId)
@@ -188,9 +187,9 @@ func (s *StorageSuite) TestVerifyProjectionOnlyChecksRequestedBoard() {
 
 	s.createMainBoard()
 	playerId := s.createPlayer("bob")
-	s.createBoard("weekly", "Weekly", mockedTime, "r1")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 10, "v-m"))
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "v-w"))
+	s.createBoard("weekly", "Weekly", mockedTime)
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 10, "v-m", ""))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "v-w", ""))
 	s.Require().NoError(
 		s.rawClient.ZIncrBy(ctx, leaderboardKey("weekly"), 5, string(playerId)).Err(),
 	)
@@ -210,9 +209,9 @@ func (s *StorageSuite) TestVerifyProjectionOnlyChecksRequestedBoard() {
 
 func (s *StorageSuite) TestVerifyProjectionDoesNotConsultBoardRegistry() {
 	ctx := s.ctx()
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	playerId := s.createPlayer("alice")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "r1"))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 20, "r1", ""))
 	s.Require().NoError(s.rawClient.ZRem(ctx, boardsRegistryKey, "weekly").Err())
 
 	mismatches, err := s.storage.VerifyProjection(ctx, "weekly")
@@ -225,7 +224,7 @@ func (s *StorageSuite) TestVerifyProjectionIgnoresMalformedEventsForOtherBoards(
 	ctx := s.ctx()
 	s.createMainBoard()
 	playerId := s.createPlayer("alice")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 20, "r1"))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 20, "r1", ""))
 	s.Require().NoError(s.rawClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: ledgerKey,
 		Values: map[string]any{

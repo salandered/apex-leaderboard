@@ -101,10 +101,10 @@ func (s *StorageSuite) ctx() context.Context {
 }
 
 func (s *StorageSuite) createMainBoard() {
-	s.createBoard(board.MainId, "main", mockedTime, "r-main")
+	s.createBoard(board.MainId, "main", mockedTime)
 }
 
-func (s *StorageSuite) createBoard(id board.ID, name string, createdAt time.Time, reqId string) {
+func (s *StorageSuite) createBoard(id board.ID, name string, createdAt time.Time) {
 	// TODO use rawClient
 	ctx := s.ctx()
 	s.Require().NoError(s.storage.CreateBoard(ctx, &board.Board{
@@ -112,7 +112,7 @@ func (s *StorageSuite) createBoard(id board.ID, name string, createdAt time.Time
 		BoardName: name,
 		State:     board.BoardActive,
 		CreatedAt: createdAt,
-	}, reqId))
+	}))
 }
 
 func (s *StorageSuite) closeBoard(id board.ID) {

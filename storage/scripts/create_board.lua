@@ -10,7 +10,7 @@
 	ARGV[2] = board_name        (mutable display name)
 	ARGV[3] = created_at        (board timestamp)
 	ARGV[4] = created_at_unix   (registry score: stable creation order for listing)
-	ARGV[5] = board_state      ("active" | "closed")
+	ARGV[5] = board_state       ("active" | "closed")
 
 	Returns: 1 created, 0 already exists
 ]]

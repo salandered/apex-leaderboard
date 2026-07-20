@@ -1,11 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"net/http"
@@ -14,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/go-resty/resty/v2"
 )
 
 type loadTestConfig struct {
@@ -65,30 +64,25 @@ func parseFlags() loadTestConfig {
 	}
 }
 
-func newLoadTestClient(maxConns int) *http.Client {
+func newLoadTestClient(baseURL string, maxConns int) *resty.Client {
 	transport := &http.Transport{
 		MaxIdleConns:        maxConns,
 		MaxIdleConnsPerHost: maxConns,
 		MaxConnsPerHost:     maxConns,
 		IdleConnTimeout:     30 * time.Second,
 	}
-	return &http.Client{
-		Transport: transport,
-		Timeout:   30 * time.Second,
-	}
+	return resty.New().
+		SetBaseURL(baseURL).
+		SetTransport(transport).
+		SetTimeout(30 * time.Second)
 }
 
-func createLoadTestPlayer(client *http.Client, baseURL string) (createPlayerResponse, error) {
-	body, err := doJSON(client, http.MethodPost, baseURL+"/api/v1/players", map[string]any{
+func createLoadTestPlayer(client *resty.Client) (createPlayerResponse, error) {
+	player, err := doJSON[createPlayerResponse](client, resty.MethodPost, "/api/v1/players", map[string]any{
 		"player_name": "load-test-player",
 	}, http.StatusCreated)
 	if err != nil {
 		return createPlayerResponse{}, err
-	}
-
-	var player createPlayerResponse
-	if err := json.Unmarshal(body, &player); err != nil {
-		return createPlayerResponse{}, fmt.Errorf("decode create player response: %w", err)
 	}
 	if player.PlayerID == "" {
 		return createPlayerResponse{}, fmt.Errorf("create player returned an empty player_id")
@@ -96,15 +90,15 @@ func createLoadTestPlayer(client *http.Client, baseURL string) (createPlayerResp
 	return player, nil
 }
 
-func createLoadTestBoard(client *http.Client, baseURL, boardID string) error {
-	_, err := doJSON(client, http.MethodPut, baseURL+"/api/v1/boards/"+boardID, map[string]any{
+func createLoadTestBoard(client *resty.Client, boardID string) error {
+	_, err := doJSON[any](client, resty.MethodPut, "/api/v1/boards/"+boardID, map[string]any{
 		"board_name": "Load Test",
 	}, http.StatusCreated)
 	return err
 }
 
-func initializePlayerScore(client *http.Client, scoreURL string) error {
-	_, err := doJSON(client, http.MethodPut, scoreURL, map[string]any{
+func initializePlayerScore(client *resty.Client, scorePath string) error {
+	_, err := doJSON[any](client, resty.MethodPut, scorePath, map[string]any{
 		"player_score": 0,
 	}, http.StatusNoContent)
 	return err
@@ -113,7 +107,7 @@ func initializePlayerScore(client *http.Client, scoreURL string) error {
 // runIncrementLoad launches requests in chunks with a delay between them instead of releasing
 // them all at once, so the burst doesn't overrun the server's listen backlog and get refused
 // before it ever reaches the handler.
-func runIncrementLoad(client *http.Client, incrementURL string, config loadTestConfig) loadTestResult {
+func runIncrementLoad(client *resty.Client, incrementPath string, config loadTestConfig) loadTestResult {
 	var succeeded int64
 	errCh := make(chan error, config.requestCount)
 	var wg sync.WaitGroup
@@ -125,7 +119,7 @@ func runIncrementLoad(client *http.Client, incrementURL string, config loadTestC
 		chunkEnd := min(chunkStart+config.chunkSize, config.requestCount)
 		for i := chunkStart; i < chunkEnd; i++ {
 			requestNumber++
-			go sendIncrementRequest(client, incrementURL, config.amount, requestNumber, &succeeded, errCh, &wg)
+			go sendIncrementRequest(client, incrementPath, config.amount, requestNumber, &succeeded, errCh, &wg)
 		}
 		if chunkEnd < config.requestCount {
 			time.Sleep(config.chunkDelay)
@@ -147,8 +141,8 @@ func runIncrementLoad(client *http.Client, incrementURL string, config loadTestC
 }
 
 func sendIncrementRequest(
-	client *http.Client,
-	incrementURL string,
+	client *resty.Client,
+	incrementPath string,
 	amount float64,
 	requestNumber int,
 	succeeded *int64,
@@ -157,7 +151,7 @@ func sendIncrementRequest(
 ) {
 	defer wg.Done()
 
-	_, err := doJSON(client, http.MethodPost, incrementURL, map[string]any{
+	_, err := doJSON[any](client, resty.MethodPost, incrementPath, map[string]any{
 		"amount": amount,
 	}, http.StatusOK, http.StatusNoContent)
 	if err != nil {
@@ -183,17 +177,8 @@ func printLoadTestSummary(result loadTestResult, requestCount int) {
 	}
 }
 
-func fetchPlayerStanding(client *http.Client, scoreURL string) (standingResponse, error) {
-	body, err := doJSON(client, http.MethodGet, scoreURL, nil, http.StatusOK)
-	if err != nil {
-		return standingResponse{}, err
-	}
-
-	var standing standingResponse
-	if err := json.Unmarshal(body, &standing); err != nil {
-		return standingResponse{}, fmt.Errorf("decode standing response: %w", err)
-	}
-	return standing, nil
+func fetchPlayerStanding(client *resty.Client, scorePath string) (standingResponse, error) {
+	return doJSON[standingResponse](client, resty.MethodGet, scorePath, nil, http.StatusOK)
 }
 
 func verifyFinalScore(standing standingResponse, requestCount int, amount float64) {
@@ -207,46 +192,32 @@ func verifyFinalScore(standing standingResponse, requestCount int, amount float6
 	}
 }
 
-func doJSON(
-	client *http.Client,
+// doJSON sends a JSON request and decodes a JSON response into T, relying on resty's SetResult
+// to unmarshal only on the statuses it considers successful (2xx, skipping 204 bodies).
+func doJSON[T any](
+	client *resty.Client,
 	method string,
-	url string,
+	path string,
 	payload any,
 	expectedStatuses ...int,
-) ([]byte, error) {
-	var body io.Reader
+) (T, error) {
+	var result T
+	req := client.R().SetResult(&result)
 	if payload != nil {
-		raw, err := json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("encode request: %w", err)
-		}
-		body = bytes.NewReader(raw)
+		req.SetBody(payload)
 	}
 
-	req, err := http.NewRequest(method, url, body)
+	resp, err := req.Execute(method, path)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
+		return result, err
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
 	for _, status := range expectedStatuses {
-		if resp.StatusCode == status {
-			return responseBody, nil
+		if resp.StatusCode() == status {
+			return result, nil
 		}
 	}
-	return nil, fmt.Errorf("unexpected status %s: %s", resp.Status, strings.TrimSpace(string(responseBody)))
+	return result, fmt.Errorf("unexpected status %s: %s", resp.Status(), strings.TrimSpace(string(resp.Body())))
 }
 
 func closeEnough(actual, expected float64) bool {
@@ -254,24 +225,28 @@ func closeEnough(actual, expected float64) bool {
 	return math.Abs(actual-expected) <= scale*1e-12
 }
 
+func seedBoardID() string {
+	return fmt.Sprintf("load-%d", time.Now().UnixMilli())
+}
+
 func main() {
 	config := parseFlags()
-	client := newLoadTestClient(config.requestCount)
-	defer client.Transport.(*http.Transport).CloseIdleConnections()
+	client := newLoadTestClient(config.baseURL, config.requestCount)
+	defer client.GetClient().CloseIdleConnections()
 
-	boardID := fmt.Sprintf("load-%d", time.Now().UnixMilli())
+	boardID := seedBoardID()
 
-	player, err := createLoadTestPlayer(client, config.baseURL)
+	player, err := createLoadTestPlayer(client)
 	if err != nil {
 		log.Fatalf("create player: %v", err)
 	}
 
-	if err := createLoadTestBoard(client, config.baseURL, boardID); err != nil {
+	if err := createLoadTestBoard(client, boardID); err != nil {
 		log.Fatalf("create board: %v", err)
 	}
 
-	scoreURL := fmt.Sprintf("%s/api/v1/boards/%s/scores/%s", config.baseURL, boardID, player.PlayerID)
-	if err := initializePlayerScore(client, scoreURL); err != nil {
+	scorePath := fmt.Sprintf("/api/v1/boards/%s/scores/%s", boardID, player.PlayerID)
+	if err := initializePlayerScore(client, scorePath); err != nil {
 		log.Fatalf("initialize score: %v", err)
 	}
 
@@ -280,13 +255,13 @@ func main() {
 		boardID, player.PlayerID, config.requestCount, config.amount, config.chunkSize, config.chunkDelay,
 	)
 
-	result := runIncrementLoad(client, scoreURL+"/increment", config)
+	result := runIncrementLoad(client, scorePath+"/increment", config)
 	printLoadTestSummary(result, config.requestCount)
 	if len(result.Errors) != 0 {
 		os.Exit(1)
 	}
 
-	standing, err := fetchPlayerStanding(client, scoreURL)
+	standing, err := fetchPlayerStanding(client, scorePath)
 	if err != nil {
 		log.Fatalf("get standing: %v", err)
 	}

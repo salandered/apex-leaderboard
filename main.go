@@ -81,7 +81,7 @@ func createMainBoard(s storage.BoardRepo) error {
 		BoardName: "main",
 		State:     board.BoardActive,
 		CreatedAt: apextime.Now(),
-	}, "seed-main")
+	})
 	if errors.Is(err, storage.ErrBoardExists) {
 		return nil
 	}

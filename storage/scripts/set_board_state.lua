@@ -7,8 +7,6 @@
 	ARGV[1] = board_state     ("active" | "closed")
 
 	Returns: 1 updated, 0 board not found
-
-	State values must match the board.BoardState constants in Go.
 ]]
 
 local board_key = KEYS[1]

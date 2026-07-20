@@ -21,10 +21,6 @@ type IncrementScoreReq struct {
 	Amount float64 `json:"amount"`
 }
 
-type IncrementScoreResp struct {
-	Score float64 `json:"score"`
-}
-
 // one ledger entry in the API response
 type HistoryEvent struct {
 	Id        string  `json:"id"`
@@ -62,7 +58,13 @@ type RankResp struct {
 
 func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) {
 	playerId, boardId, err := parsePlayerBoardPathValues(w, req)
+	// TODO: get rid of parsePlayerBoardPathValues and consider validating boardId here
 	if err != nil {
+		return
+	}
+	idempotencyKey, err := readIdempotencyKey(req)
+	if err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}
 	var data PutScoreReq
@@ -71,14 +73,15 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}
-
-	if err := h.Storage.SetScore(
+	err = h.Storage.SetScore(
 		req.Context(),
 		playerId,
 		boardId,
 		data.PlayerScore,
 		newRequestID(),
-	); err != nil {
+		idempotencyKey,
+	)
+	if err != nil {
 		writeStorageError(w, err)
 		return
 	}
@@ -91,24 +94,33 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 	if err != nil {
 		return
 	}
+	idempotencyKey, err := readIdempotencyKey(req)
+	if err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
 	var data IncrementScoreReq
 	err = json.NewDecoder(req.Body).Decode(&data)
 	if err != nil {
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}
-
-	score, err := h.Storage.IncrementScore(req.Context(), playerId, boardId, data.Amount, newRequestID())
+	err = h.Storage.IncrementScore(
+		req.Context(),
+		playerId,
+		boardId,
+		data.Amount,
+		newRequestID(),
+		idempotencyKey,
+	)
 	if err != nil {
 		writeStorageError(w, err)
 		return
 	}
 
-	response := IncrementScoreResp{Score: score}
-	writeJSONToResponse(w, http.StatusOK, response)
+	w.WriteHeader(http.StatusNoContent)
 }
 
-// Returns one player's standing on the leaderboard (rank, score, total).
 func (h *ScoreHandler) HandleGetRank(w http.ResponseWriter, req *http.Request) {
 	playerId, boardId, err := parsePlayerBoardPathValues(w, req)
 	if err != nil {
@@ -129,7 +141,6 @@ func (h *ScoreHandler) HandleGetRank(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
-// Returns a page of the leaderboard, highest score first.
 func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request) {
 	limit, err := parseIntQuery(req, limitQuery, defaultListLimit, 1, maxListLimit)
 	if err != nil {
@@ -188,7 +199,7 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	// an unknown player yields an empty list (collection semantics), not a 404
+	// Note: an unknown player yields an empty list, not a 404
 	response := HistoryResp{
 		PlayerId: playerId,
 		Events:   make([]HistoryEvent, 0, len(events)),

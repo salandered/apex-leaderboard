@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/board"
@@ -14,13 +13,11 @@ import (
 )
 
 const (
-	ledgerKey      = "ledger:events"      // STREAM: the ledger
-	idempotencyKey = "ledger:idempotency" // HASH {board_id}:{player_id}:{request_id} -> stream id: replays the original result on retry
+	ledgerKey          = "ledger:events"      // STREAM
+	idempotencyHashKey = "ledger:idempotency" // HASH {board_id}:{player_id}:{idempotency_key} -> "entry_id|op|amount"
 )
 
-// A player's current standing in the projection.
 // Rank is 1-based (rank 1 means highest score).
-// Formerly known as RankedScore.
 type Standing struct {
 	// consider moving out of storage
 	PlayerID string
@@ -40,15 +37,14 @@ func leaderboardKey(id board.ID) string {
 
 // Sets an absolute score.
 // An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
-func (rs *redisStorage) SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score float64, requestID string) error {
-	_, err := rs.applyEvent(ctx, ledger.EventSet, playerId, boardId, score, requestID)
-	return err
+func (rs *redisStorage) SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score float64, requestID, idempotencyKey string) error {
+	return rs.applyEvent(ctx, ledger.EventSet, playerId, boardId, score, requestID, idempotencyKey)
 }
 
 // Applies a delta to score on the board (a player with no entry starts from 0).
 // An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
-func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount float64, requestID string) (float64, error) {
-	return rs.applyEvent(ctx, ledger.EventIncrement, playerId, boardId, amount, requestID)
+func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount float64, requestID, idempotencyKey string) error {
+	return rs.applyEvent(ctx, ledger.EventIncrement, playerId, boardId, amount, requestID, idempotencyKey)
 }
 
 // Commands are pipelined into one round trip (best-effort, not atomic: consider using MULT).
@@ -159,15 +155,17 @@ func (rs *redisStorage) PlayerHistory(
 
 // Script result codes. Must match the Lua write script.
 const (
-	applyCodeApplied        = 1  // event appended, projection updated
-	applyCodeDeduped        = 0  // request_id seen before: original result returned
-	applyCodePlayerNotFound = -1 // player hash missing
-	applyCodeBoardNotFound  = -2 // board hash missing
-	applyCodeBoardClosed    = -3 // board state is "closed": writes rejected
+	applyCodeApplied             = 1  // event appended, projection updated
+	applyCodeDeduped             = 0  // idempotency key seen before with a matching op/amount
+	applyCodePlayerNotFound      = -1 // player hash missing
+	applyCodeBoardNotFound       = -2 // board hash missing
+	applyCodeBoardClosed         = -3 // board state is "closed": writes rejected
+	applyCodeIdempotencyConflict = -4 // key reused with a different op/amount
 )
 
-// Runs the write script and returns the player's score on the board.
-// A rejected write appends nothing and maps to an error.
+// Runs the write script. Both a fresh apply and a deduped retry are non-errors (the write
+// endpoints return 204 either way); a rejected write appends nothing and maps to an error.
+// idempotencyKey is the client-supplied dedupe key; empty skips the idempotency record entirely.
 func (rs *redisStorage) applyEvent(
 	ctx context.Context,
 	etype ledger.EventType,
@@ -175,30 +173,35 @@ func (rs *redisStorage) applyEvent(
 	boardId board.ID,
 	amount float64,
 	requestID string,
-) (float64, error) {
+	idempotencyKey string,
+) error {
 	result, err := applyScoreScript.Run(ctx, rs.client,
-		[]string{leaderboardKey(boardId), ledgerKey, idempotencyKey, playerHashKey(playerId), boardHashKey(boardId)},
-		string(etype), string(playerId), amount, requestID, string(boardId),
+		[]string{leaderboardKey(boardId), ledgerKey, idempotencyHashKey, playerHashKey(playerId), boardHashKey(boardId)},
+		string(etype), string(playerId), amount, requestID, string(boardId), idempotencyKey,
 	).Slice()
 	if err != nil {
-		return 0, fmt.Errorf("storage apply %s event: %w", etype, err)
+		return fmt.Errorf("storage apply %s event: %w", etype, err)
 	}
-	// result = { code(int64), new_score(string), stream_id(string) }
-	switch code := result[0].(int64); code {
+	// result = { code(int64), entry_id(string) } — guard against a script/contract mismatch
+	if len(result) == 0 {
+		return fmt.Errorf("storage apply %s event: empty script result", etype)
+	}
+	code, ok := result[0].(int64)
+	if !ok {
+		return fmt.Errorf("storage apply %s event: non-integer script code %v", etype, result[0])
+	}
+	switch code {
 	case applyCodeApplied, applyCodeDeduped:
-		// both ok
+		return nil
 	case applyCodePlayerNotFound:
-		return 0, ErrNotFound
+		return ErrNotFound
 	case applyCodeBoardNotFound:
-		return 0, ErrBoardNotFound
+		return ErrBoardNotFound
 	case applyCodeBoardClosed:
-		return 0, ErrBoardClosed
+		return ErrBoardClosed
+	case applyCodeIdempotencyConflict:
+		return ErrIdempotencyConflict
 	default:
-		return 0, fmt.Errorf("storage apply %s event: unexpected script code %d", etype, code)
+		return fmt.Errorf("storage apply %s event: unexpected script code %d", etype, code)
 	}
-	score, err := strconv.ParseFloat(result[1].(string), 64)
-	if err != nil {
-		return 0, fmt.Errorf("storage apply %s event: parse score %q: %w", etype, result[1], err)
-	}
-	return score, nil
 }

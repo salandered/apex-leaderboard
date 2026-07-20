@@ -85,48 +85,46 @@ curl -X POST http://localhost:8090/api/v1/players \
   -d '{"player_name":"alice"}'
 # {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
 
-# Fetch a player
-curl http://localhost:8090/api/v1/players/7dcbeb46-e1e1-492d-a32a-c593b13428de
+# Set a score on a main board
+curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
+  -H "Content-Type: application/json" \
+  -d '{"player_score":36}'
+
+# Increment a score
+curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
+  -H "Content-Type: application/json" \
+  -d '{"amount":5}'
+
+# Retry-safe increment: send an Idempotency-Key. Try to curl this several times.
+curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: r1" \
+  -d '{"amount":5}'
+
+# See all the score events
+curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/history
+
+# List a leaderboard
+curl "http://localhost:8090/api/v1/boards/main/scores?limit=10&offset=0"
 
 # Create a new board
 curl -X PUT http://localhost:8090/api/v1/boards/summer-contest \
   -H "Content-Type: application/json" \
   -d '{"board_name":"Summer Contest"}'
 
-# List boards (creation order)
-curl http://localhost:8090/api/v1/boards
-
-# Close a board: score writes start returning 409
+# Close a board
 curl -X POST http://localhost:8090/api/v1/boards/summer-contest/close
 
-# Open a closed board
-curl -X POST http://localhost:8090/api/v1/boards/summer-contest/open
-
-# Set an absolute score on a board
-curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
+# Try to set a score on a new closed board
+curl -X PUT http://localhost:8090/api/v1/boards/summer-contest/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
   -H "Content-Type: application/json" \
-  -d '{"player_score":100}'
+  -d '{"player_score":36}'
 
-# Increment a score
-curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
-  -H "Content-Type: application/json" \
-  -d '{"amount":5}'
-# {"score":105}
+# List boards
+curl http://localhost:8090/api/v1/boards
 
-# List a board's leaderboard, highest first 
-curl "http://localhost:8090/api/v1/boards/main/scores?limit=10&offset=0"
-
-# A single player's standing on a board
-curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de
-```
-
-Projection repair endpoints:
-
-```bash
+# Rebuild a leaderboard
 curl -X POST http://localhost:8090/api/v1/admin/boards/main/projection/rebuild
-
-curl http://localhost:8090/api/v1/admin/boards/main/projection/verify
-# {"mismatches":[]}
 ```
 
 ### Run Tests

@@ -18,7 +18,7 @@ func (s *StorageSuite) TestCreateBoard() {
 		BoardName: "Summer Contest",
 		State:     board.BoardActive,
 		CreatedAt: mockedTime,
-	}, "cb1")
+	})
 
 	// then
 	s.Require().NoError(err)
@@ -35,7 +35,7 @@ func (s *StorageSuite) TestCreateBoardIdConflict() {
 		BoardName: "Summer Contest",
 		State:     board.BoardActive,
 		CreatedAt: mockedTime,
-	}, "cb1"))
+	}))
 
 	// when
 	err := s.storage.CreateBoard(ctx, &board.Board{
@@ -43,7 +43,7 @@ func (s *StorageSuite) TestCreateBoardIdConflict() {
 		BoardName: "Impostor",
 		State:     board.BoardActive,
 		CreatedAt: mockedTime,
-	}, "cb2")
+	})
 
 	// then
 	s.Require().ErrorIs(err, ErrBoardExists)
@@ -59,7 +59,7 @@ func (s *StorageSuite) TestCreateBoardInvalidState() {
 		BoardName: "Summer Contest",
 		State:     board.BoardState("unknown"),
 		CreatedAt: mockedTime,
-	}, "cb1")
+	})
 
 	// then
 	s.Require().ErrorIs(err, StorageError)
@@ -68,7 +68,7 @@ func (s *StorageSuite) TestCreateBoardInvalidState() {
 func (s *StorageSuite) TestGetBoard() {
 	ctx := s.ctx()
 
-	s.createBoard("summer-contest", "Summer Contest", mockedTime, "r1")
+	s.createBoard("summer-contest", "Summer Contest", mockedTime)
 
 	// when
 	b, err := s.storage.GetBoard(ctx, "summer-contest")
@@ -86,8 +86,8 @@ func (s *StorageSuite) TestGetBoardMissingReturnsNotFound() {
 }
 
 func (s *StorageSuite) TestListBoardsOrderedByCreatedAt() {
-	s.createBoard("b-board", "B", mockedTime, "lb1")
-	s.createBoard("a-board", "A", mockedTime.Add(time.Second), "lb2")
+	s.createBoard("b-board", "B", mockedTime)
+	s.createBoard("a-board", "A", mockedTime.Add(time.Second))
 
 	// when
 	boards, err := s.storage.ListBoards(s.ctx())
@@ -100,7 +100,7 @@ func (s *StorageSuite) TestListBoardsOrderedByCreatedAt() {
 }
 
 func (s *StorageSuite) TestSetBoardStateIdempotent() {
-	s.createBoard("weekly", "W", mockedTime, "r0")
+	s.createBoard("weekly", "W", mockedTime)
 
 	// when
 	s.Require().NoError(s.storage.SetBoardState(s.ctx(), "weekly", board.BoardClosed))
@@ -120,7 +120,7 @@ func (s *StorageSuite) TestSetBoardStateIdempotent() {
 }
 
 func (s *StorageSuite) TestSetBoardStateOpenClose() {
-	s.createBoard("weekly", "W", mockedTime, "r0")
+	s.createBoard("weekly", "W", mockedTime)
 
 	// when
 	s.Require().NoError(s.storage.SetBoardState(s.ctx(), "weekly", board.BoardClosed))
@@ -147,10 +147,10 @@ func (s *StorageSuite) TestSetBoardStateUnknownBoard() {
 func (s *StorageSuite) TestSetScoreOnClosedBoardRejected() {
 	ctx := s.ctx()
 	playerId := s.createPlayer("alice")
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	s.closeBoard("weekly")
 
-	err := s.storage.SetScore(ctx, playerId, "weekly", 10, "r1")
+	err := s.storage.SetScore(ctx, playerId, "weekly", 10, "r1", "")
 
 	s.Require().ErrorIs(err, ErrBoardClosed)
 	s.requireStreamLen(ctx, 0) // rejected writes append nothing
@@ -161,10 +161,10 @@ func (s *StorageSuite) TestSetScoreOnClosedBoardRejected() {
 func (s *StorageSuite) TestIncrementScoreOnClosedBoardRejected() {
 	ctx := s.ctx()
 	playerId := s.createPlayer("alice")
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	s.closeBoard("weekly")
 
-	_, err := s.storage.IncrementScore(ctx, playerId, "weekly", 5, "r1")
+	err := s.storage.IncrementScore(ctx, playerId, "weekly", 5, "r1", "")
 
 	s.Require().ErrorIs(err, ErrBoardClosed)
 	s.requireStreamLen(ctx, 0)
@@ -173,36 +173,33 @@ func (s *StorageSuite) TestIncrementScoreOnClosedBoardRejected() {
 func (s *StorageSuite) TestOpenedBoardAcceptsWrites() {
 	ctx := s.ctx()
 	playerId := s.createPlayer("alice")
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 	s.closeBoard("weekly")
 
 	s.Require().NoError(s.storage.SetBoardState(ctx, "weekly", board.BoardActive))
 
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 10, "r1"))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 10, "r1", ""))
 	s.requireStreamLen(ctx, 1)
 }
 
-func (s *StorageSuite) TestAppliedWriteRetryOnClosedBoardReturnsOriginalResult() {
+func (s *StorageSuite) TestAppliedWriteRetryOnClosedBoardIsDeduped() {
 	ctx := s.ctx()
 	playerId := s.createPlayer("alice")
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
+	s.createBoard("weekly", "Weekly", mockedTime)
 
-	first, err := s.storage.IncrementScore(ctx, playerId, "weekly", 10, "r-dup")
-	s.Require().NoError(err)
+	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, "weekly", 10, "req-1", "idem-1"))
 	s.closeBoard("weekly")
 
 	// the fact was recorded while the board was open: dedupe wins over the closed check
-	retry, err := s.storage.IncrementScore(ctx, playerId, "weekly", 10, "r-dup")
-	s.Require().NoError(err)
-	s.Require().Equal(first, retry)
+	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, "weekly", 10, "req-2", "idem-1"))
 	s.requireStreamLen(ctx, 1)
 }
 
 func (s *StorageSuite) TestReadsWorkOnClosedBoard() {
 	ctx := s.ctx()
 	playerId := s.createPlayer("alice")
-	s.createBoard("weekly", "Weekly", mockedTime, "r0")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 10, "r1"))
+	s.createBoard("weekly", "Weekly", mockedTime)
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 10, "r1", ""))
 
 	s.closeBoard("weekly")
 
@@ -219,8 +216,8 @@ func (s *StorageSuite) TestReadsWorkOnClosedBoard() {
 func (s *StorageSuite) TestRebuildFoldsClosedBoardEvents() {
 	ctx := s.ctx()
 	playerId := s.createPlayer("alice")
-	s.createBoard("weekly", "W", mockedTime, "r0")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 10, "r1"))
+	s.createBoard("weekly", "W", mockedTime)
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, "weekly", 10, "r1", ""))
 
 	s.closeBoard("weekly")
 	s.Require().NoError(s.rawClient.Del(ctx, leaderboardKey("weekly")).Err())

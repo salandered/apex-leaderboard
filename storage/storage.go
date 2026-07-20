@@ -22,6 +22,8 @@ var (
 	ErrBoardExists   = fmt.Errorf("%w: board exists", StorageError)
 	ErrBoardNotFound = fmt.Errorf("%w: board not found", StorageError)
 	ErrBoardClosed   = fmt.Errorf("%w: board closed", StorageError)
+	// An idempotency key reused with a different operation or payload.
+	ErrIdempotencyConflict = fmt.Errorf("%w: idempotency conflict", StorageError)
 )
 
 type redisStorage struct {

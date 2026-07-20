@@ -9,15 +9,14 @@ import (
 )
 
 type PlayerRepo interface {
-	// Create-or-conflict: an existing player id yields ErrPlayerExists (never overwrites).
-	// Ids are server-generated, so a conflict signals a collision/bug, not a client error.
-	CreatePlayerProfile(ctx context.Context, profile *player.Profile, requestID string) error
+	// idempotencyKey is the optional client-supplied key (empty string skips the idempotency record)
+	CreatePlayerProfile(ctx context.Context, profile *player.Profile, idempotencyKey string) (player.ID, error)
 	GetPlayerProfile(ctx context.Context, playerId player.ID) (*player.Profile, error)
 }
 
 type BoardRepo interface {
 	// Create-or-conflict: an existing board id yields ErrBoardExists (never overwrites).
-	CreateBoard(ctx context.Context, board *board.Board, requestID string) error
+	CreateBoard(ctx context.Context, board *board.Board) error
 	GetBoard(ctx context.Context, boardId board.ID) (*board.Board, error)
 	// Idempotent state change.
 	SetBoardState(ctx context.Context, boardId board.ID, state board.BoardState) error
@@ -27,8 +26,10 @@ type BoardRepo interface {
 
 // Score reads and writes exposed through the API.
 type ScoreRepo interface {
-	IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount float64, requestID string) (float64, error)
-	SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score float64, requestID string) error
+	// requestID is the server-generated id;
+	// idempotencyKey is the optional client-supplied key (empty string skips the idempotency record)
+	IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount float64, requestID, idempotencyKey string) error
+	SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score float64, requestID, idempotencyKey string) error
 
 	// Returns a player's standing and the total number of ranked players. Rank is 1-based.
 	GetStanding(ctx context.Context, playerId player.ID, boardId board.ID) (Standing, int64, error)
@@ -40,7 +41,6 @@ type ScoreRepo interface {
 	PlayerHistory(ctx context.Context, playerId player.ID, boardId board.ID, limit int64) ([]ledger.Event, error)
 }
 
-// Ops tooling over ledger + projection
 type ProjectionAdmin interface {
 	// Drops one board's projection and rebuilds it from the ledger.
 	RebuildProjection(ctx context.Context, boardId board.ID) error

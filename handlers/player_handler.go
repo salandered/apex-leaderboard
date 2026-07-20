@@ -28,34 +28,35 @@ type GetPlayerResp struct {
 }
 
 func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request) {
+	idempotencyKey, err := readIdempotencyKey(req)
+	if err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
 	var data PostPlayerReq
-	err := json.NewDecoder(req.Body).Decode(&data)
+	err = json.NewDecoder(req.Body).Decode(&data)
 	if err != nil {
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}
 
-	player_id := player.GenerateID()
-
-	err = h.Storage.CreatePlayerProfile(
+	playerId, err := h.Storage.CreatePlayerProfile(
 		req.Context(),
 		&player.Profile{
-			PlayerId:   player_id,
+			PlayerId:   player.GenerateID(),
 			PlayerName: data.PlayerName,
 			CreatedAt:  apextime.Now(),
 		},
-		newRequestID())
-
+		idempotencyKey)
 	if err != nil {
 		writeStorageError(w, err)
 		return
 	}
-	response := PostPlayerResp{PlayerId: string(player_id)}
 
-	writeJSONToResponse(w, http.StatusCreated, response)
+	w.Header().Set("Location", "/api/v1/players/"+string(playerId))
+	writeJSONToResponse(w, http.StatusCreated, PostPlayerResp{PlayerId: string(playerId)})
 }
 
-// HandleGetPlayer returns a player's profile.
 func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request) {
 	playerId := player.ID(req.PathValue(playerIDPathValue))
 	if err := playerId.Validate(); err != nil {

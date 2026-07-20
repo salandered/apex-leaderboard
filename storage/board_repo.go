@@ -31,7 +31,6 @@ var createBoardScript = redis.NewScript(createBoardLua)
 func (rs *redisStorage) CreateBoard(
 	ctx context.Context,
 	board *board.Board,
-	requestID string,
 ) error {
 	if err := board.State.Validate(); err != nil {
 		return fmt.Errorf("%w: create board '%s': invalid state %q", StorageError, board.BoardId, board.State)
@@ -87,8 +86,7 @@ func (rs *redisStorage) GetBoard(ctx context.Context, boardId board.ID) (*board.
 	return boardFromFields(boardId, fields)
 }
 
-// Boards are few by assumption, all hashes are fetched at once:
-// consider adding pagination.
+// TODO: MVP: Boards are few by assumption, all hashes are fetched at once. Add pagination.
 func (rs *redisStorage) ListBoards(ctx context.Context) ([]board.Board, error) {
 	boardIds, err := rs.client.ZRange(ctx, boardsRegistryKey, 0, -1).Result()
 	if err != nil {

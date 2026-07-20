@@ -16,8 +16,8 @@ type boardRepoStub struct {
 	created   []board.Board
 }
 
-func (b *boardRepoStub) CreateBoard(ctx context.Context, brd *board.Board, requestID string) error {
-	b.created = append(b.created, *brd)
+func (b *boardRepoStub) CreateBoard(ctx context.Context, board *board.Board) error {
+	b.created = append(b.created, *board)
 	return b.createErr
 }
 

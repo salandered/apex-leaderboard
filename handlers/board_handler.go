@@ -21,7 +21,7 @@ type PutBoardReq struct {
 type BoardResp struct {
 	BoardId   string `json:"board_id"`
 	BoardName string `json:"board_name"`
-	State     string `json:"status"` // deliberate state - status
+	State     string `json:"status"` // state to status
 	CreatedAt string `json:"created_at"`
 }
 
@@ -48,13 +48,13 @@ func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) 
 			BoardName: data.BoardName,
 			State:     board.BoardActive,
 			CreatedAt: apextime.Now(),
-		},
-		newRequestID())
+		})
 	if err != nil {
 		writeStorageError(w, err)
 		return
 	}
 
+	w.Header().Set("Location", "/api/v1/boards/"+string(boardId))
 	w.WriteHeader(http.StatusCreated)
 }
 

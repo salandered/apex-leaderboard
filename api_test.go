@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ var MockedPlayerId = "698057b7-eb86-4f63-a228-100304c6ca0a"
 var MockedBoardId = "main"
 var MockedUnknownBoardId = "ghost-board" // the mock answers ErrBoardNotFound
 var MockedClosedBoardId = "closed-board" // the mock rejects score writes with ErrBoardClosed
+var MockedConflictIdempotencyKey = "conflict-key" // the mock answers ErrIdempotencyConflict on player create
 
 //go:embed api.yaml
 var apiSpec []byte
@@ -88,6 +90,31 @@ func (s *APISuite) TestPostPlayer() {
 	s.decodeJSON(resp, &result)
 	s.Require().NotEmpty(result.PlayerId)
 	s.Require().NoError(player.ID(result.PlayerId).Validate())
+	s.Require().Equal("/api/v1/players/"+result.PlayerId, resp.Header.Get("Location"))
+}
+
+func (s *APISuite) TestPostPlayerWithIdempotencyKey() {
+	resp := s.postJSONWithHeaders("/api/v1/players",
+		handlers.PostPlayerReq{PlayerName: "alice"},
+		map[string]string{"Idempotency-Key": "player-key-1"},
+	)
+	s.Require().Equal(http.StatusCreated, resp.StatusCode)
+}
+
+func (s *APISuite) TestPostPlayerRejectsOverlongIdempotencyKey() {
+	resp := s.postJSONWithHeaders("/api/v1/players",
+		handlers.PostPlayerReq{PlayerName: "alice"},
+		map[string]string{"Idempotency-Key": strings.Repeat("k", 129)},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPostPlayerIdempotencyKeyConflict() {
+	resp := s.postJSONWithHeaders("/api/v1/players",
+		handlers.PostPlayerReq{PlayerName: "alice"},
+		map[string]string{"Idempotency-Key": MockedConflictIdempotencyKey},
+	)
+	s.Require().Equal(http.StatusConflict, resp.StatusCode)
 }
 
 func (s *APISuite) TestPutScore() {
@@ -106,11 +133,25 @@ func (s *APISuite) TestIncrementScore() {
 			Amount: 12.0,
 		})
 
-	s.Require().Equal(http.StatusOK, resp.StatusCode)
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
+}
 
-	var result handlers.IncrementScoreResp
-	s.decodeJSON(resp, &result)
-	s.Require().Equal(12.0, result.Score)
+func (s *APISuite) TestIncrementScoreWithIdempotencyKey() {
+	resp := s.postJSONWithHeaders(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		handlers.IncrementScoreReq{Amount: 12.0},
+		map[string]string{"Idempotency-Key": "key-abc"},
+	)
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
+}
+
+func (s *APISuite) TestIncrementScoreRejectsOverlongIdempotencyKey() {
+	resp := s.postJSONWithHeaders(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		handlers.IncrementScoreReq{Amount: 12.0},
+		map[string]string{"Idempotency-Key": strings.Repeat("k", 129)},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
 func (s *APISuite) TestPutBoard() {
@@ -387,6 +428,22 @@ func (s *APISuite) postJSON(path string, payload any) *http.Response {
 	return resp
 }
 
+func (s *APISuite) postJSONWithHeaders(path string, payload any, headers map[string]string) *http.Response {
+	body, err := json.Marshal(payload)
+	s.Require().NoError(err)
+	req, err := http.NewRequest(http.MethodPost, s.server.URL+path, bytes.NewReader(body))
+	s.Require().NoError(err)
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := s.client.Do(req)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { resp.Body.Close() })
+	s.validateAgainstSpec(resp)
+	return resp
+}
+
 func (s *APISuite) putJSON(path string, payload any) *http.Response {
 	body, err := json.Marshal(payload)
 	s.Require().NoError(err)
@@ -414,9 +471,12 @@ func getMockedStorage() apiStorage {
 type mockStorage struct {
 }
 
-func (ms *mockStorage) CreatePlayerProfile(c context.Context, profile *player.Profile, requestID string) error {
+func (ms *mockStorage) CreatePlayerProfile(c context.Context, profile *player.Profile, idempotencyKey string) (player.ID, error) {
 	fmt.Printf("creating profile %v to mocked storage", profile)
-	return nil
+	if idempotencyKey == MockedConflictIdempotencyKey {
+		return "", storage.ErrIdempotencyConflict
+	}
+	return profile.PlayerId, nil
 }
 
 func (ms *mockStorage) GetPlayerProfile(c context.Context, id player.ID) (*player.Profile, error) {
@@ -431,7 +491,6 @@ func (ms *mockStorage) GetPlayerProfile(c context.Context, id player.ID) (*playe
 func (ms *mockStorage) CreateBoard(
 	ctx context.Context,
 	board *board.Board,
-	requestID string,
 ) error {
 	fmt.Printf("creating board %v to mocked storage", board)
 	return nil
@@ -461,14 +520,14 @@ func (ms *mockStorage) ListBoards(c context.Context) ([]board.Board, error) {
 	}, nil
 }
 
-func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, boardId board.ID, amount float64, requestID string) (float64, error) {
+func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, boardId board.ID, amount float64, requestID, idempotencyKey string) error {
 	if boardId == board.ID(MockedClosedBoardId) {
-		return 0, storage.ErrBoardClosed
+		return storage.ErrBoardClosed
 	}
-	return 12.0, nil
+	return nil
 }
 
-func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, boardId board.ID, score float64, requestID string) error {
+func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, boardId board.ID, score float64, requestID, idempotencyKey string) error {
 	if boardId == board.ID(MockedClosedBoardId) {
 		return storage.ErrBoardClosed
 	}

@@ -39,10 +39,28 @@ func HandleRoot(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "apex version %v", GetVersion())
 }
 
-// TODO: accept a client-supplied key (Idempotency-Key header).
-// Generating it server-side makes every request unique
 func newRequestID() string {
 	return uuid.NewString()
+}
+
+const idempotencyKeyHeader = "Idempotency-Key"
+const maxIdempotencyKeyLen = 128
+
+// Absent -> "".
+// Empty or too big -> error.
+func readIdempotencyKey(req *http.Request) (string, error) {
+	if _, ok := req.Header[idempotencyKeyHeader]; !ok {
+		return "", nil
+	}
+	key := req.Header.Get(idempotencyKeyHeader)
+	if key == "" {
+		// TODO: consider that empty and no key is the same
+		return "", fmt.Errorf("%s must not be empty", idempotencyKeyHeader)
+	}
+	if len(key) > maxIdempotencyKeyLen {
+		return "", fmt.Errorf("%s must be at most %d characters", idempotencyKeyHeader, maxIdempotencyKeyLen)
+	}
+	return key, nil
 }
 
 // max <= 0 means no cap
@@ -138,6 +156,10 @@ func writeStorageError(w http.ResponseWriter, err error) {
 	}
 	if errors.Is(err, storage.ErrBoardClosed) {
 		writeErrorToResponse(w, fmt.Errorf("board closed"), http.StatusConflict)
+		return
+	}
+	if errors.Is(err, storage.ErrIdempotencyConflict) {
+		writeErrorToResponse(w, fmt.Errorf("idempotency key reused with a different request"), http.StatusConflict)
 		return
 	}
 	slog.Error("internal storage error", "error", err)

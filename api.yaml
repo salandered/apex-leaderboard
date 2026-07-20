@@ -14,6 +14,8 @@ paths:
   /api/v1/players:
     post:
       summary: Add a new player profile. Returns a generated ID.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -22,13 +24,24 @@ paths:
               $ref: "#/components/schemas/CreatePlayerRequest"
       responses:
         "201":
-          description: Player profile created.
+          description: Player profile created (or replayed for a repeated Idempotency-Key)
+          headers:
+            Location:
+              description: URL of the created player profile
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/GeneratedIdResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "409":
+          description: The Idempotency-Key was reused with a different player name
+          content:
+            text/plain:
+              schema:
+                type: string
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -59,6 +72,11 @@ paths:
       responses:
         "201":
           description: Board created
+          headers:
+            Location:
+              description: URL of the created board
+              schema:
+                type: string
         "400":
           $ref: "#/components/responses/BadRequest"
         "409":
@@ -243,6 +261,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
         - $ref: "#/components/parameters/PlayerIdPath"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       responses:
         "204":
           description: Score updated (no content)
@@ -255,7 +274,7 @@ paths:
               schema:
                 type: string
         "409":
-          description: Board is closed to writes
+          description: Board is closed, or the Idempotency-Key was reused with a different request
           content:
             text/plain:
               schema:
@@ -275,13 +294,10 @@ paths:
       parameters:
         - $ref: "#/components/parameters/PlayerIdPath"
         - $ref: "#/components/parameters/BoardIdPath"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       responses:
-        "200":
-          description: All ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IncrementScoreResponse"
+        "204":
+          description: Score incremented. 
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -291,7 +307,7 @@ paths:
               schema:
                 type: string
         "409":
-          description: Board is closed to writes
+          description: Board is closed, or the Idempotency-Key was reused with a different request
           content:
             text/plain:
               schema:
@@ -437,17 +453,6 @@ components:
         player_id:
           type: string
           description: The generated unique ID for a player entry
-
-    IncrementScoreResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - score
-      properties:
-        score:
-          type: number
-          format: double
-          description: Score after incrementing
 
     HistoryEvent:
       type: object
@@ -604,6 +609,16 @@ components:
       description: leaderboard ID
       schema:
         type: string
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >
+        Optional key that makes a retried write a no-op. Reusing a key with a
+        different operation or amount is rejected with 409. Records expire after 24h.
+      schema:
+        type: string
+        maxLength: 128
 
   responses:
     InternalServerError:
