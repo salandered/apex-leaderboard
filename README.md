@@ -85,43 +85,39 @@ curl -X POST http://localhost:8090/api/v1/players \
   -d '{"player_name":"alice"}'
 # {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
 
-# Fetch a player by id
+# Fetch a player
 curl http://localhost:8090/api/v1/players/7dcbeb46-e1e1-492d-a32a-c593b13428de
-# {"player_id":"7dcbeb46-...","player_name":"alice"}
 
-# Create a board (the id is client-chosen; the "main" board always exists)
+# Create a new board
 curl -X PUT http://localhost:8090/api/v1/boards/summer-contest \
   -H "Content-Type: application/json" \
   -d '{"board_name":"Summer Contest"}'
 
 # List boards (creation order)
 curl http://localhost:8090/api/v1/boards
-# {"boards":[{"board_id":"main",...},{"board_id":"summer-contest",...}]}
 
-# Close a board: score writes start returning 409, reads keep working (idempotent, 204)
+# Close a board: score writes start returning 409
 curl -X POST http://localhost:8090/api/v1/boards/summer-contest/close
 
-# Open a closed board (idempotent, 204)
+# Open a closed board
 curl -X POST http://localhost:8090/api/v1/boards/summer-contest/open
 
-# Set an absolute score on a board (a player's first write enrolls them there)
+# Set an absolute score on a board
 curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
   -H "Content-Type: application/json" \
   -d '{"player_score":100}'
 
-# Increment a player's score on a board
+# Increment a score
 curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
   -H "Content-Type: application/json" \
   -d '{"amount":5}'
 # {"score":105}
 
-# List a board's leaderboard, highest first (top 10 by default; page with ?limit= & ?offset=)
+# List a board's leaderboard, highest first 
 curl "http://localhost:8090/api/v1/boards/main/scores?limit=10&offset=0"
-# {"scores":[{"player_id":"7dcbeb46-...","score":105,"rank":1}],"limit":10,"offset":0,"total":1}
 
-# A single player's standing on a board (rank is 1-based; total is the board size)
+# A single player's standing on a board
 curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de
-# {"player_id":"7dcbeb46-...","rank":1,"score":105,"total":1}
 ```
 
 Projection repair endpoints:
