@@ -141,12 +141,13 @@ func (rs *redisStorage) PlayerHistory(
 
 	events := make([]ledger.Event, 0)
 	for _, entry := range entries {
-		if getStreamEntryValue(entry, entryFieldPlayerID) != string(playerId) {
+		if getStreamEntryValue(entry, entryFieldPlayerID) != string(playerId) ||
+			getStreamEntryValue(entry, entryFieldBoardID) != string(boardId) {
 			continue
 		}
-		event := entryToEvent(entry)
-		if event.BoardID != string(boardId) {
-			continue
+		event, err := entryToEvent(entry)
+		if err != nil {
+			return nil, fmt.Errorf("storage history: %w", err)
 		}
 		events = append(events, event)
 		if limit > 0 && int64(len(events)) >= limit {

@@ -6,13 +6,13 @@ Apex is the backend web service implementing the Leaderboard functionality. A li
 
 ## 🚀 Quick Start
 
-You only need [Docker](https://docs.docker.com/get-docker/). Run the app:
+You will only need [Docker](https://docs.docker.com/get-docker/). Run the app:
 
 ```bash
-docker compose up --build      # app on :8090, Redis on :6379
+docker compose up --build
 ```
 
-Make your first requests against `:8090`:
+Make requests:
 
 ```bash
 # Create a player profile; returns the generated id
@@ -21,7 +21,7 @@ curl -X POST http://localhost:8090/api/v1/players \
   -d '{"player_name":"alice"}'
 # {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
 
-# Give that player a score on the default "main" board
+# Give that player a score on the default "main" board (change UUID)
 curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
   -H "Content-Type: application/json" \
   -d '{"player_score":42.5}'
@@ -32,7 +32,7 @@ curl "http://localhost:8090/api/v1/boards/main/scores"
 
 ## 🛠️ Development
 
-Working on the code needs 1.26+ [Go](https://go.dev/doc/install) in addition to Docker.
+[Go](https://go.dev/doc/install) 1.26+ is used in addition to Docker.
 
 ### Running the Server
 
@@ -47,17 +47,12 @@ docker compose down            # stop the stack (add -v to wipe Redis data)
 **Locally with Go (Redis in Docker)**
 
 ```bash
-docker compose up -d redis 
-# or just docker: docker run -p 6379:6379 redis:8.8.0-alpine
+docker compose up -d redis # or: docker run -p 6379:6379 redis:8.8.0-alpine
 go run .
 ```
 
 The server listens on port `:8090` and connects to Redis via `REDIS_URL`
-(default `redis://localhost:6379/0`). Point it elsewhere with the env var:
-
-```bash
-REDIS_URL=redis://:password@host:6379/0 go run .
-```
+(default `redis://localhost:6379/0`).
 
 ### Configuration
 
@@ -129,8 +124,14 @@ curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c59
 # {"player_id":"7dcbeb46-...","rank":1,"score":105,"total":1}
 ```
 
-Legacy single-board routes (`GET /api/v1/scores*`) remain as aliases for the `main` board;
-see [api.yaml](api.yaml).
+Projection repair endpoints:
+
+```bash
+curl -X POST http://localhost:8090/api/v1/admin/boards/main/projection/rebuild
+
+curl http://localhost:8090/api/v1/admin/boards/main/projection/verify
+# {"mismatches":[]}
+```
 
 ### Run Tests
 

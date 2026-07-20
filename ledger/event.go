@@ -12,6 +12,7 @@ const (
 // Uses auto-generated Redis stream entry id.
 // formerly known as ScoreEvent
 type Event struct {
+	// TODO: consider map arguments, not first level "Amount"/"BoardID"/"PlayerID"
 	ID        string    // uses auto-generated Redis ID
 	Type      EventType //
 	PlayerID  string    //

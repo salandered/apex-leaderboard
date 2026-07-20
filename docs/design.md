@@ -23,7 +23,7 @@ Contexts:
 
 ## Rules (invariants)
 
-1. **The event stream is the source of truth.** The leaderboard ZSET (Sorted Set) is a projection:
+1. **The event stream is the source of truth for standings.** The leaderboard ZSET (Sorted Set) is a projection:
    it can be deleted and rebuilt from stream, and the result must be the same.
 
 2. **Events record facts only.** An event exists iff the operation was applied.
@@ -55,7 +55,7 @@ Lua script is used to ensure that an operation is atomic.
 
 *Note: alternative is to remove `/increment` and use set. But that introduces the worse get + set race condition, see info below.*
 
-### Set endpoint (`PUT /api/v1/scores/{id}`)
+### Set endpoint (`PUT /api/v1/boards/{board_id}/scores/{player_id}`)
 
 Potential problem: read-modify-write, a client does `GET` → computes a new value → `PUT`.
 Two clients might read the same value and then set different values, one of them will be lost.
@@ -75,7 +75,7 @@ Implementation notes:
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag
 * https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/If-Match
 
-### Listing endpoint (`GET /api/v1/scores`) and pagination
+### Listing endpoint (`GET /api/v1/boards/{board_id}/scores`) and pagination
 
 The leaderboard is a ZSET which naturally is good for any kind of ranges and hence the pagination. Arguably most important leaderboard functionality - Top N - is just the pagination with starting with the first page.
 

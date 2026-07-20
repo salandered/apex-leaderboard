@@ -26,18 +26,18 @@ const banner = `
      \         \  /   \         \  /   \         \  /   \         \  /
       \_________\/     \_________\/     \_________\/     \_________\/`
 
-// storage.ProjectionAdmin is absent - admin ops (replay/verify) are not
-// reachable from these routes; a future admin surface declares it separately.
 type apiStorage interface {
 	storage.PlayerRepo
 	storage.BoardRepo
 	storage.ScoreRepo
+	storage.ProjectionAdmin
 }
 
 func getMux(s apiStorage) *http.ServeMux {
 	players := &handlers.PlayerHandler{Storage: s}
 	boards := &handlers.BoardHandler{Storage: s}
 	scores := &handlers.ScoreHandler{Storage: s}
+	admin := &handlers.AdminHandler{Storage: s}
 
 	mux := http.NewServeMux()
 
@@ -57,10 +57,16 @@ func getMux(s apiStorage) *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores", scores.HandleListScores)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}", scores.HandleGetRank)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}/history", scores.HandleGetHistory)
-	// legacy aliases for the main board (documented as such in api.yaml)
-	mux.HandleFunc("GET /api/v1/scores", scores.HandleListScores)
-	mux.HandleFunc("GET /api/v1/scores/{player_id}/rank", scores.HandleGetRank)
-	mux.HandleFunc("GET /api/v1/scores/{player_id}/history", scores.HandleGetHistory)
+
+	// admin
+	mux.HandleFunc(
+		"POST /api/v1/admin/boards/{board_id}/projection/rebuild",
+		admin.HandleRebuildProjection,
+	)
+	mux.HandleFunc(
+		"GET /api/v1/admin/boards/{board_id}/projection/verify",
+		admin.HandleVerifyProjection,
+	)
 
 	return mux
 }

@@ -3,13 +3,10 @@ package storage
 import (
 	"context"
 	"fmt"
-	"math"
-	"strconv"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/ledger"
-	"github.com/salandered/apex/player"
 )
 
 // Present flags distinguish "wrong score" from "missing on one side".
@@ -65,73 +62,13 @@ func (rs *redisStorage) readBoardEvents(
 		if getStreamEntryValue(entry, entryFieldBoardID) != string(boardId) {
 			continue
 		}
-		event, err := projectionEvent(entry)
+		event, err := entryToEvent(entry)
 		if err != nil {
 			return nil, err
 		}
 		events = append(events, event)
 	}
 	return events, nil
-}
-
-func projectionEvent(entry redis.XMessage) (ledger.Event, error) {
-	required := func(field string) (string, error) {
-		value := getStreamEntryValue(entry, field)
-		if value == "" {
-			return "", fmt.Errorf(
-				"%w: ledger event '%s' missing field '%s'", ErrInconsistent, entry.ID, field,
-			)
-		}
-		return value, nil
-	}
-
-	rawType, err := required(entryFieldType)
-	if err != nil {
-		return ledger.Event{}, err
-	}
-	eventType := ledger.EventType(rawType)
-	if eventType != ledger.EventSet && eventType != ledger.EventIncrement {
-		return ledger.Event{}, fmt.Errorf(
-			"%w: ledger event '%s' has unknown type %q", ErrInconsistent, entry.ID, rawType,
-		)
-	}
-	playerId, err := required(entryFieldPlayerID)
-	if err != nil {
-		return ledger.Event{}, err
-	}
-	if err := player.ID(playerId).Validate(); err != nil {
-		return ledger.Event{}, fmt.Errorf(
-			"%w: ledger event '%s' has invalid player id: %v", ErrInconsistent, entry.ID, err,
-		)
-	}
-	boardId, err := required(entryFieldBoardID)
-	if err != nil {
-		return ledger.Event{}, err
-	}
-	rawAmount, err := required(entryFieldAmount)
-	if err != nil {
-		return ledger.Event{}, err
-	}
-	amount, err := strconv.ParseFloat(rawAmount, 64)
-	if err != nil || math.IsNaN(amount) {
-		return ledger.Event{}, fmt.Errorf(
-			"%w: ledger event '%s' has invalid amount %q", ErrInconsistent, entry.ID, rawAmount,
-		)
-	}
-	requestId, err := required(entryFieldRequestID)
-	if err != nil {
-		return ledger.Event{}, err
-	}
-
-	return ledger.Event{
-		ID:        entry.ID,
-		Type:      eventType,
-		PlayerID:  playerId,
-		BoardID:   boardId,
-		Amount:    amount,
-		RequestID: requestId,
-		CreatedAt: eventTime(entry.ID),
-	}, nil
 }
 
 // Drops keyFor(board), then folds that board's events forward:

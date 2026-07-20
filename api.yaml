@@ -45,43 +45,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /api/v1/scores:
-    get:
-      summary: >
-        Lists players by score, highest first (paginated).
-        Legacy alias for /api/v1/boards/main/scores.
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          description: Page size (1..100)
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-        - name: offset
-          in: query
-          required: false
-          description: Number of higher-ranked rows to skip
-          schema:
-            type: integer
-            minimum: 0
-      responses:
-        "200":
-          description: All ok (empty list if the board is empty or offset is past the end)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListScoresResponse"
-        "400":
-          description: Bad Request (e.g. invalid limit or offset)
-          content:
-            text/plain:
-              schema:
-                type: string
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-
   /api/v1/boards/{board_id}:
     put:
       summary: Create a new board. The id is client-chosen and immutable.
@@ -246,36 +209,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /api/v1/scores/{player_id}/rank:
-    get:
-      summary: >
-        Retrieves a player's standing (rank, score, total).
-        Legacy alias for /api/v1/boards/main/scores/{player_id}.
-      parameters:
-        - name: player_id
-          in: path
-          required: true
-          description: The ID of the player entry
-          schema:
-            type: string
-      responses:
-        "200":
-          description: All ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RankResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          description: ID not found (player not ranked)
-          content:
-            text/plain:
-              schema:
-                type: string
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-
   /api/v1/boards/{board_id}/scores/{player_id}:
     get:
       summary: Retrieves a player's standing on a board (rank, score, total)
@@ -366,29 +299,45 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /api/v1/scores/{player_id}/history:
-    get:
-      summary: >
-        Lists a player's score events (ledger), newest first.
-        Legacy alias for /api/v1/boards/main/scores/{player_id}/history.
+  /api/v1/admin/boards/{board_id}/projection/rebuild:
+    post:
+      summary: Rebuild one board's leaderboard projection from the score ledger
       parameters:
-        - $ref: "#/components/parameters/PlayerIdPath"
-        - name: limit
-          in: query
-          required: false
-          description: Max number of events to return (positive integer)
-          schema:
-            type: integer
-            minimum: 1
+        - $ref: "#/components/parameters/BoardIdPath"
+      responses:
+        "204":
+          description: Projection rebuilt (no content)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Board ID not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/boards/{board_id}/projection/verify:
+    get:
+      summary: Compare one board's live projection with a ledger replay
+      parameters:
+        - $ref: "#/components/parameters/BoardIdPath"
       responses:
         "200":
-          description: All ok (empty list if the player has no events)
+          description: Verification completed; an empty mismatch list means no drift
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HistoryResponse"
+                $ref: "#/components/schemas/VerifyProjectionResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Board ID not found
+          content:
+            text/plain:
+              schema:
+                type: string
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -602,6 +551,43 @@ components:
         total:
           type: integer
           description: Total ranked players on the board (ZCARD)
+
+    ProjectionMismatch:
+      type: object
+      additionalProperties: false
+      required:
+        - board_id
+        - player_id
+        - live_score
+        - live_present
+        - replay_score
+        - replay_present
+      properties:
+        board_id:
+          type: string
+        player_id:
+          type: string
+        live_score:
+          type: number
+          format: double
+        live_present:
+          type: boolean
+        replay_score:
+          type: number
+          format: double
+        replay_present:
+          type: boolean
+
+    VerifyProjectionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - mismatches
+      properties:
+        mismatches:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectionMismatch"
 
   parameters:
     PlayerIdPath:

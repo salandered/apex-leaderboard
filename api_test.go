@@ -70,8 +70,7 @@ func (s *APISuite) TestRoot() {
 	s.Require().NoError(err)
 
 	// the version is build-time injected
-	s.Require().Contains(string(body), "apex")
-	s.Require().Contains(string(body), "see /api/v1/scores")
+	s.Require().Contains(string(body), "apex version")
 }
 
 func (s *APISuite) TestInvalidPath() {
@@ -172,6 +171,34 @@ func (s *APISuite) TestCloseBoardInvalidId() {
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
+func (s *APISuite) TestAdminRebuildProjection() {
+	resp := s.post("/api/v1/admin/boards/" + MockedBoardId + "/projection/rebuild")
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
+}
+
+func (s *APISuite) TestAdminRebuildProjectionUnknownBoard() {
+	resp := s.post("/api/v1/admin/boards/" + MockedUnknownBoardId + "/projection/rebuild")
+	s.Require().Equal(http.StatusNotFound, resp.StatusCode)
+}
+
+func (s *APISuite) TestAdminRebuildProjectionInvalidBoardId() {
+	resp := s.post("/api/v1/admin/boards/Bad_Id/projection/rebuild")
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestAdminVerifyProjection() {
+	resp := s.get("/api/v1/admin/boards/" + MockedBoardId + "/projection/verify")
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.VerifyProjectionResp
+	s.decodeJSON(resp, &result)
+	s.Require().Len(result.Mismatches, 1)
+	s.Require().Equal(MockedBoardId, result.Mismatches[0].BoardId)
+	s.Require().Equal(MockedPlayerId, result.Mismatches[0].PlayerId)
+	s.Require().Equal(40.0, result.Mismatches[0].LiveScore)
+	s.Require().Equal(42.0, result.Mismatches[0].ReplayScore)
+}
+
 func (s *APISuite) TestPutScoreClosedBoard() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedClosedBoardId+"/scores/"+MockedPlayerId,
@@ -232,8 +259,8 @@ func (s *APISuite) TestGetScoreInvalidId() {
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
-func (s *APISuite) TestGetRank() {
-	resp := s.get("/api/v1/scores/" + MockedPlayerId + "/rank")
+func (s *APISuite) TestGetStandingOnBoardDetails() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/" + MockedPlayerId)
 	s.Require().Equal(http.StatusOK, resp.StatusCode)
 
 	var result handlers.RankResp
@@ -243,13 +270,13 @@ func (s *APISuite) TestGetRank() {
 	s.Require().Equal(int64(10), result.Total)
 }
 
-func (s *APISuite) TestGetRankInvalidId() {
-	resp := s.get("/api/v1/scores/not-a-uuid/rank")
+func (s *APISuite) TestGetStandingOnBoardInvalidPlayerId() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/not-a-uuid")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
-func (s *APISuite) TestListScores() {
-	resp := s.get("/api/v1/scores?limit=10&offset=0")
+func (s *APISuite) TestListScoresOnBoardDetails() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores?limit=10&offset=0")
 	s.Require().Equal(http.StatusOK, resp.StatusCode)
 
 	var result handlers.ListScoresResp
@@ -264,18 +291,18 @@ func (s *APISuite) TestListScores() {
 	s.Require().Equal(int64(2), result.Total)
 }
 
-func (s *APISuite) TestListScoresInvalidOffset() {
-	resp := s.get("/api/v1/scores?offset=-1")
+func (s *APISuite) TestListScoresOnBoardInvalidOffset() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores?offset=-1")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
-func (s *APISuite) TestListScoresLimitTooLarge() {
-	resp := s.get("/api/v1/scores?limit=99999")
+func (s *APISuite) TestListScoresOnBoardLimitTooLarge() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores?limit=99999")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
-func (s *APISuite) TestGetHistory() {
-	resp := s.get("/api/v1/scores/" + MockedPlayerId + "/history")
+func (s *APISuite) TestGetHistoryOnBoardDetails() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/" + MockedPlayerId + "/history")
 	s.Require().Equal(http.StatusOK, resp.StatusCode)
 
 	var result handlers.HistoryResp
@@ -286,13 +313,13 @@ func (s *APISuite) TestGetHistory() {
 	s.Require().Equal("set", result.Events[1].Type)
 }
 
-func (s *APISuite) TestGetHistoryInvalidId() {
-	resp := s.get("/api/v1/scores/not-a-uuid/history")
+func (s *APISuite) TestGetHistoryOnBoardInvalidPlayerId() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/not-a-uuid/history")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
-func (s *APISuite) TestGetHistoryInvalidLimit() {
-	resp := s.get("/api/v1/scores/" + MockedPlayerId + "/history?limit=0")
+func (s *APISuite) TestGetHistoryOnBoardInvalidLimit() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/" + MockedPlayerId + "/history?limit=0")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -463,5 +490,28 @@ func (ms *mockStorage) PlayerHistory(c context.Context, playerId player.ID, boar
 	return []ledger.Event{
 		{ID: "200-1", Type: ledger.EventIncrement, PlayerID: string(playerId), Amount: 3, RequestID: "r2", CreatedAt: time.UnixMilli(200)},
 		{ID: "100-0", Type: ledger.EventSet, PlayerID: string(playerId), Amount: 0, RequestID: "r1", CreatedAt: time.UnixMilli(100)},
+	}, nil
+}
+
+func (ms *mockStorage) RebuildProjection(c context.Context, boardId board.ID) error {
+	if boardId == board.ID(MockedUnknownBoardId) {
+		return storage.ErrBoardNotFound
+	}
+	return nil
+}
+
+func (ms *mockStorage) VerifyProjection(c context.Context, boardId board.ID) ([]storage.ScoreMismatch, error) {
+	if boardId == board.ID(MockedUnknownBoardId) {
+		return nil, storage.ErrBoardNotFound
+	}
+	return []storage.ScoreMismatch{
+		{
+			BoardID:       string(boardId),
+			PlayerID:      MockedPlayerId,
+			LiveScore:     40,
+			LivePresent:   true,
+			ReplayScore:   42,
+			ReplayPresent: true,
+		},
 	}, nil
 }

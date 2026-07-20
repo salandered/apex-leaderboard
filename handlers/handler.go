@@ -36,7 +36,7 @@ func GetVersion() string {
 }
 
 func HandleRoot(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, "apex %s — see /api/v1/scores\n", GetVersion())
+	fmt.Fprintf(w, "apex version %v", GetVersion())
 }
 
 // TODO: accept a client-supplied key (Idempotency-Key header).
@@ -69,14 +69,8 @@ func parseIntQuery(req *http.Request, name string, def, min, max int64) (int64, 
 	return v, nil
 }
 
-// boardIdFromPath reads {board_id}; the legacy alias routes have no board segment,
-// which means the main board.
 func boardIdFromPath(req *http.Request) (board.ID, error) {
-	raw := req.PathValue(boardIDPathValue)
-	if raw == "" {
-		return board.MainId, nil
-	}
-	boardId := board.ID(raw)
+	boardId := board.ID(req.PathValue(boardIDPathValue))
 	if err := boardId.Validate(); err != nil {
 		return "", err
 	}

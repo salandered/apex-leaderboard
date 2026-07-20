@@ -5,6 +5,7 @@ package storage
 import (
 	"strconv"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/ledger"
 	"github.com/salandered/apex/player"
@@ -334,4 +335,47 @@ func (s *StorageSuite) TestHistory() {
 	none, err := s.storage.PlayerHistory(ctx, player.GenerateID(), board.MainId, 0)
 	s.Require().NoError(err)
 	s.Require().Empty(none)
+}
+
+func (s *StorageSuite) TestHistoryRejectsMalformedMatchingEvent() {
+	ctx := s.ctx()
+	s.createMainBoard()
+	playerId := s.createPlayer("alice")
+	s.Require().NoError(s.rawClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: ledgerKey,
+		Values: map[string]any{
+			entryFieldType:      "unknown",
+			entryFieldPlayerID:  string(playerId),
+			entryFieldBoardID:   string(board.MainId),
+			entryFieldAmount:    "5",
+			entryFieldRequestID: "broken",
+		},
+	}).Err())
+
+	events, err := s.storage.PlayerHistory(ctx, playerId, board.MainId, 0)
+
+	s.Require().ErrorIs(err, ErrInconsistent)
+	s.Require().Nil(events)
+}
+
+func (s *StorageSuite) TestHistoryIgnoresMalformedEventsOutsideRequestedScope() {
+	ctx := s.ctx()
+	s.createMainBoard()
+	playerId := s.createPlayer("alice")
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 20, "r1"))
+	s.Require().NoError(s.rawClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: ledgerKey,
+		Values: map[string]any{
+			entryFieldType:     "unknown",
+			entryFieldPlayerID: string(playerId),
+			entryFieldBoardID:  "weekly",
+			entryFieldAmount:   "not-a-number",
+		},
+	}).Err())
+
+	events, err := s.storage.PlayerHistory(ctx, playerId, board.MainId, 0)
+
+	s.Require().NoError(err)
+	s.Require().Len(events, 1)
+	s.Require().Equal("r1", events[0].RequestID)
 }
