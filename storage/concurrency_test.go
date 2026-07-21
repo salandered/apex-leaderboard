@@ -11,6 +11,8 @@ import (
 	"github.com/salandered/apex/player"
 )
 
+// TODO: probably e2e tests during the CI
+
 // N concurrent increments apply N ops and append N events.
 func (s *StorageSuite) TestConcurrentIncrementScoreApplielAllOnce() {
 	ctx := s.ctx()

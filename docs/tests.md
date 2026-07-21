@@ -44,7 +44,7 @@ where
 Responses that tests produce are auto checked against Open API spec.
 This runs **only in tests** (no production middleware).
 
-- `SetupSuite` loads `api.yaml` (embedded) and builds a router from it.
+- `SetupSuite` loads the spec (embedded via the `apispec` package) and builds a router from it.
 - Test helpers which work with HTTP requests call `validateAgainstSpec`.
 - Since all tests use http helpers, no extra code to test bodies
 - NOTE: Requests to paths not in the spec are skipped.

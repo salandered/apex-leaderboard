@@ -1,19 +1,13 @@
 package main
 
 import (
-	"context"
-	_ "embed"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
-	"time"
 
-	"github.com/salandered/apex/apextime"
-	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/handlers"
 	"github.com/salandered/apex/logging"
+	"github.com/salandered/apex/server"
 	"github.com/salandered/apex/storage"
 )
 
@@ -25,81 +19,6 @@ const banner = `
      /_________/  \___/_________/  \___/_________/  \___/_________/  \
      \         \  /   \         \  /   \         \  /   \         \  /
       \_________\/     \_________\/     \_________\/     \_________\/`
-
-type apiStorage interface {
-	storage.PlayerRepo
-	storage.BoardRepo
-	storage.ScoreRepo
-	storage.ProjectionAdmin
-}
-
-func getMux(s apiStorage) *http.ServeMux {
-	players := &handlers.PlayerHandler{Storage: s}
-	boards := &handlers.BoardHandler{Storage: s}
-	scores := &handlers.ScoreHandler{Storage: s}
-	admin := &handlers.AdminHandler{Storage: s}
-
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /{$}", handlers.HandleRoot)
-	// players
-	mux.HandleFunc("POST /api/v1/players", players.HandlePostPlayer)
-	mux.HandleFunc("GET /api/v1/players/{player_id}", players.HandleGetPlayer)
-	// boards
-	mux.HandleFunc("PUT /api/v1/boards/{board_id}", boards.HandlePutBoard)
-	mux.HandleFunc("GET /api/v1/boards", boards.HandleListBoards)
-	mux.HandleFunc("GET /api/v1/boards/{board_id}", boards.HandleGetBoard)
-	mux.HandleFunc("POST /api/v1/boards/{board_id}/close", boards.HandleCloseBoard)
-	mux.HandleFunc("POST /api/v1/boards/{board_id}/open", boards.HandleOpenBoard)
-	// scores + ledger, board-scoped
-	mux.HandleFunc("PUT /api/v1/boards/{board_id}/scores/{player_id}", scores.HandlePutScore)
-	mux.HandleFunc("POST /api/v1/boards/{board_id}/scores/{player_id}/increment", scores.HandleIncrementScore)
-	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores", scores.HandleListScores)
-	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}", scores.HandleGetRank)
-	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}/history", scores.HandleGetHistory)
-
-	// admin
-	mux.HandleFunc(
-		"POST /api/v1/admin/boards/{board_id}/projection/rebuild",
-		admin.HandleRebuildProjection,
-	)
-	mux.HandleFunc(
-		"GET /api/v1/admin/boards/{board_id}/projection/verify",
-		admin.HandleVerifyProjection,
-	)
-
-	return mux
-}
-
-// creates the default board if missing
-func createMainBoard(s storage.BoardRepo) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := s.CreateBoard(ctx, &board.Board{
-		BoardId:   board.MainId,
-		BoardName: "main",
-		State:     board.BoardActive,
-		CreatedAt: apextime.Now(),
-	})
-	if errors.Is(err, storage.ErrBoardExists) {
-		return nil
-	}
-	return err
-}
-
-func startServer(handler http.Handler) {
-	s := &http.Server{
-		Addr:           ":8090",
-		Handler:        handler,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20, // 1 mb
-	}
-	slog.Info("starting server", "addr", s.Addr)
-	slog.Error("server stopped", "error", s.ListenAndServe())
-	os.Exit(1)
-}
 
 func main() {
 	fmt.Printf("apex version %v %v \n\n", handlers.GetVersion(), banner)
@@ -124,11 +43,13 @@ func main() {
 	}
 
 	// the default board must exist before the server accepts writes
-	if err := createMainBoard(store); err != nil {
+	if err := storage.SeedMainBoard(store); err != nil {
 		slog.Error("seeding main board failed", "error", err)
 		os.Exit(1)
 	}
 
-	mux := getMux(store)
-	startServer(loggingMiddleware(mux))
+	if err := server.Start(server.NewMux(store)); err != nil {
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
+	}
 }

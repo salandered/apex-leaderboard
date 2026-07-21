@@ -1,4 +1,4 @@
-package main
+package storage_test
 
 import (
 	"context"
@@ -33,11 +33,11 @@ func (b *boardRepoStub) ListBoards(context.Context) ([]board.Board, error) {
 	return nil, nil
 }
 
-func TestCreateMainBoardSeedsMissingBoard(t *testing.T) {
+func TestSeedMainBoardSeedsMissingBoard(t *testing.T) {
 	stub := &boardRepoStub{}
 
 	// when
-	err := createMainBoard(stub)
+	err := storage.SeedMainBoard(stub)
 
 	// then
 	require.NoError(t, err)
@@ -47,22 +47,22 @@ func TestCreateMainBoardSeedsMissingBoard(t *testing.T) {
 	require.False(t, stub.created[0].CreatedAt.IsZero())
 }
 
-func TestCreateMainBoardIgnoresExistingBoard(t *testing.T) {
+func TestSeedMainBoardIgnoresExistingBoard(t *testing.T) {
 	stub := &boardRepoStub{createErr: storage.ErrBoardExists}
 
 	// when
-	err := createMainBoard(stub)
+	err := storage.SeedMainBoard(stub)
 
 	// then
 	require.NoError(t, err)
 }
 
-func TestCreateMainBoardPropagatesOtherErrors(t *testing.T) {
+func TestSeedMainBoardPropagatesOtherErrors(t *testing.T) {
 	stubErr := errors.New("redis unreachable")
 	stub := &boardRepoStub{createErr: stubErr}
 
 	// when
-	err := createMainBoard(stub)
+	err := storage.SeedMainBoard(stub)
 
 	// then
 	require.ErrorIs(t, err, stubErr)

@@ -40,7 +40,7 @@ curl "http://localhost:8090/api/v1/boards/main/scores"
 
 ## API Spec
 
-[`api.yaml`](api.yaml) - OpenAPI specification
+[`api.yaml`](apispec/api.yaml) - OpenAPI specification
 
 ## 🛠️ Development
 
