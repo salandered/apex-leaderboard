@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
 )
@@ -21,18 +20,9 @@ type IncrementScoreReq struct {
 	Amount float64 `json:"amount"`
 }
 
-// one ledger entry in the API response
-type HistoryEvent struct {
-	Id        string  `json:"id"`
-	Type      string  `json:"type"`
-	Amount    float64 `json:"amount"`
-	RequestId string  `json:"request_id"`
-	CreatedAt string  `json:"created_at"`
-}
-
 type HistoryResp struct {
-	PlayerId player.ID      `json:"player_id"`
-	Events   []HistoryEvent `json:"events"`
+	PlayerId player.ID    `json:"player_id"`
+	Events   []ScoreEvent `json:"events"`
 }
 
 // part of the ListScoresResp
@@ -202,16 +192,10 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 	// Note: an unknown player yields an empty list, not a 404
 	response := HistoryResp{
 		PlayerId: playerId,
-		Events:   make([]HistoryEvent, 0, len(events)),
+		Events:   make([]ScoreEvent, 0, len(events)),
 	}
 	for _, e := range events {
-		response.Events = append(response.Events, HistoryEvent{
-			Id:        e.ID,
-			Type:      string(e.Type),
-			Amount:    e.Amount,
-			RequestId: e.RequestID,
-			CreatedAt: apextime.Format(e.CreatedAt),
-		})
+		response.Events = append(response.Events, scoreEventFromLedger(e))
 	}
 
 	writeJSONToResponse(w, http.StatusOK, response)

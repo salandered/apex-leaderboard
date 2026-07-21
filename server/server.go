@@ -17,6 +17,7 @@ func NewMux(s storage.Storage) *http.ServeMux {
 	scores := &handlers.ScoreHandler{Storage: s}
 	admin := &handlers.AdminHandler{Storage: s}
 	views := &handlers.ViewHandler{Storage: s}
+	events := &handlers.EventHandler{Storage: s}
 
 	mux := http.NewServeMux()
 
@@ -30,12 +31,14 @@ func NewMux(s storage.Storage) *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/boards/{board_id}", boards.HandleGetBoard)
 	mux.HandleFunc("POST /api/v1/boards/{board_id}/close", boards.HandleCloseBoard)
 	mux.HandleFunc("POST /api/v1/boards/{board_id}/open", boards.HandleOpenBoard)
-	// scores + ledger, board-scoped
+	// scores, board-scoped
 	mux.HandleFunc("PUT /api/v1/boards/{board_id}/scores/{player_id}", scores.HandlePutScore)
 	mux.HandleFunc("POST /api/v1/boards/{board_id}/scores/{player_id}/increment", scores.HandleIncrementScore)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores", scores.HandleListScores)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}", scores.HandleGetRank)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}/history", scores.HandleGetHistory)
+	// global events
+	mux.HandleFunc("GET /api/v1/events", events.HandleListEvents)
 
 	// admin
 	mux.HandleFunc(
@@ -53,8 +56,7 @@ func NewMux(s storage.Storage) *http.ServeMux {
 	return mux
 }
 
-// Start runs the HTTP server with the standard middleware stack.
-// It blocks until the server stops and always returns a non-nil error.
+// blocks until the server stops and always returns a non-nil error.
 func Start(handler http.Handler) error {
 	s := &http.Server{
 		Addr:           addr,

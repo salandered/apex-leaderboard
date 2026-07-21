@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -259,9 +261,35 @@ func (ms *mockStorage) ListStandings(c context.Context, boardId board.ID, limit,
 
 func (ms *mockStorage) PlayerHistory(c context.Context, playerId player.ID, boardId board.ID, limit int64) ([]ledger.Event, error) {
 	return []ledger.Event{
-		{ID: "200-1", Type: ledger.EventIncrement, PlayerID: string(playerId), Amount: 3, RequestID: "r2", CreatedAt: time.UnixMilli(200)},
-		{ID: "100-0", Type: ledger.EventSet, PlayerID: string(playerId), Amount: 0, RequestID: "r1", CreatedAt: time.UnixMilli(100)},
+		{ID: "200-1", Type: ledger.EventIncrement, PlayerID: string(playerId), BoardID: string(boardId), Amount: 3, RequestID: "r2", CreatedAt: time.UnixMilli(200)},
+		{ID: "100-0", Type: ledger.EventSet, PlayerID: string(playerId), BoardID: string(boardId), Amount: 0, RequestID: "r1", CreatedAt: time.UnixMilli(100)},
 	}, nil
+}
+
+func (ms *mockStorage) ListEventsAfter(
+	_ context.Context, after string, limit int64,
+) ([]ledger.Event, error) {
+	// TODO: mocked methods with such complex logic is hard to maintain, consider rewriting
+	if after == "999-0" {
+		return []ledger.Event{}, nil
+	}
+
+	start, _, _ := strings.Cut(after, "-")
+	startMillis, _ := strconv.ParseInt(start, 10, 64)
+	events := make([]ledger.Event, 0, limit)
+	for i := int64(1); i <= limit; i++ {
+		milliseconds := startMillis + i
+		events = append(events, ledger.Event{
+			ID:        fmt.Sprintf("%d-0", milliseconds),
+			Type:      ledger.EventIncrement,
+			PlayerID:  MockedPlayerId,
+			BoardID:   MockedBoardId,
+			Amount:    5,
+			RequestID: fmt.Sprintf("request-%d", i),
+			CreatedAt: time.UnixMilli(milliseconds).UTC(),
+		})
+	}
+	return events, nil
 }
 
 func (ms *mockStorage) RebuildProjection(c context.Context, boardId board.ID) error {

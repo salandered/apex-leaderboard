@@ -140,7 +140,15 @@ func (s *APISuite) TestGetHistoryOnBoardDetails() {
 	s.decodeJSON(resp, &result)
 	s.Require().Equal(MockedPlayerId, string(result.PlayerId))
 	s.Require().Len(result.Events, 2)
-	s.Require().Equal("increment", result.Events[0].Type) // newest first
+	s.Require().Equal(handlers.ScoreEvent{
+		EventId:   "200-1",
+		Type:      "increment",
+		PlayerId:  MockedPlayerId,
+		BoardId:   MockedBoardId,
+		Amount:    3,
+		RequestId: "r2",
+		CreatedAt: "1970-01-01T00:00:00.200Z",
+	}, result.Events[0]) // newest first
 	s.Require().Equal("set", result.Events[1].Type)
 }
 

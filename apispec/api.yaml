@@ -205,7 +205,7 @@ paths:
 
   /api/v1/boards/{board_id}/scores/{player_id}/history:
     get:
-      summary: Lists a player's score events on a board (ledger), newest first
+      summary: Lists a player's score events on a board, newest first
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
         - $ref: "#/components/parameters/PlayerIdPath"
@@ -223,6 +223,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HistoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/events:
+    get:
+      summary: Lists all score events after an exclusive cursor, oldest first
+      parameters:
+        - name: after
+          in: query
+          required: true
+          description: Pass the previous response's next_after; use 0-0 to read from the beginning
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of events to return (defaults to 50)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: A chronological page of events; an empty page retains the requested cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEventsResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "500":
@@ -318,7 +348,7 @@ paths:
 
   /api/v1/admin/boards/{board_id}/projection/rebuild:
     post:
-      summary: Rebuild one board's leaderboard projection from the score ledger
+      summary: Rebuild one board's leaderboard projection from its score events
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
       responses:
@@ -337,7 +367,7 @@ paths:
 
   /api/v1/admin/boards/{board_id}/projection/verify:
     get:
-      summary: Compare one board's live projection with a ledger replay
+      summary: Compare one board's live projection with an event replay
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
       responses:
@@ -492,35 +522,40 @@ components:
           type: string
           description: The generated unique ID for a player entry
 
-    HistoryEvent:
+    ScoreEvent:
       type: object
       additionalProperties: false
       required:
-        - id
+        - event_id
         - type
+        - player_id
+        - board_id
         - amount
         - request_id
         - created_at
       properties:
-        id:
+        event_id:
           type: string
-          description: Event ID
+          description: Unique event identifier
         type:
           type: string
           enum:
             - set
             - increment
+        player_id:
+          type: string
+        board_id:
+          type: string
         amount:
           type: number
           format: double
           description: Absolute value (set) or delta (increment)
         request_id:
           type: string
-          description: Idempotency key the write used
+          description: Server-generated request correlation ID
         created_at:
           type: string
           format: date-time
-          description: Event time (RFC3339)
 
     HistoryResponse:
       type: object
@@ -534,7 +569,22 @@ components:
         events:
           type: array
           items:
-            $ref: "#/components/schemas/HistoryEvent"
+            $ref: "#/components/schemas/ScoreEvent"
+
+    ListEventsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - events
+        - next_after
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreEvent"
+        next_after:
+          type: string
+          description: Cursor to pass as after on the next request
 
     ScoreEntry:
       type: object

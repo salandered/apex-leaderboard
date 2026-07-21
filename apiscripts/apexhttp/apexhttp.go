@@ -61,18 +61,19 @@ type createPlayerResp struct {
 	PlayerID string `json:"player_id"`
 }
 
-// HistoryEvent is one entry in a player's score ledger.
-type HistoryEvent struct {
-	ID        string  `json:"id"`
+type ScoreEvent struct {
+	EventID   string  `json:"event_id"`
 	Type      string  `json:"type"`
+	PlayerID  string  `json:"player_id"`
+	BoardID   string  `json:"board_id"`
 	Amount    float64 `json:"amount"`
 	RequestID string  `json:"request_id"`
 	CreatedAt string  `json:"created_at"`
 }
 
 type History struct {
-	PlayerID string         `json:"player_id"`
-	Events   []HistoryEvent `json:"events"`
+	PlayerID string       `json:"player_id"`
+	Events   []ScoreEvent `json:"events"`
 }
 
 // ScorePath is the path to a single player's score/standing on a board.
@@ -121,7 +122,7 @@ func FetchStanding(rc *resty.Client, boardID, playerID string) (Standing, error)
 	return DoJSON[Standing](rc, resty.MethodGet, ScorePath(boardID, playerID), nil, http.StatusOK)
 }
 
-// FetchHistory reads a player's score ledger on a board (newest first).
+// FetchHistory reads a player's score events on a board (newest first).
 func FetchHistory(rc *resty.Client, boardID, playerID string) (History, error) {
 	return DoJSON[History](rc, resty.MethodGet, ScorePath(boardID, playerID)+"/history", nil, http.StatusOK)
 }

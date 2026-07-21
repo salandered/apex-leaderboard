@@ -49,17 +49,23 @@ The board id is **immutable forever** (ids are written into ledger events),
 however, a board has a mutable display name.
 A registry (currently acts as a sorting index) keeps the list of boards in creation order.
 The default board `main` is created at startup.
-Boards carry an `active`/`closed` status: a closed
+
+Boards has a status, currntly `active`/`closed`: a closed
 board rejects score writes with `409` while reads and ledger replay are unaffected.
 In particualr, a closed board allows to rebuild the leaderboard projection from the ledger without racing with
 concurrent new score writes.
-Board can be reopened. A board can also be created already closed.
+Board can be reopened.
+
 Currently boards cannot be deleted.
 
 **The ledger.** One global stream containing all score events.
 Event is recorded only if the operation was succesfully applied (fact only).
 Currently two event types exist: `set` and `increment` (a delta).
 "Set" typed event acts as a snapshot barrier - replay never needs to look past the latest `set`.
+
+Clients can consume the same global order through `GET /api/v1/events`: pass the last seen
+event id an exclusive `after` cursor. It does not keep a
+server-side subscription or cursor.
 
 **Projections.** The actual leaderboards which face clients. One sorted set per board holding the current scores.
 In app (not API) we call a projection entry a **standing**, because besides the score value it holds a player id

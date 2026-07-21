@@ -54,10 +54,10 @@ func (s *StorageSuite) TestReadLedgerBatchAfterZero() {
 	alice := player.GenerateID()
 	bob := player.GenerateID()
 
-	s.addActivityLedgerEntry(ctx, day1, alice, "r1")
-	s.addActivityLedgerEntry(ctx, day1.Add(time.Minute), bob, "r2")
-	s.addActivityLedgerEntry(ctx, day1.Add(2*time.Minute), alice, "r3")
-	lastID := s.addActivityLedgerEntry(ctx, day2, alice, "r4")
+	s.addLedgerEntryAt(ctx, day1, alice, "r1")
+	s.addLedgerEntryAt(ctx, day1.Add(time.Minute), bob, "r2")
+	s.addLedgerEntryAt(ctx, day1.Add(2*time.Minute), alice, "r3")
+	lastID := s.addLedgerEntryAt(ctx, day2, alice, "r4")
 
 	batch, err := s.activityStore.ReadLedgerBatch(ctx, "0-0", 10, time.Second)
 
@@ -72,9 +72,9 @@ func (s *StorageSuite) TestReadLedgerBatchAfterCursor() {
 	day := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 	alice := player.GenerateID()
 
-	firstID := s.addActivityLedgerEntry(ctx, day, alice, "r1")
-	secondID := s.addActivityLedgerEntry(ctx, day.Add(time.Minute), alice, "r2")
-	lastID := s.addActivityLedgerEntry(ctx, day.Add(2*time.Minute), alice, "r3")
+	firstID := s.addLedgerEntryAt(ctx, day, alice, "r1")
+	secondID := s.addLedgerEntryAt(ctx, day.Add(time.Minute), alice, "r2")
+	lastID := s.addLedgerEntryAt(ctx, day.Add(2*time.Minute), alice, "r3")
 
 	batch, err := s.activityStore.ReadLedgerBatch(ctx, firstID, 10, time.Second)
 
@@ -89,9 +89,9 @@ func (s *StorageSuite) TestReadLedgerBatchLimit() {
 	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	alice := player.GenerateID()
 
-	s.addActivityLedgerEntry(ctx, day, alice, "r1")
-	secondID := s.addActivityLedgerEntry(ctx, day.Add(time.Minute), alice, "r2")
-	s.addActivityLedgerEntry(ctx, day.Add(2*time.Minute), alice, "r3")
+	s.addLedgerEntryAt(ctx, day, alice, "r1")
+	secondID := s.addLedgerEntryAt(ctx, day.Add(time.Minute), alice, "r2")
+	s.addLedgerEntryAt(ctx, day.Add(2*time.Minute), alice, "r3")
 
 	batch, err := s.activityStore.ReadLedgerBatch(ctx, "0-0", 2, time.Second)
 
@@ -168,7 +168,7 @@ func (s *StorageSuite) TestApplyDailyCountsSetsTTL() {
 	s.Require().LessOrEqual(actual, ttl)
 }
 
-func (s *StorageSuite) addActivityLedgerEntry(
+func (s *StorageSuite) addLedgerEntryAt(
 	ctx context.Context, t time.Time, playerId player.ID, reqID string,
 ) string {
 	// creates an explicit stream ID like '1768471200000-1'

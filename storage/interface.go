@@ -50,6 +50,11 @@ type ProjectionAdmin interface {
 	VerifyProjection(ctx context.Context, boardId board.ID) ([]ScoreMismatch, error)
 }
 
+type EventRepo interface {
+	// Global score events after an exclusive cursor, oldest first.
+	ListEventsAfter(ctx context.Context, after string, limit int64) ([]ledger.Event, error)
+}
+
 // Board-independent: activity is counted per player across all boards.
 type ActivityRepo interface {
 	// Most active players on a UTC day (date = "YYYY-MM-DD"), highest count first.
@@ -61,5 +66,6 @@ type Storage interface {
 	BoardRepo
 	ScoreRepo
 	ProjectionAdmin
+	EventRepo
 	ActivityRepo
 }
