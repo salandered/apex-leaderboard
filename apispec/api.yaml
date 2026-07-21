@@ -358,6 +358,38 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/activity/daily:
+    get:
+      summary: >-
+        Most active players on a UTC day, by score operations count. Eventually consistent.
+      parameters:
+        - name: date
+          in: query
+          required: true
+          description: UTC day, YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          required: false
+          description: Max number of players to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: All ok (an unknown or not-yet-processed date reads as an empty list)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListDailyActivityResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
 components:
   schemas:
     CreatePlayerRequest:
@@ -562,6 +594,35 @@ components:
         total:
           type: integer
           description: Total ranked players on the board
+
+    ActivityEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - player_id
+        - count
+      properties:
+        player_id:
+          type: string
+        count:
+          type: integer
+          description: Number of applied score events for this player on this day
+
+    ListDailyActivityResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - date
+        - entries
+      properties:
+        date:
+          type: string
+          format: date
+        entries:
+          type: array
+          description: Most active players first
+          items:
+            $ref: "#/components/schemas/ActivityEntry"
 
     ProjectionMismatch:
       type: object

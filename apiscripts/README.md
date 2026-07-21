@@ -28,6 +28,15 @@ the 100-row seam) and the projection stays clean.
 go run ./fanout [-base-url http://localhost:8090] [-players 200] [-chunk-size 25]
 ```
 
+## Daily activity
+
+Creates fresh players, writes distinct event counts for the current UTC day, then waits for the
+eventually consistent activity projection and verifies their counts and relative order.
+
+```bash
+go run ./dailyactivity [-base-url http://localhost:8090] [-timeout 15s]
+```
+
 ## Config
 
 Run `go run ./<script> --help` for a specific script.

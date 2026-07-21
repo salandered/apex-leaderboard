@@ -50,9 +50,16 @@ type ProjectionAdmin interface {
 	VerifyProjection(ctx context.Context, boardId board.ID) ([]ScoreMismatch, error)
 }
 
+// Board-independent: activity is counted per player across all boards.
+type ActivityRepo interface {
+	// Most active players on a UTC day (date = "YYYY-MM-DD"), highest count first.
+	ListDailyActivity(ctx context.Context, date string, limit int64) ([]ActivityEntry, error)
+}
+
 type Storage interface {
 	PlayerRepo
 	BoardRepo
 	ScoreRepo
 	ProjectionAdmin
+	ActivityRepo
 }

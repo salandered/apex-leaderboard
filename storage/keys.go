@@ -11,11 +11,12 @@ import (
 const keyPrefix = "app:"
 
 const (
-	playerNS = keyPrefix + "player:"
-	boardNS  = keyPrefix + "board:"
-	viewNS   = keyPrefix + "view:" // note: we usually use "projection" word
-	adminNS  = keyPrefix + "admin:"
-	ledgerNS = keyPrefix + "ledger:"
+	playerNS   = keyPrefix + "player:"
+	boardNS    = keyPrefix + "board:"
+	viewNS     = keyPrefix + "view:" // note: we usually use "projection" word
+	adminNS    = keyPrefix + "admin:"
+	ledgerNS   = keyPrefix + "ledger:"
+	consumerNS = keyPrefix + "consumer:"
 )
 
 const (
@@ -34,3 +35,9 @@ func leaderboardKey(id board.ID) string { return viewNS + "leaderboard:" + strin
 
 // per-board ZSET scratch: transient rebuild target for VerifyProjection
 func boardVerifyKey(id board.ID) string { return adminNS + "temp:verify:" + string(id) }
+
+// per-day ZSET projection: member=player_id, score=event count. date is UTC YYYY-MM-DD.
+func activityDailyKey(date string) string { return viewNS + "activity:daily:" + date }
+
+// last processed ledger stream id for a named async consumer.
+func consumerCursorKey(name string) string { return consumerNS + name + ":cursor" }

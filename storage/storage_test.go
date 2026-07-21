@@ -26,8 +26,9 @@ var (
 
 type StorageSuite struct {
 	suite.Suite
-	storage   Storage
-	rawClient *redis.Client // for assertions + flushing
+	storage       Storage
+	activityStore *redisActivityStore
+	rawClient     *redis.Client // for assertions + flushing
 }
 
 func TestStorageSuite(t *testing.T) {
@@ -50,6 +51,7 @@ func (s *StorageSuite) SetupSuite() {
 	opts, err := redis.ParseURL(url)
 	s.Require().NoError(err)
 	s.rawClient = redis.NewClient(opts)
+	s.activityStore = newActivityStore(s.rawClient)
 	s.T().Cleanup(func() { s.rawClient.Close() })
 }
 

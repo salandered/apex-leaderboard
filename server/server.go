@@ -16,6 +16,7 @@ func NewMux(s storage.Storage) *http.ServeMux {
 	boards := &handlers.BoardHandler{Storage: s}
 	scores := &handlers.ScoreHandler{Storage: s}
 	admin := &handlers.AdminHandler{Storage: s}
+	views := &handlers.ViewHandler{Storage: s}
 
 	mux := http.NewServeMux()
 
@@ -45,6 +46,9 @@ func NewMux(s storage.Storage) *http.ServeMux {
 		"GET /api/v1/admin/boards/{board_id}/projection/verify",
 		admin.HandleVerifyProjection,
 	)
+
+	// async projections
+	mux.HandleFunc("GET /api/v1/activity/daily", views.HandleListDailyActivity)
 
 	return mux
 }

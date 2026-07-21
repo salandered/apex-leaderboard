@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
 
+	"github.com/salandered/apex/consumer"
 	"github.com/salandered/apex/handlers"
 	"github.com/salandered/apex/logging"
 	"github.com/salandered/apex/server"
@@ -47,6 +49,18 @@ func main() {
 		slog.Error("seeding main board failed", "error", err)
 		os.Exit(1)
 	}
+
+	activityStore, err := storage.NewActivityStore(redisURL)
+	if err != nil {
+		slog.Error("activity store init failed", "error", err)
+		os.Exit(1)
+	}
+	dailyActivityConsumer := consumer.NewDailyActivityConsumer(activityStore)
+	go func() {
+		if err := dailyActivityConsumer.Run(context.Background()); err != nil {
+			slog.Error("activity consumer stopped", "error", err)
+		}
+	}()
 
 	if err := server.Start(server.NewMux(store)); err != nil {
 		slog.Error("server stopped", "error", err)

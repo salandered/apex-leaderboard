@@ -286,3 +286,12 @@ func (ms *mockStorage) VerifyProjection(c context.Context, boardId board.ID) ([]
 		},
 	}, nil
 }
+
+func (ms *mockStorage) ListDailyActivity(
+	context.Context, string, int64,
+) ([]storage.ActivityEntry, error) {
+	return []storage.ActivityEntry{
+		{PlayerID: MockedPlayerId, Count: 5},
+		{PlayerID: "0f8fad5b-d9cb-469f-a165-70867728950e", Count: 3},
+	}, nil
+}
