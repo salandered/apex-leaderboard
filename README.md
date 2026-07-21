@@ -4,7 +4,7 @@
 
 Apex is a backend web service for leaderboards, built as an MVP to prove out two things:
 
-- **Architecturally:** every score is event-sourced — a ledger of events is the source of truth, and
+- **Architecturally:** every score is event-sourced. An event ledger is the source of truth, and
   leaderboards are derived views.
 - **Technically:** Redis is the only datastore. Beyond plain key-value use, it acts as a persistent
   document database and as the main store for the event-sourced parts: topics (streams), views, and
@@ -36,6 +36,9 @@ curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a
 
 # See the leaderboard
 curl "http://localhost:8090/api/v1/boards/main/scores"
+
+# Read all score events from the beginning
+curl "http://localhost:8090/api/v1/events?after=0-0"
 ```
 
 ## API Spec
@@ -48,7 +51,7 @@ curl "http://localhost:8090/api/v1/boards/main/scores"
 
 ### Running the Server
 
-**Everything in Docker (app + Redis)** — uses [`docker-compose.yml`](docker-compose.yml)
+**Everything in Docker (app + Redis)**
 
 ```bash
 docker compose up -d --build   # app on :8090, Redis on 127.0.0.1:6379 (data persisted in a volume)
@@ -110,6 +113,9 @@ curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-
 
 # See all the score events
 curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/history
+
+# Read the global score event feed, oldest first
+curl "http://localhost:8090/api/v1/events?after=0-0&limit=50"
 
 # Verify a leaderboard's projection against its ledger
 curl http://localhost:8090/api/v1/admin/boards/main/projection/verify

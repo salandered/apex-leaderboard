@@ -82,6 +82,9 @@ func main() {
 	w.step("GET history (the ledger, newest first: the set + the increment, retry recorded once)")
 	w.call("GET", standingPath+"/history", nil)
 
+	w.step("GET global event feed (oldest first; 0-0 reads from the beginning)")
+	w.call("GET", "/api/v1/events?after=0-0&limit=10", nil)
+
 	w.step("POST close board")
 	w.call("POST", "/api/v1/boards/"+*boardID+"/close", nil)
 

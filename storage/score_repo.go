@@ -95,8 +95,6 @@ func (rs *redisStorage) ListStandings(
 		return nil, 0, fmt.Errorf("storage list scores: %w", err)
 	}
 
-	// err checks here are redundant (after a strict Exec check)
-	// kept for uniformity — see docs/redis.md
 	total, err := cardCmd.Result()
 	if err != nil {
 		return nil, 0, fmt.Errorf("storage list scores: count: %w", err)
@@ -153,9 +151,9 @@ const (
 	applyCodeIdempotencyConflict = -4 // key reused with a different op/amount
 )
 
-// Runs the write script. Both a fresh apply and a deduped retry are non-errors (the write
-// endpoints return 204 either way); a rejected write appends nothing and maps to an error.
-// idempotencyKey is the client-supplied dedupe key; empty skips the idempotency record entirely.
+// Runs the write script. Both a new and retried applies are non-errors.
+// A rejected write appends nothing and maps to an error.
+// idempotencyKey is the client-supplied key, used if not empty.
 func (rs *redisStorage) applyEvent(
 	ctx context.Context,
 	etype ledger.EventType,
@@ -172,7 +170,7 @@ func (rs *redisStorage) applyEvent(
 	if err != nil {
 		return fmt.Errorf("storage apply %s event: %w", etype, err)
 	}
-	// result = { code(int64), entry_id(string) } — guard against a script/contract mismatch
+	// result = { code(int64), entry_id(string) }
 	if len(result) == 0 {
 		return fmt.Errorf("storage apply %s event: empty script result", etype)
 	}

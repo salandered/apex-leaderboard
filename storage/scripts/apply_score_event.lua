@@ -1,4 +1,6 @@
 --[[
+	TODO: Validate key types and append the event/idempotency record before mutating the projection
+
 	Performs an atomic score write:
 		- (if idempotency key) idempotency check (replay a matching write, reject a conflicting one)
 		- Existence check (player, board)
@@ -13,10 +15,10 @@
 	KEYS[5] = board hash           (app:board:profile:{board_id})
 
 	ARGV[1] = operation type       ("set" | "increment")
-	ARGV[2] = player_id           
+	ARGV[2] = player_id
 	ARGV[3] = amount               (float, raw string)
 	ARGV[4] = request_id           (server-generated UUID)
-	ARGV[5] = board_id             
+	ARGV[5] = board_id
 	ARGV[6] = idempotency_key      (optional)
 
 	Returns: { code, entry_id }

@@ -13,8 +13,8 @@
 
 ## Client library (go-redis)
 
-- [go-redis guide](https://redis.uptrace.dev/) — overview and getting started
-- [go-redis API reference](https://pkg.go.dev/github.com/redis/go-redis/v9) — package docs (pkg.go.dev)
+- [go-redis guide](https://redis.uptrace.dev/)
+- [go-redis package docs](https://pkg.go.dev/github.com/redis/go-redis/v9)
 
 ## Reading results from a pipeline
 
@@ -36,8 +36,7 @@ if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
     return err
 }
 
-//  Read every command with Result() and check its error individually — this is
-//  where an expected redis.Nil may be separated from a failure.
+//  Read the command with Result() and separate redis.Nil if it's an expected behaviour.
 a, err := aCmd.Result() 
 if err != nil { ... }
 b, err := bCmd.Result()
@@ -73,7 +72,7 @@ This leads to that we never use `Cmd.Val()` (returns the zero value on error ins
 ## Lua scripting
 
 Redis lets you run Lua scripts server-side via `EVAL`.
-The main reason to use it: **atomicity** — the whole script runs as one uninterrupted operation.
+They provie **atomicity**, the script runs as one uninterrupted operation.
 
 See links:
 
@@ -87,8 +86,8 @@ EVAL "return redis.call('SET', KEYS[1], ARGV[1])" 1 mykey myvalue
 ```
 
 - `redis.call` - calling Redis command
-- `KEYS[]` — Redis keys the script touches
-- `ARGV[]` — plain arguments
+- `KEYS[]` - Redis keys the script touches
+- `ARGV[]` - plain arguments
 - `1` - number of keys following
 - `mykey` - the actual key, accessible in the script as `KEYS[1]`
 
@@ -157,10 +156,11 @@ XRANGE ledger:events - +
 
 Other basic commands:
 
-- `XLEN ledger:events` — number of entries.
-- `XREVRANGE ledger:events + - COUNT 10` — newest first.
-- `XRANGE ledger:events <last_seen_id> +` — resume reading from a checkpoint
+- `XLEN ledger:events` - number of entries.
+- `XREVRANGE ledger:events + - COUNT 10` - newest first.
+- `XRANGE ledger:events <last_seen_id> +` - resume reading from a checkpoint
   (this is how `Rebuild` or an async consumer makes progress).
+- `XREAD COUNT 10 BLOCK 5000 STREAMS ledger:events 0-0` - blocking read for 10 entries after the `0-0` cursor.
 - Consumer groups (`XGROUP` / `XREADGROUP`) exist for *asynchronous* projections with
   acking.
 

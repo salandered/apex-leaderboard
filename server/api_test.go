@@ -183,6 +183,11 @@ func getMockedStorage() storage.Storage {
 }
 
 type mockStorage struct {
+	pingErr error
+}
+
+func (ms *mockStorage) Ping(context.Context) error {
+	return ms.pingErr
 }
 
 func (ms *mockStorage) CreatePlayerProfile(c context.Context, profile *player.Profile, idempotencyKey string) (player.ID, error) {

@@ -12,6 +12,7 @@ import (
 const addr = ":8090"
 
 func NewMux(s storage.Storage) *http.ServeMux {
+	health := &handlers.HealthHandler{Storage: s}
 	players := &handlers.PlayerHandler{Storage: s}
 	boards := &handlers.BoardHandler{Storage: s}
 	scores := &handlers.ScoreHandler{Storage: s}
@@ -22,6 +23,8 @@ func NewMux(s storage.Storage) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /{$}", handlers.HandleRoot)
+	mux.HandleFunc("GET /livez", health.HandleLive)
+	mux.HandleFunc("GET /readyz", health.HandleReady)
 	// players
 	mux.HandleFunc("POST /api/v1/players", players.HandlePostPlayer)
 	mux.HandleFunc("GET /api/v1/players/{player_id}", players.HandleGetPlayer)

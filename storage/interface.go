@@ -68,4 +68,5 @@ type Storage interface {
 	ProjectionAdmin
 	EventRepo
 	ActivityRepo
+	Ping(ctx context.Context) error
 }

@@ -3,16 +3,61 @@ info:
   title: Leaderboard Apex Service API
   version: 1.0.0
   description: An API for storing and retrieving player scores.
+tags:
+  - name: System
+    description: Operational
+  - name: Players
+    description: Player profile operations
+  - name: Boards
+    description: Board operations
+  - name: Scores
+    description: Score operations and events
+  - name: Activity
+    description: Eventually consistent activity views
+  - name: Admin
+    description: Projection maintenance
 paths:
   /:
     get:
-      summary: May be used to ping
+      tags: [System]
+      summary: Returns Apex version information
       responses:
         "200":
           description: Successful response
 
+  /livez:
+    get:
+      tags: [System]
+      summary: Checks if Apex is alive
+      responses:
+        "200":
+          description: Apex is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /readyz:
+    get:
+      tags: [System]
+      summary: Checks if Apex is ready to serve requests
+      responses:
+        "200":
+          description: Apex and its datastore are ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: A required dependency is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DependencyUnavailableResponse"
+
   /api/v1/players:
     post:
+      tags: [Players]
       summary: Add a new player profile. Returns a generated ID.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKeyHeader"
@@ -47,6 +92,7 @@ paths:
 
   /api/v1/boards:
     get:
+      tags: [Boards]
       summary: Lists all boards, in creation order
       responses:
         "200":
@@ -60,6 +106,7 @@ paths:
 
   /api/v1/boards/{board_id}:
     put:
+      tags: [Boards]
       summary: >-
         Create a new board. The id is client-chosen and immutable. By default the board is open.
       requestBody:
@@ -89,6 +136,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
     get:
+      tags: [Boards]
       summary: Get a board info by ID
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
@@ -112,6 +160,7 @@ paths:
 
   /api/v1/boards/{board_id}/close:
     post:
+      tags: [Boards]
       summary: Closes the board for score writes. Idempotent - closing a closed board is a no-op.
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
@@ -131,6 +180,7 @@ paths:
 
   /api/v1/boards/{board_id}/open:
     post:
+      tags: [Boards]
       summary: Opens a closed board. Idempotent - opening an active board is a no-op.
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
@@ -150,6 +200,7 @@ paths:
 
   /api/v1/boards/{board_id}/scores:
     get:
+      tags: [Scores]
       summary: Lists players by score on a board, highest first
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
@@ -182,6 +233,7 @@ paths:
 
   /api/v1/players/{player_id}:
     get:
+      tags: [Players]
       summary: Retrieves a player's info by ID
       parameters:
         - $ref: "#/components/parameters/PlayerIdPath"
@@ -205,6 +257,7 @@ paths:
 
   /api/v1/boards/{board_id}/scores/{player_id}/history:
     get:
+      tags: [Scores]
       summary: Lists a player's score events on a board, newest first
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
@@ -230,6 +283,7 @@ paths:
 
   /api/v1/events:
     get:
+      tags: [Scores]
       summary: Lists all score events after an exclusive cursor, oldest first
       parameters:
         - name: after
@@ -260,6 +314,7 @@ paths:
 
   /api/v1/boards/{board_id}/scores/{player_id}:
     get:
+      tags: [Scores]
       summary: Retrieves a player's standing on a board (rank, score, total)
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
@@ -282,6 +337,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
     put:
+      tags: [Scores]
       summary: Sets a player's absolute score
       requestBody:
         required: true
@@ -315,6 +371,7 @@ paths:
 
   /api/v1/boards/{board_id}/scores/{player_id}/increment:
     post:
+      tags: [Scores]
       summary: Increments the score (supports negative values for decrementing)
       requestBody:
         required: true
@@ -348,6 +405,7 @@ paths:
 
   /api/v1/admin/boards/{board_id}/projection/rebuild:
     post:
+      tags: [Admin]
       summary: Rebuild one board's leaderboard projection from its score events
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
@@ -367,6 +425,7 @@ paths:
 
   /api/v1/admin/boards/{board_id}/projection/verify:
     get:
+      tags: [Admin]
       summary: Compare one board's live projection with an event replay
       parameters:
         - $ref: "#/components/parameters/BoardIdPath"
@@ -390,6 +449,7 @@ paths:
 
   /api/v1/activity/daily:
     get:
+      tags: [Activity]
       summary: >-
         Most active players on a UTC day, by score operations count. Eventually consistent.
       parameters:
@@ -422,6 +482,30 @@ paths:
 
 components:
   schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    DependencyUnavailableResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - dependency
+      properties:
+        status:
+          type: string
+          enum: [unavailable]
+        dependency:
+          type: string
+          enum: [redis]
+
     CreatePlayerRequest:
       type: object
       additionalProperties: false
