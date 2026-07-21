@@ -15,10 +15,19 @@ _Developer scripts_
 Fires concurrent increment requests at a running apex instance and verifies the final score.
 
 ```bash
-cd apiscripts
-go run . -base-url=http://localhost:8090 -requests=1000 -amount=1
+go run ./loadscore [-base-url http://localhost:8090] [-requests 1000] [-amount 1]
+```
+
+## Fanout
+
+Fans many players out onto one board with distinct scores concurrently, then verifies the
+leaderboard ranks them correctly (contiguous ranks, listing vs single-standing agree, paging across
+the 100-row seam) and the projection stays clean.
+
+```bash
+go run ./fanout [-base-url http://localhost:8090] [-players 200] [-chunk-size 25]
 ```
 
 ## Config
 
-Run `go run . --help` for a specific script.
+Run `go run ./<script> --help` for a specific script.

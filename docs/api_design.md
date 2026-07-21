@@ -1,42 +1,7 @@
-# Current design desicions
 
-## Language (aiming for this)
+# API notes
 
-| Term              | Means                                                          | Context                   |
-| ----------------- | -------------------------------------------------------------- | ------------------------- |
-| **event**         | one applied operation (a fact)                                 | all                       |
-| **ledger**        | append-only record of score **events**                         | all                       |
-| **tombstone**     | the delete **event**                                           | app, API uses "delete"?   |
-| **board**         | named score container with lifecycle.                          | all                       |
-| projection        | content of the **board** (derived view of the **ledger**)      | app                       |
-| standing          | **projection** read model: (playerId, boardId, value, rank)    | API uses generic "score"? |
-| **replay**        | Build a **projection** using the **ledger**                    | app                       |
-| idempotency table | idempotency records: what reqIds were applied using **events** | app                       |
-| **profile**       | player's info (no score)                                       | all                       |
-| **stream entry**  | Redis Stream item (raw **event**)                              | redis                     |
-
-Contexts:
-
-* all (codebase, docs, public API)
-* app (codebase, docs)
-* redis (storage codebase, not domain)
-
-## Rules (invariants)
-
-1. **The event stream is the source of truth for standings.** The leaderboard ZSET (Sorted Set) is a projection:
-   it can be deleted and rebuilt from stream, and the result must be the same.
-
-2. **Events record facts only.** An event exists iff the operation was applied.
-   E.g failed score increment is not appended.
-
-3. **A non idempotent write carries a client `request_id` (Idempotency-key).**
-   Retrying the same request_id produces the same result.
-
-4. **`set` is a snapshot barrier.** The current score of a player is:
-   `last set value + sum of increments after it`. Replay never needs to look
-   past the most recent `set`.
-
-## Storage API notes
+## a
 
 ### Increment endpoint (`POST scores/{id}/increment`) and Idempotency key
 

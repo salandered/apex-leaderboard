@@ -1,7 +1,6 @@
-package loadscore
+package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -12,6 +11,8 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+
+	"github.com/salandered/apex/loadtest/apexhttp"
 )
 
 type loadTestResult struct {
@@ -65,7 +66,7 @@ func sendIncrementRequest(
 ) {
 	defer wg.Done()
 
-	_, err := doJSON[any](
+	_, err := apexhttp.DoJSON[any](
 		rc,
 		resty.MethodPost,
 		incrementPath,
@@ -97,7 +98,7 @@ func printLoadTestSummary(result loadTestResult, requestCount int) {
 	}
 }
 
-func verifyFinalScore(standing standingResp, requestCount int, amount float64) {
+func verifyFinalScore(standing apexhttp.Standing, requestCount int, amount float64) {
 	expected := float64(requestCount) * amount
 	fmt.Printf(
 		"standing: score=%g expected=%g rank=%d total=%d\n",
@@ -108,22 +109,14 @@ func verifyFinalScore(standing standingResp, requestCount int, amount float64) {
 	}
 }
 
-func saveHistoryToFile(history historyResp, path string) error {
-	data, err := json.MarshalIndent(history, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o644)
-}
-
 func closeEnough(actual, expected float64) bool {
 	scale := math.Max(1, math.Max(math.Abs(actual), math.Abs(expected)))
 	return math.Abs(actual-expected) <= scale*1e-12
 }
 
-func Entry() {
+func main() {
 	cfg := parseFlags()
-	rc := newLoadTestClient(cfg.baseURL, cfg.requestCount)
+	rc := apexhttp.NewClient(cfg.baseURL, cfg.requestCount)
 	defer rc.GetClient().CloseIdleConnections()
 
 	playerId, boardId, scorePath := createApexFixtures(rc)
@@ -137,17 +130,17 @@ func Entry() {
 
 	printLoadTestSummary(result, cfg.requestCount)
 
-	standing, err := fetchPlayerStanding(rc, scorePath)
+	standing, err := apexhttp.FetchStanding(rc, boardId, playerId)
 	if err != nil {
 		log.Fatalf("get standing: %v", err)
 	}
 
 	// Fetch and persist the ledger before verification, so the artifact survives a mismatch.
-	history, err := fetchPlayerHistory(rc, scorePath)
+	history, err := apexhttp.FetchHistory(rc, boardId, playerId)
 	if err != nil {
 		log.Fatalf("get history: %v", err)
 	}
-	if err := saveHistoryToFile(history, cfg.historyOut); err != nil {
+	if err := apexhttp.SaveHistoryToFile(history, cfg.historyOut); err != nil {
 		log.Fatalf("save history: %v", err)
 	}
 	fmt.Printf("saved %d history events to %s\n", len(history.Events), cfg.historyOut)

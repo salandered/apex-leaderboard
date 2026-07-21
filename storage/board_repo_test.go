@@ -27,6 +27,24 @@ func (s *StorageSuite) TestCreateBoard() {
 	s.requireEqualBoardRegistry([]string{"summer-contest"})
 }
 
+func (s *StorageSuite) TestCreateBoardStateClosed() {
+	ctx := s.ctx()
+
+	// when
+	err := s.storage.CreateBoard(ctx, &board.Board{
+		BoardId:   "summer-contest",
+		BoardName: "Summer Contest",
+		State:     board.BoardClosed,
+		CreatedAt: mockedTime,
+	})
+
+	// then
+	s.Require().NoError(err)
+
+	s.requireEqualBoardHash("summer-contest", "Summer Contest", mockedTimeStr, board.BoardClosed)
+	s.requireEqualBoardRegistry([]string{"summer-contest"})
+}
+
 func (s *StorageSuite) TestCreateBoardIdConflict() {
 	ctx := s.ctx()
 

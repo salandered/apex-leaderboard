@@ -2,7 +2,15 @@
 
 ![alt text](logo.png)
 
-Apex is the backend web service implementing the Leaderboard functionality. A lightweight HTTP API for storing and retrieving player scores using Redis (inspired by https://redis.io/solutions/leaderboards/).
+Apex is a backend web service for leaderboards, built as an MVP to prove out two things:
+
+- **Architecturally:** every score is event-sourced — a ledger of events is the source of truth, and
+  leaderboards are derived views.
+- **Technically:** Redis is the only datastore. Beyond plain key-value use, it acts as a persistent
+  document database and as the main store for the event-sourced parts: topics (streams), views, and
+  consumer data.
+
+More details in [docs/architecture.md](docs/architecture.md)
 
 ## 🚀 Quick Start
 
@@ -30,6 +38,10 @@ curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a
 curl "http://localhost:8090/api/v1/boards/main/scores"
 ```
 
+## API Spec
+
+[`api.yaml`](api.yaml) - OpenAPI specification
+
 ## 🛠️ Development
 
 [Go](https://go.dev/doc/install) 1.26+ is used in addition to Docker.
@@ -39,7 +51,7 @@ curl "http://localhost:8090/api/v1/boards/main/scores"
 **Everything in Docker (app + Redis)** — uses [`docker-compose.yml`](docker-compose.yml)
 
 ```bash
-docker compose up -d --build   # app on :8090, Redis on :6379 (data persisted in a volume)
+docker compose up -d --build   # app on :8090, Redis on 127.0.0.1:6379 (data persisted in a volume)
 docker compose logs -f app     # follow the app logs
 docker compose down            # stop the stack (add -v to wipe Redis data)
 ```
@@ -79,7 +91,7 @@ will be logging messages like `05:23:40 INFO starting server addr=:8090` into fi
 With the server running on `:8090`:
 
 ```bash
-# Create a player profile; returns the generated id
+# Create a player profile; returns the generated id.
 curl -X POST http://localhost:8090/api/v1/players \
   -H "Content-Type: application/json" \
   -d '{"player_name":"alice"}'
@@ -90,12 +102,7 @@ curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a
   -H "Content-Type: application/json" \
   -d '{"player_score":36}'
 
-# Increment a score
-curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
-  -H "Content-Type: application/json" \
-  -d '{"amount":5}'
-
-# Retry-safe increment: send an Idempotency-Key. Try to curl this several times.
+# Retry-safe increment: send an Idempotency-Key. Try to curl this several times with and without the header.
 curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: r1" \
@@ -104,36 +111,27 @@ curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-
 # See all the score events
 curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/history
 
-# List a leaderboard
-curl "http://localhost:8090/api/v1/boards/main/scores?limit=10&offset=0"
+# Verify a leaderboard's projection against its ledger
+curl http://localhost:8090/api/v1/admin/boards/main/projection/verify
+# {"mismatches":[]}
 
-# Create a new board
+# Create a new closed board
 curl -X PUT http://localhost:8090/api/v1/boards/summer-contest \
   -H "Content-Type: application/json" \
-  -d '{"board_name":"Summer Contest"}'
-
-# Close a board
-curl -X POST http://localhost:8090/api/v1/boards/summer-contest/close
+  -d '{"board_name":"Summer Contest","status":"closed"}'
 
 # Try to set a score on a new closed board
 curl -X PUT http://localhost:8090/api/v1/boards/summer-contest/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
   -H "Content-Type: application/json" \
-  -d '{"player_score":36}'
+  -d '{"player_score":12}'
 
 # List boards
 curl http://localhost:8090/api/v1/boards
-
-# Rebuild a leaderboard
-curl -X POST http://localhost:8090/api/v1/admin/boards/main/projection/rebuild
-
-# Verify a leaderboard's projection against its ledger (empty mismatches means no drift)
-curl http://localhost:8090/api/v1/admin/boards/main/projection/verify
-# {"mismatches":[]}
 ```
 
 ### API Walk
 
-Exercises every endpoint once against a running server and prints each request/response:
+Exercises every endpoint against a running server:
 
 ```bash
 go run ./apiscripts/apiwalk -base-url http://localhost:8090 -board demo-cup
@@ -166,7 +164,7 @@ go build -o apex .
 
 ### Dependencies
 
-Run `go mod tidy` to sync `go.mod` and `go.sum` with the actual imports.
+Run `tidy` to sync `go.mod` and `go.sum` with the actual imports.
 
 ```bash
 go mod tidy
@@ -174,11 +172,7 @@ go mod tidy
 
 ### Developer Docs
 
-- [`api.yaml`](api.yaml) - OpenAPI specification
-- See docs/ folder. In particular:
-  - [docs/architecture.md](docs/architecture.md) - how the system is put together and why
-  - [docs/design.md](docs/design.md) - vocabulary and invariants
-  - [docs/tests.md](docs/tests.md) - testing approach
+- See docs/ folder.
 
 ## Misc
 

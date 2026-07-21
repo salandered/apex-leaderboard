@@ -18,7 +18,7 @@ services:
   redis:
     image: redis:8.8.0-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379" # loopback only; app reaches redis by service name
     volumes:
       - redis-data:/data
 

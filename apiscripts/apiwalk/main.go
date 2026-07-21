@@ -1,10 +1,3 @@
-// Walks over every apex endpoint once, printing the status and body of each call.
-// A Go port of __docs/try-api.ps1 (server on :8090, e.g. `docker compose up -d`).
-//
-// Usage: go run ./apiwalk [-base-url http://localhost:8090] [-board demo-cup] [-color auto]
-//
-// Rerunnable: the board create returns 409 after the first run (ids are immutable) -
-// expected. Each run creates a fresh player, so the leaderboard grows by one per run.
 package main
 
 import (
@@ -29,6 +22,7 @@ const (
 )
 
 func main() {
+	fmt.Print("🚶🌳")
 	base := flag.String("base-url", "http://localhost:8090", "Apex service URL")
 	boardID := flag.String("board", "demo-cup", "board id to use (fixed id -> 409 on board create after first run)")
 	color := flag.String("color", "auto", "colorize output: auto|always|never")

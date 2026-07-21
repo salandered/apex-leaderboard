@@ -101,7 +101,7 @@ func (s *APISuite) TestPostPlayerWithIdempotencyKey() {
 	s.Require().Equal(http.StatusCreated, resp.StatusCode)
 }
 
-func (s *APISuite) TestPostPlayerRejectsOverlongIdempotencyKey() {
+func (s *APISuite) TestPostPlayerRejectsBigIdempotencyKey() {
 	resp := s.postJSONWithHeaders("/api/v1/players",
 		handlers.PostPlayerReq{PlayerName: "alice"},
 		map[string]string{"Idempotency-Key": strings.Repeat("k", 129)},
@@ -164,6 +164,22 @@ func (s *APISuite) TestPutBoard() {
 func (s *APISuite) TestPutBoardInvalidId() {
 	resp := s.putJSON("/api/v1/boards/Bad_Id", handlers.PutBoardReq{
 		BoardName: "nope",
+	})
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutBoardCreatedClosed() {
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
+		BoardName: "Summer Contest",
+		State:     "closed",
+	})
+	s.Require().Equal(http.StatusCreated, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutBoardUnknownState() {
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
+		BoardName: "Summer Contest",
+		State:     "paused",
 	})
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }

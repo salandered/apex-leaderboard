@@ -16,6 +16,7 @@ type BoardHandler struct {
 
 type PutBoardReq struct {
 	BoardName string `json:"board_name"`
+	State     string `json:"status,omitempty"` // state to status; empty means active
 }
 
 type BoardResp struct {
@@ -41,12 +42,21 @@ func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) 
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}
+	state := board.BoardActive
+	if data.State != "" {
+		state = board.BoardState(data.State)
+		if err := state.Validate(); err != nil {
+			writeErrorToResponse(w, err, http.StatusBadRequest)
+			return
+		}
+	}
+
 	err = h.Storage.CreateBoard(
 		req.Context(),
 		&board.Board{
 			BoardId:   boardId,
 			BoardName: data.BoardName,
-			State:     board.BoardActive,
+			State:     state,
 			CreatedAt: apextime.Now(),
 		})
 	if err != nil {

@@ -1,4 +1,4 @@
-package loadscore
+package main
 
 import (
 	"flag"
@@ -22,7 +22,7 @@ func parseFlags() loadTestConfig {
 	amount := flag.Float64("amount", 1, "amount added by each request")
 	chunkSize := flag.Int("chunk-size", 25, "number of requests launched together before waiting chunk-delay")
 	chunkDelay := flag.Duration("chunk-delay", 50*time.Millisecond, "delay between launching request chunks")
-	historyOut := flag.String("history-out", "history.json", "path to save the player's score history JSON")
+	historyOut := flag.String("history-out", "_tmp_history.json", "path to save the player's score history JSON")
 	flag.Parse()
 
 	if *requestCount <= 0 {

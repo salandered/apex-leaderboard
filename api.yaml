@@ -60,7 +60,8 @@ paths:
 
   /api/v1/boards/{board_id}:
     put:
-      summary: Create a new board. The id is client-chosen and immutable.
+      summary: >-
+        Create a new board. The id is client-chosen and immutable. By default the board is open.
       requestBody:
         required: true
         content:
@@ -376,6 +377,11 @@ components:
       properties:
         board_name:
           type: string
+        status:
+          type: string
+          enum: [active, closed]
+          default: active
+          description: A closed board rejects score writes
 
     BoardResponse:
       type: object

@@ -11,7 +11,7 @@ The value is baked into the compiled binary / image.
 
 ## Development
 
-Nothing should be set, a default value (like `dev`) is used.
+A default value (like `dev`) is used.
 
 ## Git tag as version
 
