@@ -30,6 +30,10 @@ func Parse(s string) (time.Time, error) {
 	return t.UTC(), nil
 }
 
+func ParseDate(s string) (time.Time, error) {
+	return time.Parse(time.DateOnly, s)
+}
+
 // from Redis stream entry ID ("<unix_millis>-<seq>") to UTC
 func FromStreamID(id string) (time.Time, error) {
 	msStr, _, ok := strings.Cut(id, "-")

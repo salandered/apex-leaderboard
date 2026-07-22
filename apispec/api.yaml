@@ -219,6 +219,13 @@ paths:
           schema:
             type: integer
             minimum: 0
+        - name: as_of
+          in: query
+          required: false
+          description: Reconstruct standings at the end of the UTC date (today is allowed)
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: All ok (an unknown or empty board reads as an empty list)

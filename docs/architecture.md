@@ -26,7 +26,7 @@ Pros:
 
 ```mermaid
 flowchart TD
-    Ledger[(Ledger<br/>global stream — source of truth)]
+    Ledger[(Ledger<br/>global stream)]
 
     Board[Board<br/>slug id, name, status]
     Proj[(Projection<br/>sorted set per board)]
@@ -70,8 +70,14 @@ server-side subscription or cursor.
 **Projections.** The actual leaderboards which face clients. One sorted set per board holding the current scores.
 In app (not API) we call a projection entry a **standing**, because besides the score value it holds a player id
 and also implicitly implies a "rank" - its index (1-based). So standing is a (score, player_id, rank). All standing reads -
-top-N pages, a single player's standing - are cheap sorted-set operations. It allows listing operations use plain
+top-N pages, a single player's standing - are cheap sorted-set operations. It allows listing operations to use plain
 limit/offset pagination.
+
+The scores endpoint also accepts `as_of=YYYY-MM-DD`. This reconstructs a transient historical
+leaderboard by folding events from the beginning to "as_of"; it does not
+consult or modify the live projection.
+The current implementation scans the global event history, it **demonstrates time-travel possibilities**
+rather than providing a scalable query.
 
 **Idempotency hash.** Every write records a server-generated request id in its event.
 A client might send an optional `Idempotency-Key` header: the write would store
@@ -90,13 +96,13 @@ Board creation doesnt use this mechanics: `PUT` with a client-chosen slug is alr
 ```mermaid
 flowchart LR
     Start([Score write]) --> Dedupe{idempotency \nkey seen?}
-	Dedupe -->|yes, same op| Return204([204 — replay])
+	Dedupe -->|yes, same op| Return204([204 - replay])
     Dedupe -->|yes, diff op| Conflict([409])
     Dedupe -->|no| Checks{Validation like \nplayer/board exist}
     Checks -->|no| Reject([4xx])
     Checks -->|yes| Apply[apply to \nprojection] --> Append[append to\n ledger] --> Record[record \nidempotency key] --> Done([204])
 
-    subgraph atomic [one Lua script — all or nothing]
+    subgraph atomic [one Lua script - all or nothing]
         Dedupe
         Checks
         Apply

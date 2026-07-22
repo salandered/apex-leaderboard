@@ -5,6 +5,9 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/board"
@@ -139,6 +142,62 @@ func (rs *redisStorage) PlayerHistory(
 		}
 	}
 	return events, nil
+}
+
+func (rs *redisStorage) ListStandingsAsOf(
+	ctx context.Context, boardId board.ID, before time.Time, limit, offset int64,
+) ([]Standing, int64, error) {
+	endID := "(" + strconv.FormatInt(before.UTC().UnixMilli(), 10) + "-0"
+	entries, err := rs.client.XRange(ctx, ledgerKey, "-", endID).Result()
+	if err != nil {
+		return nil, 0, fmt.Errorf("storage list historical standings: read events: %w", err)
+	}
+
+	scores := make(map[string]float64)
+	for _, entry := range entries {
+		if getStreamEntryValue(entry, entryFieldBoardID) != string(boardId) {
+			continue
+		}
+		event, err := entryToEvent(entry)
+		if err != nil {
+			return nil, 0, fmt.Errorf("storage list historical standings: %w", err)
+		}
+		switch event.Type {
+		case ledger.EventSet:
+			scores[event.PlayerID] = event.Amount
+		case ledger.EventIncrement:
+			scores[event.PlayerID] += event.Amount
+		default:
+			return nil, 0, fmt.Errorf(
+				"%w: ledger event '%s' has unknown type %q",
+				ErrInconsistent, event.ID, event.Type,
+			)
+		}
+	}
+
+	standings := make([]Standing, 0, len(scores))
+	for playerID, score := range scores {
+		standings = append(standings, Standing{PlayerID: playerID, Score: score})
+	}
+	sort.Slice(standings, func(i, j int) bool {
+		if standings[i].Score != standings[j].Score {
+			return standings[i].Score > standings[j].Score
+		}
+		return standings[i].PlayerID > standings[j].PlayerID
+	})
+	for i := range standings {
+		standings[i].Rank = int64(i) + 1
+	}
+
+	total := int64(len(standings))
+	if offset >= total || limit <= 0 {
+		return []Standing{}, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return standings[int(offset):int(end)], total, nil
 }
 
 // Script result codes. Must match the Lua write script.

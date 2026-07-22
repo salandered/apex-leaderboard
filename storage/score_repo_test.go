@@ -4,6 +4,7 @@ package storage
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/board"
@@ -430,4 +431,175 @@ func (s *StorageSuite) TestHistoryIgnoresMalformedEventsOutsideRequestedScope() 
 	s.Require().NoError(err)
 	s.Require().Len(events, 1)
 	s.Require().Equal("r1", events[0].RequestID)
+}
+
+func (s *StorageSuite) TestListStandingsAsOfStopsAtExclusiveCutoff() {
+	ctx := s.ctx()
+	playerID := player.GenerateID()
+	fistDay := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
+	nextDay := fistDay.AddDate(0, 0, 1)
+	firstDayVeryEnd := nextDay.Add(-time.Millisecond)
+	initialScore := 10.0
+	firstDayVeryEndIncr := 5.0
+	nextDayIncr := 100.0
+
+	s.appendHistoricalEvent(
+		streamIDAt(fistDay),
+		ledger.EventSet,
+		playerID,
+		board.MainId,
+		initialScore,
+	)
+	s.appendHistoricalEvent(
+		streamIDAt(firstDayVeryEnd),
+		ledger.EventIncrement,
+		playerID,
+		board.MainId,
+		firstDayVeryEndIncr,
+	)
+	s.appendHistoricalEvent(
+		streamIDAt(nextDay),
+		ledger.EventIncrement,
+		playerID,
+		board.MainId,
+		nextDayIncr,
+	)
+
+	standings, total, err := s.storage.ListStandingsAsOf(
+		ctx, board.MainId, nextDay, 10, 0,
+	)
+
+	s.Require().NoError(err)
+	s.Require().Equal(int64(1), total)
+	s.Require().Equal(initialScore+firstDayVeryEndIncr, standings[0].Score) // nextDayIncr excluded
+}
+
+func (s *StorageSuite) TestListStandingsAsOfOrdersTiesLikeLiveLeaderboard() {
+	alice := player.GenerateID()
+	bob := player.GenerateID()
+	s.appendHistoricalEvent("1-0", ledger.EventSet, alice, board.MainId, 20)
+	s.appendHistoricalEvent("2-0", ledger.EventSet, bob, board.MainId, 20)
+
+	standings, _, err := s.storage.ListStandingsAsOf(
+		s.ctx(), board.MainId, time.UnixMilli(3), 10, 0,
+	)
+
+	s.Require().NoError(err)
+	// TODO: looks weird, not determined kinda
+	if alice.String() > bob.String() {
+		s.Require().Equal(alice.String(), standings[0].PlayerID)
+	} else {
+		s.Require().Equal(bob.String(), standings[0].PlayerID)
+	}
+	s.Require().Equal(int64(1), standings[0].Rank)
+	s.Require().Equal(int64(2), standings[1].Rank)
+}
+
+func (s *StorageSuite) TestListStandingsAsOfAppliesPaginationAfterFolding() {
+	players := []player.ID{player.GenerateID(), player.GenerateID(), player.GenerateID()}
+	for i, score := range []float64{30, 20, 10} {
+		s.appendHistoricalEvent(
+			[]string{"1-0", "2-0", "3-0"}[i],
+			ledger.EventSet,
+			players[i],
+			board.MainId,
+			score,
+		)
+	}
+
+	standings, total, err := s.storage.ListStandingsAsOf(
+		s.ctx(), board.MainId, time.UnixMilli(10), 1, 1,
+	)
+
+	s.Require().NoError(err)
+	s.Require().Equal(int64(3), total)
+	s.Require().Len(standings, 1)
+	s.Require().Equal(20.0, standings[0].Score)
+	s.Require().Equal(int64(2), standings[0].Rank)
+}
+
+func (s *StorageSuite) TestListStandingsAsOfIgnoresLiveProjection() {
+	playerID := player.GenerateID()
+	s.appendHistoricalEvent("1-0", ledger.EventSet, playerID, board.MainId, 42)
+	s.Require().NoError(s.rawClient.ZAdd(
+		s.ctx(), leaderboardKey(board.MainId), redis.Z{Score: 999, Member: playerID.String()},
+	).Err())
+
+	standings, _, err := s.storage.ListStandingsAsOf(
+		s.ctx(), board.MainId, time.UnixMilli(2), 10, 0,
+	)
+
+	s.Require().NoError(err)
+	s.Require().Equal(42.0, standings[0].Score)
+}
+
+func (s *StorageSuite) TestListStandingsAsOfCurrentMatchesLiveProjection() {
+	s.createMainBoard()
+	alice := s.createPlayer("alice")
+	bob := s.createPlayer("bob")
+	s.Require().NoError(s.storage.SetScore(s.ctx(), alice, board.MainId, 20, "a1", ""))
+	s.Require().NoError(s.storage.IncrementScore(s.ctx(), alice, board.MainId, 5, "a2", ""))
+	s.Require().NoError(s.storage.SetScore(s.ctx(), bob, board.MainId, 25, "b1", ""))
+
+	live, liveTotal, err := s.storage.ListStandings(s.ctx(), board.MainId, 10, 0)
+	s.Require().NoError(err)
+	historical, historicalTotal, err := s.storage.ListStandingsAsOf(
+		s.ctx(), board.MainId, time.Now().UTC().Add(time.Second), 10, 0,
+	)
+
+	s.Require().NoError(err)
+	s.Require().Equal(liveTotal, historicalTotal)
+	s.Require().Equal(live, historical)
+}
+
+func (s *StorageSuite) TestListStandingsAsOfUnknownBoardIsEmpty() {
+	standings, total, err := s.storage.ListStandingsAsOf(
+		s.ctx(), "unknown", time.Now().UTC(), 10, 0,
+	)
+
+	s.Require().NoError(err)
+	s.Require().Empty(standings)
+	s.Require().Zero(total)
+}
+
+func (s *StorageSuite) TestListStandingsAsOfRejectsMalformedMatchingEvent() {
+	playerID := player.GenerateID()
+	s.Require().NoError(s.rawClient.XAdd(s.ctx(), &redis.XAddArgs{
+		Stream: ledgerKey,
+		ID:     "1-0",
+		Values: map[string]any{
+			entryFieldType:      string(ledger.EventIncrement),
+			entryFieldPlayerID:  playerID.String(),
+			entryFieldBoardID:   string(board.MainId),
+			entryFieldAmount:    "not-a-number",
+			entryFieldRequestID: "historical-test",
+		},
+	}).Err())
+
+	standings, _, err := s.storage.ListStandingsAsOf(
+		s.ctx(), board.MainId, time.UnixMilli(2), 10, 0,
+	)
+
+	s.Require().ErrorIs(err, ErrInconsistent)
+	s.Require().Nil(standings)
+}
+
+func (s *StorageSuite) appendHistoricalEvent(
+	id string, eventType ledger.EventType, playerID player.ID, boardID board.ID, amount float64,
+) {
+	s.Require().NoError(s.rawClient.XAdd(s.ctx(), &redis.XAddArgs{
+		Stream: ledgerKey,
+		ID:     id,
+		Values: map[string]any{
+			entryFieldType:      string(eventType),
+			entryFieldPlayerID:  playerID.String(),
+			entryFieldBoardID:   string(boardID),
+			entryFieldAmount:    amount,
+			entryFieldRequestID: "historical-test",
+		},
+	}).Err())
+}
+
+func streamIDAt(timestamp time.Time) string {
+	return strconv.FormatInt(timestamp.UnixMilli(), 10) + "-0"
 }

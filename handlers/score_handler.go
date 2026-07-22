@@ -2,11 +2,16 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
 )
+
+const asOfQuery = "as_of"
 
 type ScoreHandler struct {
 	Storage storage.ScoreRepo
@@ -148,7 +153,28 @@ func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	scores, total, err := h.Storage.ListStandings(req.Context(), boardId, limit, offset)
+	var scores []storage.Standing
+	var total int64
+	asOfValues, hasAsOf := req.URL.Query()[asOfQuery]
+	if !hasAsOf {
+		scores, total, err = h.Storage.ListStandings(req.Context(), boardId, limit, offset)
+	} else {
+		asOf := asOfValues[0]
+		date, parseErr := apextime.ParseDate(asOf)
+		if parseErr != nil {
+			writeErrorToResponse(w, parseErr, http.StatusBadRequest)
+			return
+		}
+		now := apextime.Now()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		if date.After(today) {
+			writeErrorToResponse(w, fmt.Errorf("%s must not be in the future", asOfQuery), http.StatusBadRequest)
+			return
+		}
+		scores, total, err = h.Storage.ListStandingsAsOf(
+			req.Context(), boardId, date.AddDate(0, 0, 1), limit, offset,
+		)
+	}
 	if err != nil {
 		writeStorageError(w, err)
 		return

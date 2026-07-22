@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/ledger"
@@ -36,6 +37,8 @@ type ScoreRepo interface {
 
 	// Returns one page of the leaderboard (highest score first) and the board size.
 	ListStandings(ctx context.Context, boardId board.ID, limit, offset int64) ([]Standing, int64, error)
+	// Reconstructs one page at an exclusive UTC cutoff without reading the live projection.
+	ListStandingsAsOf(ctx context.Context, boardId board.ID, before time.Time, limit, offset int64) ([]Standing, int64, error)
 
 	// Reads the ledger (newest first) for one player. limit <= 0 means no cap.
 	PlayerHistory(ctx context.Context, playerId player.ID, boardId board.ID, limit int64) ([]ledger.Event, error)

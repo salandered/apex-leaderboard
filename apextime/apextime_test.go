@@ -71,6 +71,17 @@ func TestParseRejectsMalformedInput(t *testing.T) {
 	}
 }
 
+func TestParseDateReturnsUTCStartOfDay(t *testing.T) {
+	got, err := ParseDate("2026-07-18")
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC), got)
+}
+
+func TestParseDateRejectsTimestamp(t *testing.T) {
+	_, err := ParseDate("2026-07-18T00:00:00Z")
+	require.Error(t, err)
+}
+
 func TestFormatParseRoundTrip(t *testing.T) {
 	for _, rawStr := range []string{
 		"2026-01-17T12:30:00.000Z",

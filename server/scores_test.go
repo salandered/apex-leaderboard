@@ -71,6 +71,51 @@ func (s *APISuite) TestListScoresOnBoard() {
 	s.Require().Len(result.Scores, 2)
 }
 
+func (s *APISuite) TestListScoresOnBoardAsOf() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores?as_of=2026-07-18")
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.ListScoresResp
+	s.decodeJSON(resp, &result)
+	s.Require().Equal(int64(1), result.Total)
+	s.Require().Equal(12.5, result.Scores[0].Score)
+}
+
+func (s *APISuite) TestListScoresOnBoardRejectsInvalidAsOf() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores?as_of=not-a-date")
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestListScoresOnBoardRejectsEmptyAsOf() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores?as_of=")
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestListScoresOnBoardRejectsFutureAsOf() {
+	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores?as_of=9999-01-01")
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestListScoresUnknownBoardIsEmpty() {
+	resp := s.get("/api/v1/boards/" + MockedUnknownBoardId + "/scores")
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.ListScoresResp
+	s.decodeJSON(resp, &result)
+	s.Require().Empty(result.Scores)
+	s.Require().Zero(result.Total)
+}
+
+func (s *APISuite) TestListScoresAsOfUnknownBoardIsEmpty() {
+	resp := s.get("/api/v1/boards/" + MockedUnknownBoardId + "/scores?as_of=2026-07-18")
+	s.Require().Equal(http.StatusOK, resp.StatusCode)
+
+	var result handlers.ListScoresResp
+	s.decodeJSON(resp, &result)
+	s.Require().Empty(result.Scores)
+	s.Require().Zero(result.Total)
+}
+
 func (s *APISuite) TestGetStandingOnBoard() {
 	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/" + MockedPlayerId)
 	s.Require().Equal(http.StatusOK, resp.StatusCode)

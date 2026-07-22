@@ -258,13 +258,29 @@ func (ms *mockStorage) GetStanding(c context.Context, playerId player.ID, boardI
 }
 
 func (ms *mockStorage) ListStandings(c context.Context, boardId board.ID, limit, offset int64) ([]storage.Standing, int64, error) {
+	if boardId == board.ID(MockedUnknownBoardId) {
+		return []storage.Standing{}, 0, nil
+	}
 	return []storage.Standing{
 		{PlayerID: MockedPlayerId, Score: 46.4, Rank: 1},
 		{PlayerID: "0f8fad5b-d9cb-469f-a165-70867728950e", Score: 30.0, Rank: 2},
 	}, 2, nil
 }
 
-func (ms *mockStorage) PlayerHistory(c context.Context, playerId player.ID, boardId board.ID, limit int64) ([]ledger.Event, error) {
+func (ms *mockStorage) ListStandingsAsOf(
+	_ context.Context, boardID board.ID, _ time.Time, _, _ int64,
+) ([]storage.Standing, int64, error) {
+	if boardID == board.ID(MockedUnknownBoardId) {
+		return []storage.Standing{}, 0, nil
+	}
+	return []storage.Standing{
+		{PlayerID: MockedPlayerId, Score: 12.5, Rank: 1},
+	}, 1, nil
+}
+
+func (ms *mockStorage) PlayerHistory(
+	c context.Context, playerId player.ID, boardId board.ID, limit int64,
+) ([]ledger.Event, error) {
 	return []ledger.Event{
 		{ID: "200-1", Type: ledger.EventIncrement, PlayerID: string(playerId), BoardID: string(boardId), Amount: 3, RequestID: "r2", CreatedAt: time.UnixMilli(200)},
 		{ID: "100-0", Type: ledger.EventSet, PlayerID: string(playerId), BoardID: string(boardId), Amount: 0, RequestID: "r1", CreatedAt: time.UnixMilli(100)},
