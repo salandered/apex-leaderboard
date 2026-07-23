@@ -124,6 +124,49 @@ Rebuild and verification are the operational counterpart. Both are scoped to one
 Rebuild folds board's ledger events into its projection (a leaderboard). Verification does the same but with a
 scratch and then compares it with a live projection.
 
+## Async projections (consumers)
+
+New views don't touch the write path. A view is an another **consumer** of the same global
+ledger. Consumer is a goroutine with its own Redis client (its blocking read doesn't compete
+with request handlers) and its own durable cursor.
+
+The first implemented consumer is the **daily activity** projection behind `GET /api/v1/activity/daily`. `DailyActivityConsumer` tails the ledger and folds each event into a per-day sorted set (`member = player`,
+`score = event count`), with a ~30 day TTL.
+
+```mermaid
+flowchart LR
+    S[(ledger\nglobal stream)]
+    S -->|fold to| LB[(leaderboard\nprojection per board)]
+    S -->|tail + count| C[DailyActivityConsumer]
+    C --> V[(activity\nZSET per UTC day)]
+    C --> Cur[(cursor\nlast processed id)]
+```
+
+### Cursor
+
+The cursor is a Redis string, `app:consumer:{name}:cursor`, holding the id of the
+last ledger event the consumer processed. The loop reads a batch after that id, applies it, then saves
+the new position.
+
+```mermaid
+flowchart LR
+    Load[load cursor\nmissing = stream head] --> Read[XREAD BLOCK ms COUNT n\nSTREAMS ledger cursor]
+    Read -->|timeout, nothing new| Load
+    Read -->|batch| Apply[fold each entry into\nits daily ZSET]
+    Apply --> Save[save cursor = last entry id]
+    Save --> Load
+```
+
+On first boot the cursor is absent, so it starts at `0-0` (the stream head) and does a full
+catch-up over all history. `XREAD` returns only entries *after* the given id.
+
+**At-least-once.** The batch is applied *before* the cursor is saved. If the consumer
+crashes between the two, the restart would re-apply the same batch -
+so a count can be inflated, but data is never lost. For a proof of concept view it is an
+acceptable trade. Also like any projection the view is disposable can can be rebuild (drop the daily ZSETs, reset the cursor to `0-0`).
+
+Note that using the event API `GET /api/v1/events` a client can implement it's own consumer.
+
 ## How it got here
 
 The design went through three stages:
@@ -151,6 +194,8 @@ The design went through three stages:
 | idempotency table | idempotency records: what reqIds were applied using **events** | app                       |
 | **profile**       | player's info (no score)                                       | all                       |
 | **stream entry**  | Redis Stream item (raw **event**)                              | redis                     |
+| **consumer**      | background reader that folds the **ledger** into a view        | app                       |
+| **cursor**        | last processed **event** id by the **consumer**                | app                       |
 
 Contexts:
 
