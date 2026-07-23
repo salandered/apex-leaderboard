@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Smoke test: wait for the composed stack and assert the readiness endpoint serves 200.
+# -- Smoke test --
+# Waits for the composed stack and assert the readiness endpoint serves 200.
 # /readyz checks that the HTTP server can reach Redis.
 #
 # TODO: consider making go or python script

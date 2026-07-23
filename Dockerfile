@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.26.2-alpine AS build
+# --platform=$BUILDPLATFORM keeps the compiler on the native runner arch (fast);
+# GOARCH=$TARGETARCH cross-compiles to each target - free for CGO_ENABLED=0 Go.
+FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -10,10 +12,11 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 # CGO_ENABLED=0 - no libc dependency, runs on `scratch`/distroless
 # -ldflags "-s -w" strips debug info; -X injects the build-time version
 ARG VERSION=dev
+ARG TARGETARCH # injected by buildx: amd64 | arm64
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
 	--mount=type=cache,target=/root/.cache/go-build \
-	CGO_ENABLED=0 GOOS=linux go build \
+	CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 	-ldflags="-s -w -X github.com/salandered/apex/handlers.version=${VERSION}" \
 	-o /out/apex .
 
