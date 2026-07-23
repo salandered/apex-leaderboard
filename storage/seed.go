@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/salandered/apex/apextime"
@@ -24,4 +25,20 @@ func SeedMainBoard(s BoardRepo) error {
 		return nil
 	}
 	return err
+}
+
+// keeps seeding until it succeeds or ctx is done
+func SeedMainBoardWithRetry(ctx context.Context, s BoardRepo, retryInterval time.Duration) error {
+	for attempt := 1; ; attempt++ {
+		if err := SeedMainBoard(s); err == nil {
+			return nil
+		} else {
+			slog.Warn("seeding main board failed, retrying", "attempt", attempt, "error", err)
+		}
+		select {
+		case <-time.After(retryInterval):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }

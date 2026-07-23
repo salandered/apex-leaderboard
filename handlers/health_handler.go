@@ -14,6 +14,9 @@ type healthChecker interface {
 
 type HealthHandler struct {
 	Storage healthChecker
+	// Seeded reports whether one-time app init (the main board) is done.
+	// nil means no seeding gate: readiness depends on the datastore only.
+	Seeded func() bool
 }
 
 type HealthResp struct {
@@ -33,6 +36,13 @@ func (h *HealthHandler) HandleReady(w http.ResponseWriter, req *http.Request) {
 		writeJSONToResponse(w, http.StatusServiceUnavailable, HealthResp{
 			Status:     "unavailable",
 			Dependency: "redis",
+		})
+		return
+	}
+	if h.Seeded != nil && !h.Seeded() {
+		writeJSONToResponse(w, http.StatusServiceUnavailable, HealthResp{
+			Status:     "unavailable",
+			Dependency: "seed",
 		})
 		return
 	}

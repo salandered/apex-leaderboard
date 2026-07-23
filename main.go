@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync/atomic"
+	"time"
 
 	"github.com/salandered/apex/consumer"
 	"github.com/salandered/apex/handlers"
@@ -14,6 +16,8 @@ import (
 )
 
 const defaultRedisURL = "redis://localhost:6379/0"
+
+const seedRetryInterval = 2 * time.Second
 
 const banner = `
        _________        _________        _________        _________
@@ -44,11 +48,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// the default board must exist before the server accepts writes
-	if err := storage.SeedMainBoard(store); err != nil {
-		slog.Error("seeding main board failed", "error", err)
-		os.Exit(1)
-	}
+	// The default board must exist before the server accepts writes, but won't crash app on error.
+	var mainBoardSeeded atomic.Bool
+	go func() {
+		if err := storage.SeedMainBoardWithRetry(context.Background(), store, seedRetryInterval); err != nil {
+			slog.Error("seeding main board aborted", "error", err)
+			return
+		}
+		mainBoardSeeded.Store(true)
+		slog.Info("main board seeded")
+	}()
 
 	activityStore, err := storage.NewActivityStore(redisURL)
 	if err != nil {
@@ -62,7 +71,7 @@ func main() {
 		}
 	}()
 
-	if err := server.Start(server.NewMux(store)); err != nil {
+	if err := server.Start(server.NewMux(store, mainBoardSeeded.Load)); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}

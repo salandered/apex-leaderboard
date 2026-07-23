@@ -11,8 +11,8 @@ import (
 
 const addr = ":8090"
 
-func NewMux(s storage.Storage) *http.ServeMux {
-	health := &handlers.HealthHandler{Storage: s}
+func NewMux(s storage.Storage, seeded func() bool) *http.ServeMux {
+	health := &handlers.HealthHandler{Storage: s, Seeded: seeded}
 	players := &handlers.PlayerHandler{Storage: s}
 	boards := &handlers.BoardHandler{Storage: s}
 	scores := &handlers.ScoreHandler{Storage: s}

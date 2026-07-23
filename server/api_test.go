@@ -45,7 +45,7 @@ type APISuite struct {
 
 func (s *APISuite) SetupSuite() {
 	fmt.Println("SetupSuite")
-	s.server = httptest.NewServer(server.NewMux(getMockedStorage()))
+	s.server = httptest.NewServer(server.NewMux(getMockedStorage(), func() bool { return true }))
 	s.client = s.server.Client()
 
 	loader := openapi3.NewLoader()

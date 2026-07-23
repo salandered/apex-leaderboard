@@ -30,7 +30,7 @@ func (s *APISuite) TestReadyzReturnsOK() {
 func (s *APISuite) TestReadyWhenStorageIsUnavailable() {
 	testServer := httptest.NewServer(server.NewMux(&mockStorage{
 		pingErr: errors.New("redis unavailable"),
-	}))
+	}, func() bool { return true }))
 	defer testServer.Close()
 
 	resp, err := testServer.Client().Get(testServer.URL + "/readyz")
@@ -42,4 +42,19 @@ func (s *APISuite) TestReadyWhenStorageIsUnavailable() {
 	var result handlers.HealthResp
 	s.decodeJSON(resp, &result)
 	s.Require().Equal(handlers.HealthResp{Status: "unavailable", Dependency: "redis"}, result)
+}
+
+func (s *APISuite) TestReadyWhenMainBoardNotSeeded() {
+	testServer := httptest.NewServer(server.NewMux(&mockStorage{}, func() bool { return false }))
+	defer testServer.Close()
+
+	resp, err := testServer.Client().Get(testServer.URL + "/readyz")
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { resp.Body.Close() })
+	s.validateAgainstSpec(resp)
+	s.Require().Equal(http.StatusServiceUnavailable, resp.StatusCode)
+
+	var result handlers.HealthResp
+	s.decodeJSON(resp, &result)
+	s.Require().Equal(handlers.HealthResp{Status: "unavailable", Dependency: "seed"}, result)
 }

@@ -511,7 +511,7 @@ components:
           enum: [unavailable]
         dependency:
           type: string
-          enum: [redis]
+          enum: [redis, seed]
 
     CreatePlayerRequest:
       type: object
