@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/player"
 )
 
@@ -26,13 +25,13 @@ func (s *StorageSuite) TestConcurrentIncrementScoreApplielAllOnce() {
 		go func(i int) {
 			defer wg.Done()
 			s.Require().NoError(
-				s.storage.IncrementScore(ctx, playerId, board.MainId, 1, "r"+strconv.Itoa(i), ""),
+				s.storage.IncrementScore(ctx, playerId, testBoardId, 1, "r"+strconv.Itoa(i), ""),
 			)
 		}(i)
 	}
 	wg.Wait()
 
-	score, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(playerId)).Result()
+	score, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(float64(n), score)
 	s.requireStreamLen(ctx, n)

@@ -22,12 +22,12 @@ func (s *StorageSuite) TestSetScore() {
 	playerId := s.createPlayer("bob") // profile only, no score yet
 
 	// when
-	err := s.storage.SetScore(ctx, playerId, board.MainId, 100.0, "r-set", "")
+	err := s.storage.SetScore(ctx, playerId, testBoardId, 100.0, "r-set", "")
 
 	// then
 	s.Require().NoError(err)
 
-	score, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(playerId)).Result()
+	score, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(100.0, score)
 
@@ -55,7 +55,7 @@ func (s *StorageSuite) TestSetScorePlayerMissing() {
 	s.createMainBoard()
 
 	// when
-	err := s.storage.SetScore(ctx, player.GenerateID(), board.MainId, 100.0, "r-set", "")
+	err := s.storage.SetScore(ctx, player.GenerateID(), testBoardId, 100.0, "r-set", "")
 
 	// then
 	s.Require().ErrorIs(err, ErrNotFound)
@@ -82,12 +82,12 @@ func (s *StorageSuite) TestIncrementScore() {
 	playerId := s.createPlayer("bob")
 
 	// when
-	err := s.storage.IncrementScore(ctx, playerId, board.MainId, 5.0, "r-inc", "")
+	err := s.storage.IncrementScore(ctx, playerId, testBoardId, 5.0, "r-inc", "")
 
 	// then
 	s.Require().NoError(err)
 
-	score, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(playerId)).Result()
+	score, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(5.0, score) // increment starts from 0
 
@@ -115,7 +115,7 @@ func (s *StorageSuite) TestIncrementScorePlayerMissing() {
 	s.createMainBoard()
 
 	// when
-	err := s.storage.IncrementScore(ctx, player.GenerateID(), board.MainId, 5.0, "r-inc", "")
+	err := s.storage.IncrementScore(ctx, player.GenerateID(), testBoardId, 5.0, "r-inc", "")
 
 	// then
 	s.Require().ErrorIs(err, ErrNotFound)
@@ -144,16 +144,16 @@ func (s *StorageSuite) TestIncrementScoreSameIdempKeySamePayloadIsIdempotent() {
 	playerId := s.createPlayer("bob")
 
 	s.Require().NoError(
-		s.storage.IncrementScore(ctx, playerId, board.MainId, 10, "req-1", "idem-1"),
+		s.storage.IncrementScore(ctx, playerId, testBoardId, 10, "req-1", "idem-1"),
 	)
 	s.requireStreamLen(ctx, 1)
 
 	s.Require().NoError(
-		s.storage.IncrementScore(ctx, playerId, board.MainId, 10, "req-2", "idem-1"),
+		s.storage.IncrementScore(ctx, playerId, testBoardId, 10, "req-2", "idem-1"),
 	)
 	s.requireStreamLen(ctx, 1) // no new event
 
-	score, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(playerId)).Result()
+	score, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(10.0, score)
 }
@@ -164,14 +164,14 @@ func (s *StorageSuite) TestIncrementScoreSameIdempKeyDiffPayloadShouldConflict()
 	s.createMainBoard()
 	playerId := s.createPlayer("bob")
 
-	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, board.MainId, 10, "req-1", "idem-1"))
+	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, testBoardId, 10, "req-1", "idem-1"))
 	s.requireStreamLen(ctx, 1)
 
-	err := s.storage.IncrementScore(ctx, playerId, board.MainId, 20, "req-2", "idem-1")
+	err := s.storage.IncrementScore(ctx, playerId, testBoardId, 20, "req-2", "idem-1")
 	s.Require().ErrorIs(err, ErrIdempotencyConflict)
 	s.requireStreamLen(ctx, 1) // conflict appends nothing
 
-	score, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(playerId)).Result()
+	score, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(10.0, score)
 }
@@ -182,7 +182,7 @@ func (s *StorageSuite) TestIncrementScoreNoIdempotencyKeyLeavesHashEmpty() {
 	s.createMainBoard()
 	playerId := s.createPlayer("bob")
 
-	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, board.MainId, 10, "req-1", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, testBoardId, 10, "req-1", ""))
 
 	hlen, err := s.rawClient.HLen(ctx, idempotencyHashKey).Result()
 	s.Require().NoError(err)
@@ -195,9 +195,9 @@ func (s *StorageSuite) TestIdempotencyRecordGetsTTL() {
 	s.createMainBoard()
 	playerId := s.createPlayer("bob")
 
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 10, "req-1", "idem-1"))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 10, "req-1", "idem-1"))
 
-	field := string(board.MainId) + ":" + string(playerId) + ":idem-1"
+	field := string(testBoardId) + ":" + string(playerId) + ":idem-1"
 	ttls, err := s.rawClient.HTTL(ctx, idempotencyHashKey, field).Result()
 	s.Require().NoError(err)
 	s.Require().Len(ttls, 1)
@@ -210,17 +210,17 @@ func (s *StorageSuite) TestScoreOperationSequence() {
 	s.createMainBoard()
 	playerId := s.createPlayer("bob")
 
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 20, "r1", ""))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 20, "r1", ""))
 
 	s.incrementScore(playerId, 1, "r2")
 	s.incrementScore(playerId, -6, "r3")
 
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 50, "r4", ""))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 50, "r4", ""))
 
 	s.incrementScore(playerId, 10, "r5")
 	s.incrementScore(playerId, -4, "r6")
 
-	projected, err := s.rawClient.ZScore(ctx, leaderboardKey(board.MainId), string(playerId)).Result()
+	projected, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
 	s.Require().NoError(err)
 	s.Require().Equal(56.0, projected)
 	s.requireStreamLen(ctx, 6)
@@ -241,12 +241,12 @@ func (s *StorageSuite) TestListScores() {
 		_, err := s.storage.CreatePlayerProfile(ctx,
 			&player.Profile{PlayerId: id, PlayerName: sd.name}, "")
 		s.Require().NoError(err)
-		s.Require().NoError(s.storage.SetScore(ctx, id, board.MainId, sd.score, "ls-set"+strconv.Itoa(i), ""))
+		s.Require().NoError(s.storage.SetScore(ctx, id, testBoardId, sd.score, "ls-set"+strconv.Itoa(i), ""))
 		ids[sd.name] = id
 	}
 
 	// first page: highest first, ranks 1..2; total is the whole board
-	page, total, err := s.storage.ListStandings(ctx, board.MainId, 2, 0)
+	page, total, err := s.storage.ListStandings(ctx, testBoardId, 2, 0)
 	s.Require().NoError(err)
 	s.Require().Equal(int64(3), total)
 	s.Require().Len(page, 2)
@@ -257,7 +257,7 @@ func (s *StorageSuite) TestListScores() {
 	s.Require().Equal(int64(2), page[1].Rank)
 
 	// second page continues the ranking
-	page2, total, err := s.storage.ListStandings(ctx, board.MainId, 2, 2)
+	page2, total, err := s.storage.ListStandings(ctx, testBoardId, 2, 2)
 	s.Require().NoError(err)
 	s.Require().Equal(int64(3), total)
 	s.Require().Len(page2, 1)
@@ -265,7 +265,7 @@ func (s *StorageSuite) TestListScores() {
 	s.Require().Equal(int64(3), page2[0].Rank)
 
 	// offset past the end -> empty slice, total still reports the board size
-	empty, total, err := s.storage.ListStandings(ctx, board.MainId, 10, 5)
+	empty, total, err := s.storage.ListStandings(ctx, testBoardId, 10, 5)
 	s.Require().NoError(err)
 	s.Require().Equal(int64(3), total)
 	s.Require().Empty(empty)
@@ -288,14 +288,14 @@ func (s *StorageSuite) TestGetStanding() {
 			&player.Profile{PlayerId: id, PlayerName: sd.name}, "")
 		s.Require().NoError(err)
 		s.Require().NoError(s.storage.SetScore(
-			ctx, id, board.MainId, sd.score, "pr-set"+strconv.Itoa(i), ""),
+			ctx, id, testBoardId, sd.score, "pr-set"+strconv.Itoa(i), ""),
 		)
 		ids[sd.name] = id
 	}
 
 	// then
 	// top player is rank 1
-	standing, total, err := s.storage.GetStanding(ctx, ids["alice"], board.MainId)
+	standing, total, err := s.storage.GetStanding(ctx, ids["alice"], testBoardId)
 	s.Require().NoError(err)
 	s.Require().Equal(ids["alice"].String(), standing.PlayerID)
 	s.Require().Equal(int64(1), standing.Rank)
@@ -303,14 +303,14 @@ func (s *StorageSuite) TestGetStanding() {
 	s.Require().Equal(int64(3), total)
 
 	// a mid-board player
-	standing, total, err = s.storage.GetStanding(ctx, ids["bob"], board.MainId)
+	standing, total, err = s.storage.GetStanding(ctx, ids["bob"], testBoardId)
 	s.Require().NoError(err)
 	s.Require().Equal(int64(2), standing.Rank)
 	s.Require().Equal(20.0, standing.Score)
 	s.Require().Equal(int64(3), total)
 
 	// unranked player -> not found
-	_, total, err = s.storage.GetStanding(ctx, player.GenerateID(), board.MainId)
+	_, total, err = s.storage.GetStanding(ctx, player.GenerateID(), testBoardId)
 	s.Require().ErrorIs(err, ErrNotFound)
 	s.Require().Equal(int64(0), total) // default value
 }
@@ -323,11 +323,11 @@ func (s *StorageSuite) TestTwoBoardsOnePlayer() {
 	playerId := s.createPlayer("bob")
 	s.createBoard("weekly", "Weekly", mockedTime)
 
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 10, "r1", ""))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 10, "r1", ""))
 	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.ID("weekly"), 100, "r2", ""))
 	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, board.ID("weekly"), 5, "r3", ""))
 
-	mainStanding, mainTotal, err := s.storage.GetStanding(ctx, playerId, board.MainId)
+	mainStanding, mainTotal, err := s.storage.GetStanding(ctx, playerId, testBoardId)
 	s.Require().NoError(err)
 	s.Require().Equal(10.0, mainStanding.Score)
 	s.Require().Equal(int64(1), mainTotal)
@@ -340,14 +340,14 @@ func (s *StorageSuite) TestTwoBoardsOnePlayer() {
 	weeklyHistory, err := s.storage.PlayerHistory(ctx, playerId, board.ID("weekly"), 0)
 	s.Require().NoError(err)
 	s.Require().Len(weeklyHistory, 2)
-	mainHistory, err := s.storage.PlayerHistory(ctx, playerId, board.MainId, 0)
+	mainHistory, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, 0)
 	s.Require().NoError(err)
 	s.Require().Len(mainHistory, 1)
 }
 
 func (s *StorageSuite) incrementScore(playerId player.ID, amount float64, reqID string) {
 	ctx := s.ctx()
-	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, board.MainId, amount, reqID, ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, testBoardId, amount, reqID, ""))
 }
 
 func (s *StorageSuite) TestHistory() {
@@ -358,9 +358,9 @@ func (s *StorageSuite) TestHistory() {
 	aliceId := player.GenerateID()
 	_, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: aliceId, PlayerName: "alice"}, "")
 	s.Require().NoError(err)
-	s.Require().NoError(s.storage.SetScore(ctx, aliceId, board.MainId, 5, "a1", ""))
-	s.Require().NoError(s.storage.IncrementScore(ctx, aliceId, board.MainId, 3, "a2", ""))
-	s.Require().NoError(s.storage.IncrementScore(ctx, aliceId, board.MainId, 10, "a3", ""))
+	s.Require().NoError(s.storage.SetScore(ctx, aliceId, testBoardId, 5, "a1", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, aliceId, testBoardId, 3, "a2", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, aliceId, testBoardId, 10, "a3", ""))
 
 	// a second player must not leak into alice's history
 	bob := player.GenerateID()
@@ -368,7 +368,7 @@ func (s *StorageSuite) TestHistory() {
 	s.Require().NoError(err)
 
 	// all alice events, newest first
-	all, err := s.storage.PlayerHistory(ctx, aliceId, board.MainId, 0)
+	all, err := s.storage.PlayerHistory(ctx, aliceId, testBoardId, 0)
 	s.Require().NoError(err)
 	s.Require().Len(all, 3)
 	s.Require().Equal(ledger.EventIncrement, all[0].Type)
@@ -379,13 +379,13 @@ func (s *StorageSuite) TestHistory() {
 	s.Require().False(all[0].CreatedAt.IsZero())
 
 	// limit caps the result
-	limited, err := s.storage.PlayerHistory(ctx, aliceId, board.MainId, 2)
+	limited, err := s.storage.PlayerHistory(ctx, aliceId, testBoardId, 2)
 	s.Require().NoError(err)
 	s.Require().Len(limited, 2)
 	s.Require().Equal("a3", limited[0].RequestID)
 
 	// unknown player yields an empty (non-nil) slice
-	none, err := s.storage.PlayerHistory(ctx, player.GenerateID(), board.MainId, 0)
+	none, err := s.storage.PlayerHistory(ctx, player.GenerateID(), testBoardId, 0)
 	s.Require().NoError(err)
 	s.Require().Empty(none)
 }
@@ -399,13 +399,13 @@ func (s *StorageSuite) TestHistoryRejectsMalformedMatchingEvent() {
 		Values: map[string]any{
 			entryFieldType:      "unknown",
 			entryFieldPlayerID:  string(playerId),
-			entryFieldBoardID:   string(board.MainId),
+			entryFieldBoardID:   string(testBoardId),
 			entryFieldAmount:    "5",
 			entryFieldRequestID: "broken",
 		},
 	}).Err())
 
-	events, err := s.storage.PlayerHistory(ctx, playerId, board.MainId, 0)
+	events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, 0)
 
 	s.Require().ErrorIs(err, ErrInconsistent)
 	s.Require().Nil(events)
@@ -415,7 +415,7 @@ func (s *StorageSuite) TestHistoryIgnoresMalformedEventsOutsideRequestedScope() 
 	ctx := s.ctx()
 	s.createMainBoard()
 	playerId := s.createPlayer("alice")
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.MainId, 20, "r1", ""))
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 20, "r1", ""))
 	s.Require().NoError(s.rawClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: ledgerKey,
 		Values: map[string]any{
@@ -426,7 +426,7 @@ func (s *StorageSuite) TestHistoryIgnoresMalformedEventsOutsideRequestedScope() 
 		},
 	}).Err())
 
-	events, err := s.storage.PlayerHistory(ctx, playerId, board.MainId, 0)
+	events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, 0)
 
 	s.Require().NoError(err)
 	s.Require().Len(events, 1)
@@ -447,26 +447,26 @@ func (s *StorageSuite) TestListStandingsAsOfStopsAtExclusiveCutoff() {
 		streamIDAt(fistDay),
 		ledger.EventSet,
 		playerID,
-		board.MainId,
+		testBoardId,
 		initialScore,
 	)
 	s.appendHistoricalEvent(
 		streamIDAt(firstDayVeryEnd),
 		ledger.EventIncrement,
 		playerID,
-		board.MainId,
+		testBoardId,
 		firstDayVeryEndIncr,
 	)
 	s.appendHistoricalEvent(
 		streamIDAt(nextDay),
 		ledger.EventIncrement,
 		playerID,
-		board.MainId,
+		testBoardId,
 		nextDayIncr,
 	)
 
 	standings, total, err := s.storage.ListStandingsAsOf(
-		ctx, board.MainId, nextDay, 10, 0,
+		ctx, testBoardId, nextDay, 10, 0,
 	)
 
 	s.Require().NoError(err)
@@ -477,11 +477,11 @@ func (s *StorageSuite) TestListStandingsAsOfStopsAtExclusiveCutoff() {
 func (s *StorageSuite) TestListStandingsAsOfOrdersTiesLikeLiveLeaderboard() {
 	alice := player.GenerateID()
 	bob := player.GenerateID()
-	s.appendHistoricalEvent("1-0", ledger.EventSet, alice, board.MainId, 20)
-	s.appendHistoricalEvent("2-0", ledger.EventSet, bob, board.MainId, 20)
+	s.appendHistoricalEvent("1-0", ledger.EventSet, alice, testBoardId, 20)
+	s.appendHistoricalEvent("2-0", ledger.EventSet, bob, testBoardId, 20)
 
 	standings, _, err := s.storage.ListStandingsAsOf(
-		s.ctx(), board.MainId, time.UnixMilli(3), 10, 0,
+		s.ctx(), testBoardId, time.UnixMilli(3), 10, 0,
 	)
 
 	s.Require().NoError(err)
@@ -502,13 +502,13 @@ func (s *StorageSuite) TestListStandingsAsOfAppliesPaginationAfterFolding() {
 			[]string{"1-0", "2-0", "3-0"}[i],
 			ledger.EventSet,
 			players[i],
-			board.MainId,
+			testBoardId,
 			score,
 		)
 	}
 
 	standings, total, err := s.storage.ListStandingsAsOf(
-		s.ctx(), board.MainId, time.UnixMilli(10), 1, 1,
+		s.ctx(), testBoardId, time.UnixMilli(10), 1, 1,
 	)
 
 	s.Require().NoError(err)
@@ -520,13 +520,13 @@ func (s *StorageSuite) TestListStandingsAsOfAppliesPaginationAfterFolding() {
 
 func (s *StorageSuite) TestListStandingsAsOfIgnoresLiveProjection() {
 	playerID := player.GenerateID()
-	s.appendHistoricalEvent("1-0", ledger.EventSet, playerID, board.MainId, 42)
+	s.appendHistoricalEvent("1-0", ledger.EventSet, playerID, testBoardId, 42)
 	s.Require().NoError(s.rawClient.ZAdd(
-		s.ctx(), leaderboardKey(board.MainId), redis.Z{Score: 999, Member: playerID.String()},
+		s.ctx(), leaderboardKey(testBoardId), redis.Z{Score: 999, Member: playerID.String()},
 	).Err())
 
 	standings, _, err := s.storage.ListStandingsAsOf(
-		s.ctx(), board.MainId, time.UnixMilli(2), 10, 0,
+		s.ctx(), testBoardId, time.UnixMilli(2), 10, 0,
 	)
 
 	s.Require().NoError(err)
@@ -537,14 +537,14 @@ func (s *StorageSuite) TestListStandingsAsOfCurrentMatchesLiveProjection() {
 	s.createMainBoard()
 	alice := s.createPlayer("alice")
 	bob := s.createPlayer("bob")
-	s.Require().NoError(s.storage.SetScore(s.ctx(), alice, board.MainId, 20, "a1", ""))
-	s.Require().NoError(s.storage.IncrementScore(s.ctx(), alice, board.MainId, 5, "a2", ""))
-	s.Require().NoError(s.storage.SetScore(s.ctx(), bob, board.MainId, 25, "b1", ""))
+	s.Require().NoError(s.storage.SetScore(s.ctx(), alice, testBoardId, 20, "a1", ""))
+	s.Require().NoError(s.storage.IncrementScore(s.ctx(), alice, testBoardId, 5, "a2", ""))
+	s.Require().NoError(s.storage.SetScore(s.ctx(), bob, testBoardId, 25, "b1", ""))
 
-	live, liveTotal, err := s.storage.ListStandings(s.ctx(), board.MainId, 10, 0)
+	live, liveTotal, err := s.storage.ListStandings(s.ctx(), testBoardId, 10, 0)
 	s.Require().NoError(err)
 	historical, historicalTotal, err := s.storage.ListStandingsAsOf(
-		s.ctx(), board.MainId, time.Now().UTC().Add(time.Second), 10, 0,
+		s.ctx(), testBoardId, time.Now().UTC().Add(time.Second), 10, 0,
 	)
 
 	s.Require().NoError(err)
@@ -570,14 +570,14 @@ func (s *StorageSuite) TestListStandingsAsOfRejectsMalformedMatchingEvent() {
 		Values: map[string]any{
 			entryFieldType:      string(ledger.EventIncrement),
 			entryFieldPlayerID:  playerID.String(),
-			entryFieldBoardID:   string(board.MainId),
+			entryFieldBoardID:   string(testBoardId),
 			entryFieldAmount:    "not-a-number",
 			entryFieldRequestID: "historical-test",
 		},
 	}).Err())
 
 	standings, _, err := s.storage.ListStandingsAsOf(
-		s.ctx(), board.MainId, time.UnixMilli(2), 10, 0,
+		s.ctx(), testBoardId, time.UnixMilli(2), 10, 0,
 	)
 
 	s.Require().ErrorIs(err, ErrInconsistent)

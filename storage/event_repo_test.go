@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/player"
 )
 
@@ -70,7 +69,7 @@ func (s *StorageSuite) TestListEventsAfterMalformedEntryFails() {
 		Values: map[string]any{
 			entryFieldType:      "unknown",
 			entryFieldPlayerID:  string(player.GenerateID()),
-			entryFieldBoardID:   string(board.MainId),
+			entryFieldBoardID:   string(testBoardId),
 			entryFieldAmount:    "1",
 			entryFieldRequestID: "r1",
 		},

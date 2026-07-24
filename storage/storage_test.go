@@ -20,8 +20,9 @@ import (
 const testRedisImage = "redis:8.8.0-alpine"
 
 var (
-	mockedTime    = time.Date(2026, 1, 17, 12, 30, 0, 0, time.UTC)
-	mockedTimeStr = apextime.Format(mockedTime)
+	mockedTime             = time.Date(2026, 1, 17, 12, 30, 0, 0, time.UTC)
+	mockedTimeStr          = apextime.Format(mockedTime)
+	testBoardId   board.ID = "test-board"
 )
 
 type StorageSuite struct {
@@ -103,7 +104,7 @@ func (s *StorageSuite) ctx() context.Context {
 }
 
 func (s *StorageSuite) createMainBoard() {
-	s.createBoard(board.MainId, "main", mockedTime)
+	s.createBoard(testBoardId, "Test Board", mockedTime)
 }
 
 func (s *StorageSuite) createBoard(id board.ID, name string, createdAt time.Time) {

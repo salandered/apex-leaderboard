@@ -48,7 +48,6 @@ rather than UUIDs. They are readable and appear in URLs.
 The board id is **immutable forever** (ids are written into ledger events),
 however, a board has a mutable display name.
 A registry (currently acts as a sorting index) keeps the list of boards in creation order.
-The default board `main` is created at startup.
 
 Boards has a status, currntly `active`/`closed`: a closed
 board rejects score writes with `409` while reads and ledger replay are unaffected.

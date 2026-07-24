@@ -45,7 +45,7 @@ type APISuite struct {
 
 func (s *APISuite) SetupSuite() {
 	fmt.Println("SetupSuite")
-	s.server = httptest.NewServer(server.NewMux(getMockedStorage(), func() bool { return true }))
+	s.server = httptest.NewServer(server.NewMux(getMockedStorage()))
 	s.client = s.server.Client()
 
 	loader := openapi3.NewLoader()
@@ -238,7 +238,7 @@ func (ms *mockStorage) GetBoard(c context.Context, boardId board.ID) (*board.Boa
 
 func (ms *mockStorage) ListBoards(c context.Context) ([]board.Board, error) {
 	return []board.Board{
-		{BoardId: board.MainId, BoardName: "main", State: board.BoardActive, CreatedAt: time.UnixMilli(100)},
+		{BoardId: "main", BoardName: "Main", State: board.BoardActive, CreatedAt: time.UnixMilli(100)},
 		{BoardId: "summer-contest", BoardName: "Summer Contest", State: board.BoardClosed, CreatedAt: time.UnixMilli(200)},
 	}, nil
 }

@@ -23,22 +23,53 @@ docker compose up --build
 Make requests:
 
 ```bash
-# Create a player profile; returns the generated id
+# Create a player profile; returns the generated id.
 curl -X POST http://localhost:8090/api/v1/players \
   -H "Content-Type: application/json" \
   -d '{"player_name":"alice"}'
 # {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
 
-# Give that player a score on the default "main" board (change UUID)
+# Create a new board
+curl -X PUT http://localhost:8090/api/v1/boards/main \
+  -H "Content-Type: application/json" \
+  -d '{"board_name":"Main"}'
+
+# Set a score on a new board
 curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
   -H "Content-Type: application/json" \
-  -d '{"player_score":42.5}'
+  -d '{"player_score":36}'
+
+# Retry-safe increment: send an Idempotency-Key. Try to curl this several times with and without the header.
+curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: r1" \
+  -d '{"amount":5}'
 
 # See the leaderboard
 curl "http://localhost:8090/api/v1/boards/main/scores"
 
-# Read all score events from the beginning
-curl "http://localhost:8090/api/v1/events?after=0-0"
+# See all the score events
+curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/history
+
+# Read the global score event feed, oldest first
+curl "http://localhost:8090/api/v1/events?after=0-0&limit=50"
+
+# Verify a leaderboard's projection against its ledger
+curl http://localhost:8090/api/v1/admin/boards/main/projection/verify
+# {"mismatches":[]}
+
+# Create a new closed board
+curl -X PUT http://localhost:8090/api/v1/boards/summer-contest \
+  -H "Content-Type: application/json" \
+  -d '{"board_name":"Summer Contest","status":"closed"}'
+
+# Try to set a score on a new closed board
+curl -X PUT http://localhost:8090/api/v1/boards/summer-contest/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
+  -H "Content-Type: application/json" \
+  -d '{"player_score":12}'
+
+# List boards
+curl http://localhost:8090/api/v1/boards
 ```
 
 ## API Spec
@@ -88,52 +119,6 @@ LOG_LEVEL=debug LOG_FORMAT=text LOG_FILE=./apex.log go run .
 ```
 
 will be logging messages like `05:23:40 INFO starting server addr=:8090` into file.
-
-### API Examples
-
-With the server running on `:8090`:
-
-```bash
-# Create a player profile; returns the generated id.
-curl -X POST http://localhost:8090/api/v1/players \
-  -H "Content-Type: application/json" \
-  -d '{"player_name":"alice"}'
-# {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
-
-# Set a score on a main board
-curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
-  -H "Content-Type: application/json" \
-  -d '{"player_score":36}'
-
-# Retry-safe increment: send an Idempotency-Key. Try to curl this several times with and without the header.
-curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: r1" \
-  -d '{"amount":5}'
-
-# See all the score events
-curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/history
-
-# Read the global score event feed, oldest first
-curl "http://localhost:8090/api/v1/events?after=0-0&limit=50"
-
-# Verify a leaderboard's projection against its ledger
-curl http://localhost:8090/api/v1/admin/boards/main/projection/verify
-# {"mismatches":[]}
-
-# Create a new closed board
-curl -X PUT http://localhost:8090/api/v1/boards/summer-contest \
-  -H "Content-Type: application/json" \
-  -d '{"board_name":"Summer Contest","status":"closed"}'
-
-# Try to set a score on a new closed board
-curl -X PUT http://localhost:8090/api/v1/boards/summer-contest/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
-  -H "Content-Type: application/json" \
-  -d '{"player_score":12}'
-
-# List boards
-curl http://localhost:8090/api/v1/boards
-```
 
 ### API Walk
 

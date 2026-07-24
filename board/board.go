@@ -12,7 +12,6 @@ type BoardState string
 const (
 	BoardActive BoardState = "active"
 	BoardClosed BoardState = "closed"
-	MainId      ID         = "main"
 )
 
 type Board struct {

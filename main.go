@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -20,8 +19,7 @@ import (
 
 const defaultRedisURL = "redis://localhost:6379/0"
 
-const seedRetryInterval = 2 * time.Second
-
+// covers the consumer's 5s blocking XREAD plus margin.
 const backgroundStopTimeout = 7 * time.Second
 
 const banner = `
@@ -56,17 +54,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// The default board must exist before the server accepts writes, but won't crash app on error.
-	var mainBoardSeeded atomic.Bool
-	go func() {
-		if err := storage.SeedMainBoardWithRetry(ctx, store, seedRetryInterval); err != nil {
-			slog.Error("seeding main board aborted", "error", err)
-			return
-		}
-		mainBoardSeeded.Store(true)
-		slog.Info("main board seeded")
-	}()
-
 	activityStore, err := storage.NewActivityStore(redisURL)
 	if err != nil {
 		slog.Error("activity store init failed", "error", err)
@@ -81,7 +68,7 @@ func main() {
 		}
 	}()
 
-	startErr := server.Start(ctx, server.NewMux(store, mainBoardSeeded.Load))
+	startErr := server.Start(ctx, server.NewMux(store))
 	if ctx.Err() == nil {
 		// returned before any signal -> the server never ran (e.g. failed to bind).
 		slog.Error("server failed", "error", startErr)

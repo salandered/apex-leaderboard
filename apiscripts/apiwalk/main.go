@@ -53,7 +53,7 @@ func main() {
 	w.step(fmt.Sprintf("PUT create board %q (201 first run, then 409 - already exists)", *boardID))
 	w.call("PUT", "/api/v1/boards/"+*boardID, map[string]any{"board_name": "Demo Cup"})
 
-	w.step("GET boards list (creation order; 'main' always exists)")
+	w.step("GET boards list (creation order)")
 	w.call("GET", "/api/v1/boards", nil)
 
 	w.step("GET board (status: active)")

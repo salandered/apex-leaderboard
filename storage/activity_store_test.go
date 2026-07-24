@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/consumer"
 	"github.com/salandered/apex/ledger"
 	"github.com/salandered/apex/player"
@@ -107,7 +106,7 @@ func (s *StorageSuite) TestReadLedgerBatchRejectsMalformedEntry() {
 		Values: map[string]any{
 			entryFieldType:      "unknown",
 			entryFieldPlayerID:  string(player.GenerateID()),
-			entryFieldBoardID:   string(board.MainId),
+			entryFieldBoardID:   string(testBoardId),
 			entryFieldAmount:    "1",
 			entryFieldRequestID: "r1",
 		},
@@ -179,7 +178,7 @@ func (s *StorageSuite) addLedgerEntryAt(
 		Values: map[string]any{
 			entryFieldType:      string(ledger.EventIncrement),
 			entryFieldPlayerID:  string(playerId),
-			entryFieldBoardID:   string(board.MainId),
+			entryFieldBoardID:   string(testBoardId),
 			entryFieldAmount:    "1",
 			entryFieldRequestID: reqID,
 		},
