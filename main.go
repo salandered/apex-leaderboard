@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/salandered/apex/consumer"
@@ -19,6 +22,8 @@ const defaultRedisURL = "redis://localhost:6379/0"
 
 const seedRetryInterval = 2 * time.Second
 
+const backgroundStopTimeout = 7 * time.Second
+
 const banner = `
        _________        _________        _________        _________
       /    A    /\     /    P    /\     /    E    /\     /    X    /\
@@ -28,6 +33,9 @@ const banner = `
 
 func main() {
 	fmt.Printf("apex version %v %v \n\n", handlers.GetVersion(), banner)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	logCloser, err := logging.Setup()
 	if err != nil {
@@ -51,7 +59,7 @@ func main() {
 	// The default board must exist before the server accepts writes, but won't crash app on error.
 	var mainBoardSeeded atomic.Bool
 	go func() {
-		if err := storage.SeedMainBoardWithRetry(context.Background(), store, seedRetryInterval); err != nil {
+		if err := storage.SeedMainBoardWithRetry(ctx, store, seedRetryInterval); err != nil {
 			slog.Error("seeding main board aborted", "error", err)
 			return
 		}
@@ -65,14 +73,37 @@ func main() {
 		os.Exit(1)
 	}
 	dailyActivityConsumer := consumer.NewDailyActivityConsumer(activityStore)
+	consumerDone := make(chan struct{})
 	go func() {
-		if err := dailyActivityConsumer.Run(context.Background()); err != nil {
+		defer close(consumerDone)
+		if err := dailyActivityConsumer.Run(ctx); err != nil {
 			slog.Error("activity consumer stopped", "error", err)
 		}
 	}()
 
-	if err := server.Start(server.NewMux(store, mainBoardSeeded.Load)); err != nil {
-		slog.Error("server stopped", "error", err)
+	startErr := server.Start(ctx, server.NewMux(store, mainBoardSeeded.Load))
+	if ctx.Err() == nil {
+		// returned before any signal -> the server never ran (e.g. failed to bind).
+		slog.Error("server failed", "error", startErr)
 		os.Exit(1)
+	}
+	if startErr != nil {
+		// signal-triggered shutdown that didn't finish cleanly (e.g. deadline).
+		slog.Error("graceful shutdown incomplete", "error", startErr)
+	}
+
+	waitFor(consumerDone, "activity consumer", backgroundStopTimeout)
+	if c, ok := activityStore.(io.Closer); ok {
+		if err := c.Close(); err != nil {
+			slog.Error("activity store close failed", "error", err)
+		}
+	}
+}
+
+func waitFor(done <-chan struct{}, name string, timeout time.Duration) {
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		slog.Warn("background worker did not stop in time", "worker", name)
 	}
 }

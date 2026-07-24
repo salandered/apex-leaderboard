@@ -67,3 +67,7 @@ func NewStorage(url string) (Storage, error) {
 	pingWithRetry(client, opts.Addr)
 	return &redisStorage{client: client}, nil
 }
+
+func (s *redisStorage) Close() error {
+	return s.client.Close()
+}

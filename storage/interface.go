@@ -72,4 +72,5 @@ type Storage interface {
 	EventRepo
 	ActivityRepo
 	Ping(ctx context.Context) error
+	Close() error
 }

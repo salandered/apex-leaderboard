@@ -18,14 +18,22 @@ const (
 	retryBackoff              = time.Second
 )
 
-type ConsumerStore interface {
+// CursorRepo persists each consumer's position in the ledger stream.
+type CursorRepo interface {
 	LoadCursor(ctx context.Context, consumer string) (cursor string, found bool, err error)
 	SaveCursor(ctx context.Context, consumer, cursor string) error
+}
+
+// LedgerReader tails the shared ledger stream in batches.
+type LedgerReader interface {
 	ReadLedgerBatch(ctx context.Context, after string, limit int64, block time.Duration) (LedgerBatch, error)
 }
 
+// DailyActivityStore is the daily-activity consumer's dependency: shared ledger
+// tailing and cursor tracking, plus its own projection writes.
 type DailyActivityStore interface {
-	ConsumerStore
+	CursorRepo
+	LedgerReader
 	ApplyDailyCounts(ctx context.Context, increments []DailyIncrement, ttl time.Duration) error
 }
 
@@ -55,8 +63,8 @@ func NewDailyActivityConsumer(store DailyActivityStore) *DailyActivityConsumer {
 	return &DailyActivityConsumer{store: store, name: dailyActivityConsumerName}
 }
 
-// Run tails the ledger until ctx is cancelled. Batch failures are logged and retried.
-// Later should be gracefully stopped via ctx (graceful shutdown is not implemented)
+// Run tails the ledger until ctx is cancelled (gracefull shutdown).
+// Batch failures are logged and retried.
 func (c *DailyActivityConsumer) Run(ctx context.Context) error {
 	for {
 		if ctx.Err() != nil {

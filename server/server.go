@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -59,15 +61,37 @@ func NewMux(s storage.Storage, seeded func() bool) *http.ServeMux {
 	return mux
 }
 
-// blocks until the server stops and always returns a non-nil error.
-func Start(handler http.Handler) error {
-	s := &http.Server{
+// Start runs the server until ctx is cancelled, then drains in-flight requests
+// within a bounded window. Returns nil on a clean shutdown, or a non-nil error
+// on a listener failure or a drain-deadline miss.
+func Start(ctx context.Context, handler http.Handler) error {
+	srv := &http.Server{
 		Addr:           addr,
 		Handler:        loggingMiddleware(handler),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1 mb
 	}
-	slog.Info("starting server", "addr", s.Addr)
-	return s.ListenAndServe()
+	slog.Info("starting server", "addr", srv.Addr)
+
+	errCh := make(chan error, 1)
+	go func() {
+		err := srv.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		slog.Error("server error", "err", err)
+		return err // ListenAndServe returned unexpected error -> fail fast
+	case <-ctx.Done(): // signal -> graceful shutdown
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := srv.Shutdown(shutdownCtx) // when succeeds -> ListenAndServe returns ErrServerClosed
+	slog.Info("shutdown", "err", err)
+	return err
 }
