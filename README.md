@@ -104,13 +104,14 @@ The server listens on port `:8090` and connects to Redis via `REDIS_URL`
 
 All envs are optional:
 
-| Variable     | Values                        | Default                    | Description                                                                                                              |
-| ------------ | ----------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `REDIS_URL`  | Redis connection URL          | `redis://localhost:6379/0` | Storage url.                                                                                                             |
-| `LOG_LEVEL`  | `debug` `info` `warn` `error` | `info`                     | Minimum log level being printed.                                                                                         |
-| `LOG_FORMAT` | `text` `json`                 | `text`                     | `text` is a human readable format (colorized if using stdout), `json` is for machines.                                   |
-| `LOG_FILE`   | file path                     | *(empty → stdout)*         | If set, logs go to this file only.                                                                                       |
-| `LOG_TIME`   | `short` `nano`                | `short`                    | `text` timestamp precision; `nano` adds fractional seconds. Does not affect `LOG_FORMAT = json` (always full precision). |
+| Variable           | Values                        | Default                    | Description                                                                                                              |
+| ------------------ | ----------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `REDIS_URL`        | Redis connection URL          | `redis://localhost:6379/0` | Storage url.                                                                                                             |
+| `SHUTDOWN_TIMEOUT` | Go duration, e.g. `30s`       | `10s`                      | Max time to gracefully stop in-flight requests on shutdown. Keep below the deployment's termination grace period.        |
+| `LOG_LEVEL`        | `debug` `info` `warn` `error` | `info`                     | Minimum log level being printed.                                                                                         |
+| `LOG_FORMAT`       | `text` `json`                 | `text`                     | `text` is a human readable format (colorized if using stdout), `json` is for machines.                                   |
+| `LOG_FILE`         | file path                     | *(empty → stdout)*         | If set, logs go to this file only.                                                                                       |
+| `LOG_TIME`         | `short` `nano`                | `short`                    | `text` timestamp precision; `nano` adds fractional seconds. Does not affect `LOG_FORMAT = json` (always full precision). |
 
 For example,
 

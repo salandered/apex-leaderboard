@@ -18,7 +18,7 @@ func newActivityStore(client *redis.Client) *redisActivityStore {
 }
 
 // Own Redis client isolates the blocking ledger read from the request pool.
-func NewActivityStore(redisURL string) (consumer.DailyActivityStore, error) {
+func NewActivityStore(redisURL string) (*redisActivityStore, error) {
 	opts, err := redis.ParseURL(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("activity store: parse redis url: %w", err)

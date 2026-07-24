@@ -63,6 +63,12 @@ func NewDailyActivityConsumer(store DailyActivityStore) *DailyActivityConsumer {
 	return &DailyActivityConsumer{store: store, name: dailyActivityConsumerName}
 }
 
+// How long Run may keep running after ctx is cancelled.
+// Callers waiting for a clean stop should allow this long (+ some margin).
+func (c *DailyActivityConsumer) MaxStopDelay() time.Duration {
+	return blockDuration
+}
+
 // Run tails the ledger until ctx is cancelled (gracefull shutdown).
 // Batch failures are logged and retried.
 func (c *DailyActivityConsumer) Run(ctx context.Context) error {

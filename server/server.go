@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -12,6 +13,14 @@ import (
 )
 
 const addr = ":8090"
+
+const DefaultShutdownTimeout = 10 * time.Second
+
+var (
+	ServerError = errors.New("server")
+	ErrServe    = fmt.Errorf("%w: serve failed", ServerError)
+	ErrShutdown = fmt.Errorf("%w: shutdown incomplete", ServerError)
+)
 
 func NewMux(s storage.Storage) *http.ServeMux {
 	health := &handlers.HealthHandler{Storage: s}
@@ -61,10 +70,9 @@ func NewMux(s storage.Storage) *http.ServeMux {
 	return mux
 }
 
-// Start runs the server until ctx is cancelled, then drains in-flight requests
-// within a bounded window. Returns nil on a clean shutdown, or a non-nil error
-// on a listener failure or a drain-deadline miss.
-func Start(ctx context.Context, handler http.Handler) error {
+// Start runs the server until ctx is cancelled, then shuts down in-flight requests.
+// The caller owns error logging.
+func Start(ctx context.Context, handler http.Handler, shutdownTimeout time.Duration) error {
 	srv := &http.Server{
 		Addr:           addr,
 		Handler:        loggingMiddleware(handler),
@@ -74,24 +82,33 @@ func Start(ctx context.Context, handler http.Handler) error {
 	}
 	slog.Info("starting server", "addr", srv.Addr)
 
-	errCh := make(chan error, 1)
+	errServeCh := make(chan error, 1)
 	go func() {
 		err := srv.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
+			errServeCh <- err
 		}
 	}()
 
 	select {
-	case err := <-errCh:
-		slog.Error("server error", "err", err)
-		return err // ListenAndServe returned unexpected error -> fail fast
+	case err := <-errServeCh:
+		return fmt.Errorf("%w: %w", ErrServe, err) // ListenAndServe returned unexpected error -> fail fast
 	case <-ctx.Done(): // signal -> graceful shutdown
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	err := srv.Shutdown(shutdownCtx) // when succeeds -> ListenAndServe returns ErrServerClosed
-	slog.Info("shutdown", "err", err)
-	return err
+	if err := srv.Shutdown(shutdownCtx); err != nil { // when succeeds -> ListenAndServe returns ErrServerClosed
+		return fmt.Errorf("%w: %w", ErrShutdown, err)
+	}
+
+	// in case errServeCh holds something (first select might ve chosen ctx.Done)
+	select {
+	case err := <-errServeCh:
+		return fmt.Errorf("%w: %w", ErrServe, err)
+	default:
+	}
+
+	slog.Info("server stopped")
+	return nil
 }
