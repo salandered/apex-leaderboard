@@ -75,7 +75,7 @@ func NewMux(s storage.Storage) *http.ServeMux {
 func Start(ctx context.Context, handler http.Handler, shutdownTimeout time.Duration) error {
 	srv := &http.Server{
 		Addr:           addr,
-		Handler:        loggingMiddleware(handler),
+		Handler:        requestIDMiddleware(loggingMiddleware(recoveryMiddleware(handler))),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1 mb

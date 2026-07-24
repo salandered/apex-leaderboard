@@ -18,6 +18,6 @@ type Event struct {
 	PlayerID  string    //
 	BoardID   string    //
 	Amount    float64   //
-	RequestID string    // client-supplied idempotency key
+	RequestID string    // server-generated request id (identity/echo only, not the idempotency key)
 	CreatedAt time.Time // derived from the ID
 }

@@ -90,6 +90,10 @@ the same generated `player_id` or `409`s.
 
 Board creation doesnt use this mechanics: `PUT` with a client-chosen slug is already retry-safe.
 
+**Request correlation.** Every request carries a server-generated id. It is recorded in
+score event's `request_id`, returned in the `X-Request-ID` response header and logged.
+A client generated `X-Request-ID` header is ignored.
+
 ## The write operations
 
 ```mermaid

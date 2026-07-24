@@ -73,7 +73,7 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 		playerId,
 		boardId,
 		data.PlayerScore,
-		newRequestID(),
+		requestID(req),
 		idempotencyKey,
 	)
 	if err != nil {
@@ -105,7 +105,7 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 		playerId,
 		boardId,
 		data.Amount,
-		newRequestID(),
+		requestID(req),
 		idempotencyKey,
 	)
 	if err != nil {

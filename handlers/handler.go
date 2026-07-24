@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/google/uuid"
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/player"
+	"github.com/salandered/apex/requestid"
 	"github.com/salandered/apex/storage"
 )
 
@@ -39,8 +39,13 @@ func HandleRoot(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "apex version %v", GetVersion())
 }
 
-func newRequestID() string {
-	return uuid.NewString()
+// requestID uses the middleware's correlation id, falling back to a fresh one when a handler
+// runs without the middleware (direct/test calls).
+func requestID(req *http.Request) string {
+	if id := requestid.FromContext(req.Context()); id != "" {
+		return id
+	}
+	return requestid.New()
 }
 
 const idempotencyKeyHeader = "Idempotency-Key"
