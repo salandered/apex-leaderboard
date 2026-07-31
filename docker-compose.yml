@@ -5,8 +5,9 @@ services:
       args:
         VERSION: "${VERSION:-dev}"
     ports:
-      - "8090:8090" # todo: port configuration
+      - "${PORT:-8090}:${PORT:-8090}"
     environment:
+      PORT: "${PORT:-8090}" 
       REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: info
       LOG_FORMAT: text # or "json"

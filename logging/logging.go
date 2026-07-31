@@ -11,8 +11,6 @@ import (
 	"github.com/lmittmann/tint"
 )
 
-// TODO make env options as consts
-
 // Env vars (all optional):
 //   - LOG_LEVEL:  debug | info (default) | warn | error
 //   - LOG_FORMAT: text (default) | json

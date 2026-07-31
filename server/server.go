@@ -6,19 +6,22 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/salandered/apex/handlers"
 	"github.com/salandered/apex/storage"
 )
 
-const addr = ":8090"
-
-const DefaultShutdownTimeout = 10 * time.Second
+const (
+	DefaultPort            = 8090
+	DefaultShutdownTimeout = 10 * time.Second
+)
 
 var (
 	ServerError = errors.New("server")
 	ErrServe    = fmt.Errorf("%w: serve failed", ServerError)
+	ErrOption   = fmt.Errorf("%w: invalid option", ServerError)
 	ErrShutdown = fmt.Errorf("%w: shutdown incomplete", ServerError)
 )
 
@@ -70,11 +73,45 @@ func NewMux(s storage.Storage) *http.ServeMux {
 	return mux
 }
 
+type options struct {
+	port            int
+	shutdownTimeout time.Duration
+}
+
+type Option func(cfg *options) error
+
+func WithPort(port int) Option {
+	return func(cfg *options) error {
+		if port <= 0 || port > 65535 {
+			return fmt.Errorf("%w: port should be in 1..65535", ErrOption)
+		}
+		cfg.port = port
+		return nil
+	}
+}
+
+func WithShutdownTimeout(st time.Duration) Option {
+	return func(cfg *options) error {
+		if st <= 0 {
+			return fmt.Errorf("%w: shutdown timeout should be positive", ErrOption)
+		}
+		cfg.shutdownTimeout = st
+		return nil
+	}
+}
+
 // Start runs the server until ctx is cancelled, then shuts down in-flight requests.
 // The caller owns error logging.
-func Start(ctx context.Context, handler http.Handler, shutdownTimeout time.Duration) error {
+func Start(ctx context.Context, handler http.Handler, opts ...Option) error {
+	cfg := options{port: DefaultPort, shutdownTimeout: DefaultShutdownTimeout}
+	for _, opt := range opts {
+		if err := opt(&cfg); err != nil {
+			return err
+		}
+	}
+
 	srv := &http.Server{
-		Addr:           addr,
+		Addr:           ":" + strconv.Itoa(cfg.port),
 		Handler:        requestIDMiddleware(loggingMiddleware(recoveryMiddleware(handler))),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
@@ -96,7 +133,7 @@ func Start(ctx context.Context, handler http.Handler, shutdownTimeout time.Durat
 	case <-ctx.Done(): // signal -> graceful shutdown
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil { // when succeeds -> ListenAndServe returns ErrServerClosed
 		return fmt.Errorf("%w: %w", ErrShutdown, err)

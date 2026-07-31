@@ -30,6 +30,8 @@ USER apex
 
 COPY --from=build /out/apex /apex
 
+# only records the default port for `docker run -P` and inspect tools.
+# The listen port is PORT at runtime; compose publishes it explicitly.
 EXPOSE 8090
 
 ENTRYPOINT ["/apex"]

@@ -78,6 +78,8 @@ curl http://localhost:8090/api/v1/boards
 
 ## 🛠️ Development
 
+ℹ️ More developer docs: see `docs/` folder.
+
 [Go](https://go.dev/doc/install) 1.26+ is used in addition to Docker.
 
 ### Running the Server
@@ -97,15 +99,16 @@ docker compose up -d redis # or: docker run -p 6379:6379 redis:8.8.0-alpine
 go run .
 ```
 
-The server listens on port `:8090` and connects to Redis via `REDIS_URL`
-(default `redis://localhost:6379/0`).
+The server listens on `PORT` (default `8090`) and connects to Redis via `REDIS_URL`
+(default `redis://localhost:6379/0`)
 
 ### Configuration
 
-All envs are optional:
+All envs are optional, but a set and invalid one will abort the start up:
 
 | Variable           | Values                        | Default                    | Description                                                                                                              |
 | ------------------ | ----------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `PORT`             | `1`..`65535`                  | `8090`                     | HTTP listen port.                                                                                                        |
 | `REDIS_URL`        | Redis connection URL          | `redis://localhost:6379/0` | Storage url.                                                                                                             |
 | `SHUTDOWN_TIMEOUT` | Go duration, e.g. `30s`       | `10s`                      | Max time to gracefully stop in-flight requests on shutdown. Keep below the deployment's termination grace period.        |
 | `LOG_LEVEL`        | `debug` `info` `warn` `error` | `info`                     | Minimum log level being printed.                                                                                         |
@@ -161,10 +164,6 @@ Run `tidy` to sync `go.mod` and `go.sum` with the actual imports.
 ```bash
 go mod tidy
 ```
-
-### Developer Docs
-
-- See docs/ folder.
 
 ## Misc
 

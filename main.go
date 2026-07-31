@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 )
 
 const defaultRedisURL = "redis://localhost:6379/0"
+
+var ErrConfig = errors.New("invalid config")
 
 const workerStopMargin = 2 * time.Second
 
@@ -74,15 +77,17 @@ func main() {
 		}
 	}()
 
-	shutdownTimeout := durationFromEnv("SHUTDOWN_TIMEOUT", server.DefaultShutdownTimeout)
-	startErr := server.Start(ctx, server.NewMux(store), shutdownTimeout)
+	err = startServer(ctx, store)
 
 	switch {
-	case startErr == nil: // ctx cancelled
-	case errors.Is(startErr, server.ErrShutdown):
-		slog.Error("graceful shutdown incomplete", "error", startErr)
+	case err == nil: // ctx cancelled
+	case errors.Is(err, server.ErrShutdown):
+		slog.Error("graceful shutdown incomplete", "error", err)
+	case errors.Is(err, ErrConfig), errors.Is(err, server.ErrOption):
+		slog.Error("invalid configuration", "error", err)
+		os.Exit(1)
 	default: // ErrServe or unexpected
-		slog.Error("server failed", "error", startErr)
+		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
 
@@ -97,6 +102,21 @@ func main() {
 	}
 }
 
+func startServer(ctx context.Context, store storage.Storage) error {
+	port, err := intFromEnv("PORT", server.DefaultPort)
+	if err != nil {
+		return err
+	}
+	shutdownTimeout, err := durationFromEnv("SHUTDOWN_TIMEOUT", server.DefaultShutdownTimeout)
+	if err != nil {
+		return err
+	}
+	return server.Start(ctx, server.NewMux(store),
+		server.WithPort(port),
+		server.WithShutdownTimeout(shutdownTimeout),
+	)
+}
+
 func waitFor(done <-chan struct{}, name string, timeout time.Duration) {
 	select {
 	case <-done:
@@ -105,16 +125,26 @@ func waitFor(done <-chan struct{}, name string, timeout time.Duration) {
 	}
 }
 
-func durationFromEnv(name string, def time.Duration) time.Duration {
+func intFromEnv(name string, def int) (int, error) {
 	v := os.Getenv(name)
 	if v == "" {
-		return def
+		return def, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %s=%q: %w", ErrConfig, name, v, err)
+	}
+	return n, nil
+}
+
+func durationFromEnv(name string, def time.Duration) (time.Duration, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return def, nil
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil {
-		slog.Warn("invalid duration env, using default",
-			"env", name, "value", v, "default", def, "error", err)
-		return def
+		return 0, fmt.Errorf("%w: %s=%q: %w", ErrConfig, name, v, err)
 	}
-	return d
+	return d, nil
 }
