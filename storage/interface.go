@@ -29,8 +29,8 @@ type BoardRepo interface {
 type ScoreRepo interface {
 	// requestID is the server-generated id;
 	// idempotencyKey is the optional client-supplied key (empty string skips the idempotency record)
-	IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount float64, requestID, idempotencyKey string) error
-	SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score float64, requestID, idempotencyKey string) error
+	IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount int64, requestID, idempotencyKey string) error
+	SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score int64, requestID, idempotencyKey string) error
 
 	// Returns a player's standing and the total number of ranked players. Rank is 1-based.
 	GetStanding(ctx context.Context, playerId player.ID, boardId board.ID) (Standing, int64, error)

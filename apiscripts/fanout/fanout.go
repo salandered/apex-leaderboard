@@ -14,7 +14,7 @@ import (
 
 type player struct {
 	id    string
-	score float64
+	score int64
 }
 
 // rankingsShown caps how many leaderboard rows a run prints.
@@ -74,7 +74,7 @@ func printRankings(rows []playerStanding, limit int) {
 	shown := min(limit, len(rows))
 	fmt.Printf("rankings (top %d of %d):\n", shown, len(rows))
 	for _, r := range rows[:shown] {
-		fmt.Printf("  #%-3d score=%-6g %s\n", r.Rank, r.Score, r.PlayerID)
+		fmt.Printf("  #%-3d score=%-6d %s\n", r.Rank, r.Score, r.PlayerID)
 	}
 	if len(rows) > shown {
 		fmt.Printf("  ... %d more\n", len(rows)-shown)
@@ -128,7 +128,7 @@ func verifyRanking(rc *resty.Client, boardID string, players []player, rows []pl
 			log.Fatalf("wrong player at rank %d: got %s, want %s", i+1, row.PlayerID, expected[i].id)
 		}
 		if row.Score != expected[i].score {
-			log.Fatalf("wrong score at rank %d: got %g, want %g", i+1, row.Score, expected[i].score)
+			log.Fatalf("wrong score at rank %d: got %d, want %d", i+1, row.Score, expected[i].score)
 		}
 		if i > 0 && rows[i-1].Score <= row.Score {
 			log.Fatalf("scores not strictly descending at rank %d", i+1)
@@ -142,7 +142,7 @@ func verifyRanking(rc *resty.Client, boardID string, players []player, rows []pl
 		got := fetchStanding(rc, boardID, want.PlayerID)
 		if got.Rank != want.Rank || got.Score != want.Score {
 			log.Fatalf(
-				"standing disagrees with listing for %s: standing rank=%d score=%g, listing rank=%d score=%g",
+				"standing disagrees with listing for %s: standing rank=%d score=%d, listing rank=%d score=%d",
 				want.PlayerID, got.Rank, got.Score, want.Rank, want.Score,
 			)
 		}

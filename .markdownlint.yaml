@@ -20,4 +20,6 @@
   "MD036": false,
   # Fenced code blocks should have a language specified; good, but annoying
   "MD040": false,
+  # header decrement
+  "MD001": false,
 }

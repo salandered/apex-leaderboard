@@ -79,9 +79,9 @@ func (rs *redisStorage) foldInto(
 		var err error
 		switch event.Type {
 		case ledger.EventSet:
-			err = rs.client.ZAdd(ctx, destKey, redis.Z{Score: event.Amount, Member: event.PlayerID}).Err()
+			err = rs.client.ZAdd(ctx, destKey, redis.Z{Score: float64(event.Amount), Member: event.PlayerID}).Err()
 		case ledger.EventIncrement:
-			err = rs.client.ZIncrBy(ctx, destKey, event.Amount, event.PlayerID).Err()
+			err = rs.client.ZIncrBy(ctx, destKey, float64(event.Amount), event.PlayerID).Err()
 		default:
 			return fmt.Errorf(
 				"%w: ledger event '%s' has unknown type %q",

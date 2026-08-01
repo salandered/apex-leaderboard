@@ -18,11 +18,11 @@ type ScoreHandler struct {
 }
 
 type PutScoreReq struct {
-	PlayerScore float64 `json:"player_score"`
+	PlayerScore int64 `json:"player_score"`
 }
 
 type IncrementScoreReq struct {
-	Amount float64 `json:"amount"`
+	Amount int64 `json:"amount"`
 }
 
 type HistoryResp struct {
@@ -32,9 +32,9 @@ type HistoryResp struct {
 
 // part of the ListScoresResp
 type scoreEntry struct {
-	PlayerId string  `json:"player_id"`
-	Score    float64 `json:"score"`
-	Rank     int64   `json:"rank"`
+	PlayerId string `json:"player_id"`
+	Score    int64  `json:"score"`
+	Rank     int64  `json:"rank"`
 }
 
 type ListScoresResp struct {
@@ -47,7 +47,7 @@ type ListScoresResp struct {
 type RankResp struct {
 	PlayerId player.ID `json:"player_id"`
 	Rank     int64     `json:"rank"`
-	Score    float64   `json:"score"`
+	Score    int64     `json:"score"`
 	Total    int64     `json:"total"`
 }
 

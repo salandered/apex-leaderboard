@@ -11,9 +11,9 @@ import (
 )
 
 type playerStanding struct {
-	PlayerID string  `json:"player_id"`
-	Score    float64 `json:"score"`
-	Rank     int64   `json:"rank"`
+	PlayerID string `json:"player_id"`
+	Score    int64  `json:"score"`
+	Rank     int64  `json:"rank"`
 }
 
 type listScoresResp struct {
@@ -41,7 +41,7 @@ func createPlayers(rc *resty.Client, n int) []player {
 		if err != nil {
 			log.Fatalf("create player %d: %v", i, err)
 		}
-		players = append(players, player{id: id, score: float64(i + 1)})
+		players = append(players, player{id: id, score: int64(i + 1)})
 	}
 	return players
 }

@@ -11,7 +11,7 @@ func (s *APISuite) TestPutScore() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
 		handlers.PutScoreReq{
-			PlayerScore: 98.0,
+			PlayerScore: 98,
 		})
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
 }
@@ -20,7 +20,7 @@ func (s *APISuite) TestIncrementScore() {
 	resp := s.postJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
 		handlers.IncrementScoreReq{
-			Amount: 12.0,
+			Amount: 12,
 		})
 
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
@@ -29,7 +29,7 @@ func (s *APISuite) TestIncrementScore() {
 func (s *APISuite) TestIncrementScoreWithIdempotencyKey() {
 	resp := s.postJSONWithHeaders(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
-		handlers.IncrementScoreReq{Amount: 12.0},
+		handlers.IncrementScoreReq{Amount: 12},
 		map[string]string{"Idempotency-Key": "key-abc"},
 	)
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
@@ -38,8 +38,42 @@ func (s *APISuite) TestIncrementScoreWithIdempotencyKey() {
 func (s *APISuite) TestIncrementScoreRejectsOverlongIdempotencyKey() {
 	resp := s.postJSONWithHeaders(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
-		handlers.IncrementScoreReq{Amount: 12.0},
+		handlers.IncrementScoreReq{Amount: 12},
 		map[string]string{"Idempotency-Key": strings.Repeat("k", 129)},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+// Scores are int64: the JSON decoder rejects any float-like value
+
+func (s *APISuite) TestPutScoreRejectsFractionalScore() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		map[string]any{"player_score": 100.5},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreRejectsScoreBeyondInt64() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		map[string]any{"player_score": 1e20},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreRejectsNonNumericScore() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		map[string]any{"player_score": "abc"},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestIncrementScoreRejectsFractionalAmount() {
+	resp := s.postJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		map[string]any{"amount": 0.5},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
@@ -48,7 +82,7 @@ func (s *APISuite) TestPutScoreClosedBoard() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedClosedBoardId+"/scores/"+MockedPlayerId,
 		handlers.PutScoreReq{
-			PlayerScore: 98.0,
+			PlayerScore: 98,
 		})
 	s.Require().Equal(http.StatusConflict, resp.StatusCode)
 }
@@ -57,7 +91,7 @@ func (s *APISuite) TestIncrementScoreClosedBoard() {
 	resp := s.postJSON(
 		"/api/v1/boards/"+MockedClosedBoardId+"/scores/"+MockedPlayerId+"/increment",
 		handlers.IncrementScoreReq{
-			Amount: 12.0,
+			Amount: 12,
 		})
 	s.Require().Equal(http.StatusConflict, resp.StatusCode)
 }
@@ -78,7 +112,7 @@ func (s *APISuite) TestListScoresOnBoardAsOf() {
 	var result handlers.ListScoresResp
 	s.decodeJSON(resp, &result)
 	s.Require().Equal(int64(1), result.Total)
-	s.Require().Equal(12.5, result.Scores[0].Score)
+	s.Require().Equal(int64(12), result.Scores[0].Score)
 }
 
 func (s *APISuite) TestListScoresOnBoardRejectsInvalidAsOf() {
@@ -160,9 +194,9 @@ func (s *APISuite) TestListScoresOnBoardDetails() {
 	s.Require().Len(result.Scores, 2)
 	s.Require().Equal(MockedPlayerId, result.Scores[0].PlayerId)
 	s.Require().Equal(int64(1), result.Scores[0].Rank) // highest first
-	s.Require().Equal(46.4, result.Scores[0].Score)
+	s.Require().Equal(int64(46), result.Scores[0].Score)
 	s.Require().Equal(int64(2), result.Scores[1].Rank)
-	s.Require().Equal(30.0, result.Scores[1].Score)
+	s.Require().Equal(int64(30), result.Scores[1].Score)
 
 	s.Require().Equal(int64(2), result.Total)
 }

@@ -51,10 +51,10 @@ func DoJSON[T any](rc *resty.Client, method, path string, body any, expectedStat
 
 // Standing is a single player's placement on a board.
 type Standing struct {
-	PlayerID string  `json:"player_id"`
-	Rank     int64   `json:"rank"`
-	Score    float64 `json:"score"`
-	Total    int64   `json:"total"`
+	PlayerID string `json:"player_id"`
+	Rank     int64  `json:"rank"`
+	Score    int64  `json:"score"`
+	Total    int64  `json:"total"`
 }
 
 type createPlayerResp struct {
@@ -62,13 +62,13 @@ type createPlayerResp struct {
 }
 
 type ScoreEvent struct {
-	EventID   string  `json:"event_id"`
-	Type      string  `json:"type"`
-	PlayerID  string  `json:"player_id"`
-	BoardID   string  `json:"board_id"`
-	Amount    float64 `json:"amount"`
-	RequestID string  `json:"request_id"`
-	CreatedAt string  `json:"created_at"`
+	EventID   string `json:"event_id"`
+	Type      string `json:"type"`
+	PlayerID  string `json:"player_id"`
+	BoardID   string `json:"board_id"`
+	Amount    int64  `json:"amount"`
+	RequestID string `json:"request_id"`
+	CreatedAt string `json:"created_at"`
 }
 
 type History struct {
@@ -110,7 +110,7 @@ func CreateBoard(rc *resty.Client, boardID, name string) error {
 }
 
 // SetScore sets a player's score on a board (the first write enrolls the player).
-func SetScore(rc *resty.Client, boardID, playerID string, score float64) error {
+func SetScore(rc *resty.Client, boardID, playerID string, score int64) error {
 	_, err := DoJSON[any](rc, resty.MethodPut, ScorePath(boardID, playerID), map[string]any{
 		"player_score": score,
 	}, http.StatusNoContent)

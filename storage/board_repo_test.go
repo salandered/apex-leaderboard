@@ -224,7 +224,7 @@ func (s *StorageSuite) TestReadsWorkOnClosedBoard() {
 	standing, total, err := s.storage.GetStanding(ctx, playerId, "weekly")
 	s.Require().NoError(err)
 	s.Require().Equal(int64(1), total)
-	s.Require().Equal(10.0, standing.Score)
+	s.Require().Equal(int64(10), standing.Score)
 
 	history, err := s.storage.PlayerHistory(ctx, playerId, "weekly", 0)
 	s.Require().NoError(err)

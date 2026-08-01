@@ -40,59 +40,82 @@ flowchart TD
 
 The ledger is the source of truth; every projection is derived from it and can be rebuilt by replay.
 
-**Player profiles.** Global, board-independent documents (name, creation date) keyed by a
+### Player profile
+
+Board-independent document (name, creation date) keyed by a
 server-generated UUID. Creating a player is profile-only: a player can exist with no scores.
 
-**Boards.** Named score containers. Ids are short, client-chosen slugs (`summer-contest2026`)
+Currently players cannot be deleted, but it's planned.
+
+### Board
+
+Named score containers. Ids are short, client-chosen slugs (`summer-contest2026`)
 rather than UUIDs. They are readable and appear in URLs.
+
 The board id is **immutable forever** (ids are written into ledger events),
 however, a board has a mutable display name.
 A registry (currently acts as a sorting index) keeps the list of boards in creation order.
 
-Boards has a status, currntly `active`/`closed`: a closed
-board rejects score writes with `409` while reads and ledger replay are unaffected.
-In particualr, a closed board allows to rebuild the leaderboard projection from the ledger without racing with
-concurrent new score writes.
-Board can be reopened.
+A board has a status: `active` or `closed`.
+A closed board rejects score writes with `409` (reads and ledger replay are unaffected).
+In particular, a closed board allows to rebuild the leaderboard projection from the ledger without racing with
+concurrent new score writes. Boards can be reopened.
 
 Currently boards cannot be deleted.
 
-**The ledger.** One global stream containing all score events.
+### The ledger
+
+One global stream containing all score events.
 Event is recorded only if the operation was succesfully applied (fact only).
 Currently two event types exist: `set` and `increment` (a delta).
 "Set" typed event acts as a snapshot barrier - replay never needs to look past the latest `set`.
 
 Clients can consume the same global order through `GET /api/v1/events`: pass the last seen
-event id an exclusive `after` cursor. It does not keep a
-server-side subscription or cursor.
+event id as an exclusive `after` cursor. In this case, a cursor is managed by client.
 
-**Projections.** The actual leaderboards which face clients. One sorted set per board holding the current scores.
-In app (not API) we call a projection entry a **standing**, because besides the score value it holds a player id
-and also implicitly implies a "rank" - its index (1-based). So standing is a (score, player_id, rank). All standing reads -
-top-N pages, a single player's standing - are cheap sorted-set operations. It allows listing operations to use plain
-limit/offset pagination.
+### Projection (leaderboard)
+
+The actual leaderboard which faces clients. One sorted set per board holding the current scores.
+In app (not API) we call a projection entry a **standing**: besides the score value it holds a player id
+and also implicitly implies a "rank", which is its index (1-based). So standing is a (score, player_id, rank).
+
+All standing reads (i.e top-N pages, a single player's standing) are cheap sorted-set operations.
+It allows listing operations to use plain limit/offset pagination.
 
 The scores endpoint also accepts `as_of=YYYY-MM-DD`. This reconstructs a transient historical
-leaderboard by folding events from the beginning to "as_of"; it does not
+leaderboard by folding events from the beginning to `as_of`; it does not
 consult or modify the live projection.
 The current implementation scans the global event history, it **demonstrates time-travel possibilities**
 rather than providing a scalable query.
 
-**Idempotency hash.** Every write records a server-generated request id in its event.
-A client might send an optional `Idempotency-Key` header: the write would store
-a fingerprint (`entry_id|op|amount`) under that key with a TTL. This makes retries idempotent
-(essential for the incrementing a score op).
-The same key reused with a different op/amount is rejected with `409`. Score writes return
-`204` (no body).
+## Mechanics
 
-Player creation has its own idempotency (separate hash). A repeated replays posts nothing and returns
-the same generated `player_id` or `409`s.
+### Idempotency hash
 
-Board creation doesnt use this mechanics: `PUT` with a client-chosen slug is already retry-safe.
+Some APIs support a `Idempotency-Key` header: the write would store
+a fingerprint (derived from the request payload, e.g. `entry_id|op|amount`) under that key with a TTL.
+This makes retries idempotent (essential for the incrementing a score or creating a new player).
 
-**Request correlation.** Every request carries a server-generated id. It is recorded in
+The same key reused with a different payload (like a score amount) is rejected with `409`.
+
+Board creation doesn;t use this mechanic: `PUT` with a client-chosen slug is already retry-safe.
+
+`Idempotency-Key` is _optional_, but is recommended.
+
+### Request correlation
+
+Every request carries a server-generated id. It is recorded in
 score event's `request_id`, returned in the `X-Request-ID` response header and logged.
-A client generated `X-Request-ID` header is ignored.
+
+A client generated `X-Request-ID` header is not supported and **ignored**.
+
+### Score values are integers
+
+`int64` is used.
+
+A client needing precision might multiply a value on its side.
+
+A client needing a timestamp might use this method or use unix timestamps.
 
 ## The write operations
 
@@ -161,9 +184,9 @@ flowchart LR
 ```
 
 On first boot the cursor is absent, so it starts at `0-0` (the stream head) and does a full
-catch-up over all history. `XREAD` returns only entries *after* the given id.
+catch-up over all history. `XREAD` returns only entries _after_ the given id.
 
-**At-least-once.** The batch is applied *before* the cursor is saved. If the consumer
+**At-least-once.** The batch is applied _before_ the cursor is saved. If the consumer
 crashes between the two, the restart would re-apply the same batch -
 so a count can be inflated, but data is never lost. For a proof of concept view it is an
 acceptable trade. Also like any projection the view is disposable can can be rebuild (drop the daily ZSETs, reset the cursor to `0-0`).

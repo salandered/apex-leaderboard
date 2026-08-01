@@ -19,7 +19,7 @@ import (
 type Standing struct {
 	// consider moving out of storage
 	PlayerID string
-	Score    float64
+	Score    int64
 	Rank     int64
 }
 
@@ -30,13 +30,13 @@ var applyScoreScript = redis.NewScript(applyScoreLua)
 
 // Sets an absolute score.
 // An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
-func (rs *redisStorage) SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score float64, requestID, idempotencyKey string) error {
+func (rs *redisStorage) SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score int64, requestID, idempotencyKey string) error {
 	return rs.applyEvent(ctx, ledger.EventSet, playerId, boardId, score, requestID, idempotencyKey)
 }
 
 // Applies a delta to score on the board (a player with no entry starts from 0).
 // An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
-func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount float64, requestID, idempotencyKey string) error {
+func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount int64, requestID, idempotencyKey string) error {
 	return rs.applyEvent(ctx, ledger.EventIncrement, playerId, boardId, amount, requestID, idempotencyKey)
 }
 
@@ -64,9 +64,18 @@ func (rs *redisStorage) GetStanding(ctx context.Context, playerId player.ID, boa
 		return Standing{}, 0, fmt.Errorf("storage get standing: %w", err)
 	}
 
+	// a single-player read returns a error on an unusable score
+	score, ok := zScoreToInt64(rankScore.Score, leaderboardKey(boardId), string(playerId))
+	if !ok {
+		return Standing{}, 0, fmt.Errorf(
+			"%w: projection score %v for player '%s' is not representable",
+			ErrInconsistent, rankScore.Score, playerId,
+		)
+	}
+
 	standing := Standing{
 		PlayerID: string(playerId),
-		Score:    rankScore.Score,
+		Score:    score,
 		Rank:     rankScore.Rank + 1, // ZREVRANK is 0-based
 	}
 	return standing, total, nil
@@ -106,11 +115,18 @@ func (rs *redisStorage) ListStandings(
 	if err != nil {
 		return nil, 0, fmt.Errorf("storage list scores: range: %w", err)
 	}
+	key := leaderboardKey(boardId)
 	out := make([]Standing, 0, len(zs))
 	for i, z := range zs {
+		member := z.Member.(string)
+		score, ok := zScoreToInt64(z.Score, key, member)
+		if !ok {
+			// one unusable member must not break the page for everyone; rank stays positional
+			continue
+		}
 		out = append(out, Standing{
-			PlayerID: z.Member.(string),
-			Score:    z.Score,
+			PlayerID: member,
+			Score:    score,
 			Rank:     offset + int64(i) + 1,
 		})
 	}
@@ -153,7 +169,7 @@ func (rs *redisStorage) ListStandingsAsOf(
 		return nil, 0, fmt.Errorf("storage list historical standings: read events: %w", err)
 	}
 
-	scores := make(map[string]float64)
+	scores := make(map[string]int64)
 	for _, entry := range entries {
 		if getStreamEntryValue(entry, entryFieldBoardID) != string(boardId) {
 			continue
@@ -166,7 +182,16 @@ func (rs *redisStorage) ListStandingsAsOf(
 		case ledger.EventSet:
 			scores[event.PlayerID] = event.Amount
 		case ledger.EventIncrement:
-			scores[event.PlayerID] += event.Amount
+			// nothing caps a stored score yet, so the running total can wrap
+			current := scores[event.PlayerID]
+			sum := current + event.Amount
+			if (event.Amount > 0 && sum < current) || (event.Amount < 0 && sum > current) {
+				return nil, 0, fmt.Errorf(
+					"%w: ledger event '%s' overflows the replayed score",
+					ErrInconsistent, event.ID,
+				)
+			}
+			scores[event.PlayerID] = sum
 		default:
 			return nil, 0, fmt.Errorf(
 				"%w: ledger event '%s' has unknown type %q",
@@ -179,7 +204,7 @@ func (rs *redisStorage) ListStandingsAsOf(
 	for playerID, score := range scores {
 		standings = append(standings, Standing{PlayerID: playerID, Score: score})
 	}
-	sort.Slice(standings, func(i, j int) bool {
+	sort.Slice(standings, func(i, j int) bool { // by (score, player_id)
 		if standings[i].Score != standings[j].Score {
 			return standings[i].Score > standings[j].Score
 		}
@@ -218,7 +243,7 @@ func (rs *redisStorage) applyEvent(
 	etype ledger.EventType,
 	playerId player.ID,
 	boardId board.ID,
-	amount float64,
+	amount int64,
 	requestID string,
 	idempotencyKey string,
 ) error {

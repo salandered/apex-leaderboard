@@ -1,8 +1,6 @@
 
 # API notes
 
-## a
-
 ### Increment endpoint (`POST scores/{id}/increment`) and Idempotency key
 
 Problem: `increment` applies a delta (`+amount`) which is not idempotent.
@@ -88,6 +86,7 @@ Next page op will look something like `ZRANGE key (S_last -inf REV BYSCORE LIMIT
 * The `(` bound is exclusive, so scores must be **unique**.
 * Solution: bake a tiebreaker into the score (e.g. `points·BIG + seq`, or an inverse
   timestamp in the fraction), so no two members collide.
+  UPD: scores are now integers a fractional tiebreaker doesnt fit.
 
 Pros: the "correct" cursor — anchors on a *fixed value* in the total order, so every
   *stationary* row is returned exactly once.

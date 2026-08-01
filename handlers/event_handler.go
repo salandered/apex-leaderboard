@@ -23,13 +23,13 @@ type EventHandler struct {
 }
 
 type ScoreEvent struct {
-	EventId   string  `json:"event_id"`
-	Type      string  `json:"type"`
-	PlayerId  string  `json:"player_id"`
-	BoardId   string  `json:"board_id"`
-	Amount    float64 `json:"amount"`
-	RequestId string  `json:"request_id"`
-	CreatedAt string  `json:"created_at"`
+	EventId   string `json:"event_id"`
+	Type      string `json:"type"`
+	PlayerId  string `json:"player_id"`
+	BoardId   string `json:"board_id"`
+	Amount    int64  `json:"amount"`
+	RequestId string `json:"request_id"`
+	CreatedAt string `json:"created_at"`
 }
 
 type ListEventsResp struct {

@@ -19,7 +19,7 @@ func (s *StorageSuite) TestRebuildProjection() {
 	alice := player.GenerateID()
 	_, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: alice, PlayerName: "alice"}, "")
 	s.Require().NoError(err)
-	for i, delta := range []float64{3, 10, -4} {
+	for i, delta := range []int64{3, 10, -4} {
 		s.Require().NoError(s.storage.IncrementScore(
 			ctx, alice, testBoardId, delta, "a"+strconv.Itoa(i+2), "",
 		))

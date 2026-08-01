@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"strconv"
 	"time"
@@ -78,8 +79,16 @@ func entryToEvent(entry redis.XMessage) (ledger.Event, error) {
 	if err != nil {
 		return ledger.Event{}, err
 	}
-	amount, err := strconv.ParseFloat(rawAmount, 64)
-	if err != nil || math.IsNaN(amount) {
+	amountFloat, err := strconv.ParseFloat(rawAmount, 64) // ParseInt ?
+	if err != nil {
+		return ledger.Event{}, fmt.Errorf(
+			"%w: ledger event '%s' has invalid amount %q", ErrInconsistent, entry.ID, rawAmount,
+		)
+	}
+	// Strict, unlike the projection reads.
+	// Rounding here would rewrite history and a rebuild would reproduce the rounded version.
+	amount, ok := exactInt64(amountFloat)
+	if !ok {
 		return ledger.Event{}, fmt.Errorf(
 			"%w: ledger event '%s' has invalid amount %q", ErrInconsistent, entry.ID, rawAmount,
 		)
@@ -98,6 +107,40 @@ func entryToEvent(entry redis.XMessage) (ledger.Event, error) {
 		RequestID: requestId,
 		CreatedAt: eventTime(entry.ID),
 	}, nil
+}
+
+// Scores from Redis as float64 (ZSET scores, and the ledger's decimal string).
+// A value is ok if it is finite, integral and inside the int64 range.
+func exactInt64(v float64) (int64, bool) {
+	// 2^63 is exactly representable; math.MaxInt64 is not, so compare against the power of two
+	const overInt64 = float64(1 << 63)
+	if math.IsNaN(v) || v >= overInt64 || v < -overInt64 {
+		return 0, false
+	}
+	if v != math.Trunc(v) {
+		return 0, false
+	}
+	return int64(v), true
+}
+
+// Reads a projection (ZSET) score.
+// Soft, unlike the ledger decode above: projections are disposable, and failing the read
+// would let one drifted member break every page containing it.
+// Returns false if int64 can't hold the value, the caller decides what to do.
+func zScoreToInt64(raw float64, key, member string) (int64, bool) {
+	if v, ok := exactInt64(raw); ok {
+		return v, true
+	}
+	// NaN and ±Inf round to themselves, so exactInt64 still rejects them
+	rounded, ok := exactInt64(math.Round(raw))
+	if !ok {
+		slog.Error("projection score is not representable", "key", key, "member", member, "score", raw)
+		return 0, false
+	}
+	slog.Warn("projection score is not integral, rounding",
+		"key", key, "member", member, "score", raw, "rounded", rounded,
+	)
+	return rounded, true
 }
 
 // Reads a string field from a stream entry's values, "" if absent.

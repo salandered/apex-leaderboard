@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"sync"
@@ -58,7 +57,7 @@ func runIncrementLoad(rc *resty.Client, incrementPath string, cfg loadTestConfig
 func sendIncrementRequest(
 	rc *resty.Client,
 	incrementPath string,
-	amount float64,
+	amount int64,
 	requestNumber int,
 	succeeded *int64,
 	errCh chan<- error,
@@ -98,20 +97,16 @@ func printLoadTestSummary(result loadTestResult, requestCount int) {
 	}
 }
 
-func verifyFinalScore(standing apexhttp.Standing, requestCount int, amount float64) {
-	expected := float64(requestCount) * amount
+func verifyFinalScore(standing apexhttp.Standing, requestCount int, amount int64) {
+	expected := int64(requestCount) * amount
 	fmt.Printf(
-		"standing: score=%g expected=%g rank=%d total=%d\n",
+		"standing: score=%d expected=%d rank=%d total=%d\n",
 		standing.Score, expected, standing.Rank, standing.Total,
 	)
-	if !closeEnough(standing.Score, expected) {
-		log.Fatalf("score mismatch: got %g, want %g", standing.Score, expected)
+	// integer scores, so the comparison is exact (this used to need a relative tolerance)
+	if standing.Score != expected {
+		log.Fatalf("score mismatch: got %d, want %d", standing.Score, expected)
 	}
-}
-
-func closeEnough(actual, expected float64) bool {
-	scale := math.Max(1, math.Max(math.Abs(actual), math.Abs(expected)))
-	return math.Abs(actual-expected) <= scale*1e-12
 }
 
 func main() {
@@ -122,7 +117,7 @@ func main() {
 	playerId, boardId, scorePath := createApexFixtures(rc)
 
 	fmt.Printf(
-		"board=%s player=%s requests=%d amount=%g chunkSize=%d chunkDelay=%s\n",
+		"board=%s player=%s requests=%d amount=%d chunkSize=%d chunkDelay=%s\n",
 		boardId, playerId, cfg.requestCount, cfg.amount, cfg.chunkSize, cfg.chunkDelay,
 	)
 

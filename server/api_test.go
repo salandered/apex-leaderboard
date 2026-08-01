@@ -243,14 +243,14 @@ func (ms *mockStorage) ListBoards(c context.Context) ([]board.Board, error) {
 	}, nil
 }
 
-func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, boardId board.ID, amount float64, requestID, idempotencyKey string) error {
+func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, boardId board.ID, amount int64, requestID, idempotencyKey string) error {
 	if boardId == board.ID(MockedClosedBoardId) {
 		return storage.ErrBoardClosed
 	}
 	return nil
 }
 
-func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, boardId board.ID, score float64, requestID, idempotencyKey string) error {
+func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, boardId board.ID, score int64, requestID, idempotencyKey string) error {
 	if boardId == board.ID(MockedClosedBoardId) {
 		return storage.ErrBoardClosed
 	}
@@ -258,7 +258,7 @@ func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, boardId b
 }
 
 func (ms *mockStorage) GetStanding(c context.Context, playerId player.ID, boardId board.ID) (storage.Standing, int64, error) {
-	return storage.Standing{PlayerID: string(playerId), Score: 46.4, Rank: 3}, 10, nil
+	return storage.Standing{PlayerID: string(playerId), Score: 46, Rank: 3}, 10, nil
 }
 
 func (ms *mockStorage) ListStandings(c context.Context, boardId board.ID, limit, offset int64) ([]storage.Standing, int64, error) {
@@ -266,7 +266,7 @@ func (ms *mockStorage) ListStandings(c context.Context, boardId board.ID, limit,
 		return []storage.Standing{}, 0, nil
 	}
 	return []storage.Standing{
-		{PlayerID: MockedPlayerId, Score: 46.4, Rank: 1},
+		{PlayerID: MockedPlayerId, Score: 46, Rank: 1},
 		{PlayerID: "0f8fad5b-d9cb-469f-a165-70867728950e", Score: 30.0, Rank: 2},
 	}, 2, nil
 }
@@ -278,7 +278,7 @@ func (ms *mockStorage) ListStandingsAsOf(
 		return []storage.Standing{}, 0, nil
 	}
 	return []storage.Standing{
-		{PlayerID: MockedPlayerId, Score: 12.5, Rank: 1},
+		{PlayerID: MockedPlayerId, Score: 12, Rank: 1},
 	}, 1, nil
 }
 
