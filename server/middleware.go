@@ -57,7 +57,7 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 			if v == nil {
 				return
 			}
-			if v == http.ErrAbortHandler {
+			if v == http.ErrAbortHandler { //nolint:errorlint // panic value, not a wrapped err
 				panic(v) // sentinel, we repanic
 			}
 			slog.LogAttrs(req.Context(), slog.LevelError, "panic recovered",

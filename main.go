@@ -49,7 +49,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer logCloser.Close()
+	defer func() { _ = logCloser.Close() }()
 
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {

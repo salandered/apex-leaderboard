@@ -80,7 +80,7 @@ func (s *StorageSuite) TestCreateBoardInvalidState() {
 	})
 
 	// then
-	s.Require().ErrorIs(err, StorageError)
+	s.Require().ErrorIs(err, ErrStorage)
 }
 
 func (s *StorageSuite) TestGetBoard() {

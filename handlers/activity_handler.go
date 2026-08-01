@@ -36,7 +36,7 @@ func (h *ViewHandler) HandleListDailyActivity(w http.ResponseWriter, req *http.R
 		return
 	}
 	if _, err := time.Parse(time.DateOnly, date); err != nil {
-		writeErrorToResponse(w, fmt.Errorf("invalid %s, want YYYY-MM-DD: %v", dateQuery, err), http.StatusBadRequest)
+		writeErrorToResponse(w, fmt.Errorf("invalid %s, want YYYY-MM-DD: %w", dateQuery, err), http.StatusBadRequest)
 		return
 	}
 

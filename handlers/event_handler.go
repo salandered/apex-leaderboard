@@ -44,7 +44,7 @@ func (h *EventHandler) HandleListEvents(w http.ResponseWriter, req *http.Request
 		return
 	}
 	if err := validateEventID(after); err != nil {
-		writeErrorToResponse(w, fmt.Errorf("invalid %s: %v", afterQuery, err), http.StatusBadRequest)
+		writeErrorToResponse(w, fmt.Errorf("invalid %s: %w", afterQuery, err), http.StatusBadRequest)
 		return
 	}
 

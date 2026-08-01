@@ -51,7 +51,7 @@ func TestRecoveryMiddlewareOnErrAbortHandlerRepanics(t *testing.T) {
 
 	// then
 	defer func() {
-		if v := recover(); v != http.ErrAbortHandler {
+		if v := recover(); v != http.ErrAbortHandler { //nolint:errorlint
 			t.Fatalf("want ErrAbortHandler re-panicked, got %v", v)
 		}
 	}()

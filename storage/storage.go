@@ -15,15 +15,15 @@ import (
 )
 
 var (
-	StorageError     = errors.New("storage")
-	ErrNotFound      = fmt.Errorf("%w: not found", StorageError)
-	ErrInconsistent  = fmt.Errorf("%w: inconsistent", StorageError)
-	ErrPlayerExists  = fmt.Errorf("%w: player exists", StorageError)
-	ErrBoardExists   = fmt.Errorf("%w: board exists", StorageError)
-	ErrBoardNotFound = fmt.Errorf("%w: board not found", StorageError)
-	ErrBoardClosed   = fmt.Errorf("%w: board closed", StorageError)
+	ErrStorage       = errors.New("storage")
+	ErrNotFound      = fmt.Errorf("%w: not found", ErrStorage)
+	ErrInconsistent  = fmt.Errorf("%w: inconsistent", ErrStorage)
+	ErrPlayerExists  = fmt.Errorf("%w: player exists", ErrStorage)
+	ErrBoardExists   = fmt.Errorf("%w: board exists", ErrStorage)
+	ErrBoardNotFound = fmt.Errorf("%w: board not found", ErrStorage)
+	ErrBoardClosed   = fmt.Errorf("%w: board closed", ErrStorage)
 	// An idempotency key reused with a different operation or payload.
-	ErrIdempotencyConflict = fmt.Errorf("%w: idempotency conflict", StorageError)
+	ErrIdempotencyConflict = fmt.Errorf("%w: idempotency conflict", ErrStorage)
 )
 
 type redisStorage struct {
@@ -67,7 +67,7 @@ func entryToEvent(entry redis.XMessage) (ledger.Event, error) {
 	}
 	if err := player.ID(playerId).Validate(); err != nil {
 		return ledger.Event{}, fmt.Errorf(
-			"%w: ledger event '%s' has invalid player id: %v", ErrInconsistent, entry.ID, err,
+			"%w: ledger event '%s' has invalid player id: %w", ErrInconsistent, entry.ID, err,
 		)
 	}
 	boardId, err := required(entryFieldBoardID)

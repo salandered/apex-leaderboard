@@ -1,5 +1,16 @@
 # Apex
 
+- [🚀 Quick Start](#-quick-start)
+- [API Spec](#api-spec)
+- [🛠️ Development](#️-development)
+	- [Running the Server](#running-the-server)
+	- [Configuration](#configuration)
+	- [API Walk](#api-walk)
+	- [Run Tests](#run-tests)
+	- [Compile](#compile)
+- [Misc](#misc)
+
+
 ![alt text](logo.png)
 
 Apex is a backend web service for leaderboards, built as an MVP to prove out two things:
@@ -155,14 +166,6 @@ go build -o apex.exe .
 ```bash
 go build -o apex .
 ./apex
-```
-
-### Dependencies
-
-Run `tidy` to sync `go.mod` and `go.sum` with the actual imports.
-
-```bash
-go mod tidy
 ```
 
 ## Misc

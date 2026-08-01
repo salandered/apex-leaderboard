@@ -36,7 +36,9 @@ func GetVersion() string {
 }
 
 func HandleRoot(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, "apex version %v", GetVersion())
+	if _, err := fmt.Fprintf(w, "apex version %v", GetVersion()); err != nil {
+		slog.Error("failed writing root response", "error", err)
+	}
 }
 
 // requestID uses the middleware's correlation id, falling back to a fresh one when a handler

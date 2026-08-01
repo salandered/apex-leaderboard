@@ -11,6 +11,10 @@ import (
 	"github.com/lmittmann/tint"
 )
 
+type noopCloser struct{}
+
+func (noopCloser) Close() error { return nil }
+
 // Env vars (all optional):
 //   - LOG_LEVEL:  debug | info (default) | warn | error
 //   - LOG_FORMAT: text (default) | json
@@ -29,14 +33,16 @@ func Setup() (io.Closer, error) {
 	}
 
 	var w io.Writer = os.Stdout
-	closer := io.Closer(io.NopCloser(nil)) // no-op for stdout
+	var closer io.Closer = noopCloser{}
 	toFile := false
 	if path := os.Getenv("LOG_FILE"); path != "" {
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 		if err != nil {
 			return nil, fmt.Errorf("logging: open log file: %w", err)
 		}
-		w, closer, toFile = f, f, true
+		w = f
+		closer = f
+		toFile = true
 	}
 
 	var h slog.Handler

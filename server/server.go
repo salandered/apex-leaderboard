@@ -19,10 +19,10 @@ const (
 )
 
 var (
-	ServerError = errors.New("server")
-	ErrServe    = fmt.Errorf("%w: serve failed", ServerError)
-	ErrOption   = fmt.Errorf("%w: invalid option", ServerError)
-	ErrShutdown = fmt.Errorf("%w: shutdown incomplete", ServerError)
+	ErrServer   = errors.New("server") // do we need this?
+	ErrServe    = fmt.Errorf("%w: serve failed", ErrServer)
+	ErrOption   = fmt.Errorf("%w: invalid option", ErrServer)
+	ErrShutdown = fmt.Errorf("%w: shutdown incomplete", ErrServer)
 )
 
 func NewMux(s storage.Storage) *http.ServeMux {

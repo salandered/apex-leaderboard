@@ -28,7 +28,7 @@ func (rs *redisStorage) CreateBoard(
 	board *board.Board,
 ) error {
 	if err := board.State.Validate(); err != nil {
-		return fmt.Errorf("%w: create board '%s': invalid state %q", StorageError, board.BoardId, board.State)
+		return fmt.Errorf("%w: create board '%s': invalid state %q", ErrStorage, board.BoardId, board.State)
 	}
 	created, err := createBoardScript.Run(ctx, rs.client,
 		[]string{boardProfileKey(board.BoardId), boardIndexKey},
@@ -55,7 +55,7 @@ func (rs *redisStorage) SetBoardState(
 	state board.BoardState,
 ) error {
 	if err := state.Validate(); err != nil {
-		return fmt.Errorf("%w: set board '%s' state: invalid state %q", StorageError, boardId, state)
+		return fmt.Errorf("%w: set board '%s' state: invalid state %q", ErrStorage, boardId, state)
 	}
 	updated, err := setBoardStateScript.Run(ctx, rs.client,
 		[]string{boardProfileKey(boardId)},
@@ -143,8 +143,8 @@ func boardFromFields(id board.ID, fields map[string]string) (*board.Board, error
 	date, err := apextime.Parse(rawDate)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"%w: board '%s' field '%s': parse %q: %v",
-			StorageError, id, boardCreatedAtField, rawDate, err)
+			"%w: board '%s' field '%s': parse %q: %w",
+			ErrStorage, id, boardCreatedAtField, rawDate, err)
 	}
 
 	rawState, ok := fields[boardStateField]

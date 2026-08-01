@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - errorlint # %w wrapping and errors.Is/As
+    - bodyclose # unclosed HTTP response bodies
+    - exhaustive # experimental
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [errcheck, bodyclose]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -82,7 +82,7 @@ func (rs *redisStorage) GetPlayerProfile(ctx context.Context, playerId player.ID
 	}
 	date, err := apextime.Parse(rawDate)
 	if err != nil {
-		return nil, fmt.Errorf("%w: player '%s' field '%s': parse %q: %v", StorageError, playerId, profileCreatedAtField, rawDate, err)
+		return nil, fmt.Errorf("%w: player '%s' field '%s': parse %q: %w", ErrStorage, playerId, profileCreatedAtField, rawDate, err)
 	}
 
 	profile := &player.Profile{
