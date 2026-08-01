@@ -109,13 +109,24 @@ score event's `request_id`, returned in the `X-Request-ID` response header and l
 
 A client generated `X-Request-ID` header is not supported and **ignored**.
 
-### Score values are integers
+### Score values are bounded integers
 
 `int64` is used.
 
-A client needing precision might multiply a value on its side.
+A client needing a decimal precision might multiply a value on its side.
 
-A client needing a timestamp might use this method or use unix timestamps.
+A client needing a timestamp might also multiply or use a unix timestamp.
+
+A score must stay within **+-1e13** (ten trillion). Both the submitted value and the score
+resulting from an increment are bounded, otherwise a request will be rejected.
+
+Why this bound:
+
+- Redis stores leaderboard scores as IEEE-754 doubles, which represent integers exactly only below
+2^53 (~e15). Any stored score and any intermediate sum stays under this limit.
+- The range admits not only a unix timestamp but also a unix millisecond timestamps (e12). So timestamp-based ranking works out of the box.
+
+Microsecond and nanosecond timestamps won't fit as is.
 
 ## The write operations
 

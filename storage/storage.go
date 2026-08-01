@@ -13,6 +13,7 @@ import (
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/ledger"
 	"github.com/salandered/apex/player"
+	"github.com/salandered/apex/score"
 )
 
 var (
@@ -25,6 +26,8 @@ var (
 	ErrBoardClosed   = fmt.Errorf("%w: board closed", ErrStorage)
 	// An idempotency key reused with a different operation or payload.
 	ErrIdempotencyConflict = fmt.Errorf("%w: idempotency conflict", ErrStorage)
+	// The write would move the score outside [score.Min, score.Max]; nothing was appended.
+	ErrScoreOutOfRange = fmt.Errorf("%w: score out of range", ErrStorage)
 )
 
 type redisStorage struct {
@@ -93,6 +96,12 @@ func entryToEvent(entry redis.XMessage) (ledger.Event, error) {
 			"%w: ledger event '%s' has invalid amount %q", ErrInconsistent, entry.ID, rawAmount,
 		)
 	}
+	// Very bad: the write path bounds every amount, so an out-of-range one cannot have been appended.
+	if err := score.Validate(amount); err != nil {
+		return ledger.Event{}, fmt.Errorf(
+			"%w: ledger event '%s' has out of range amount: %w", ErrInconsistent, entry.ID, err,
+		)
+	}
 	requestId, err := required(entryFieldRequestID)
 	if err != nil {
 		return ledger.Event{}, err
@@ -128,19 +137,24 @@ func exactInt64(v float64) (int64, bool) {
 // would let one drifted member break every page containing it.
 // Returns false if int64 can't hold the value, the caller decides what to do.
 func zScoreToInt64(raw float64, key, member string) (int64, bool) {
-	if v, ok := exactInt64(raw); ok {
-		return v, true
-	}
-	// NaN and ±Inf round to themselves, so exactInt64 still rejects them
-	rounded, ok := exactInt64(math.Round(raw))
+	v, ok := exactInt64(raw)
 	if !ok {
-		slog.Error("projection score is not representable", "key", key, "member", member, "score", raw)
-		return 0, false
+		// NaN and ±Inf round to themselves, so exactInt64 still rejects them
+		v, ok = exactInt64(math.Round(raw))
+		if !ok {
+			slog.Error("projection score is not representable", "key", key, "member", member, "score", raw)
+			return 0, false
+		}
+		slog.Warn("projection score is not integral, rounding",
+			"key", key, "member", member, "score", raw, "rounded", v,
+		)
 	}
-	slog.Warn("projection score is not integral, rounding",
-		"key", key, "member", member, "score", raw, "rounded", rounded,
-	)
-	return rounded, true
+	// Out of range is drift the write path can no longer produce, but the value still serves
+	// fine, so report it instead of dropping the row.
+	if score.Validate(v) != nil {
+		slog.Warn("projection score is out of range", "key", key, "member", member, "score", v)
+	}
+	return v, true
 }
 
 // Reads a string field from a stream entry's values, "" if absent.

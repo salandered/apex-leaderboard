@@ -1,9 +1,12 @@
 --[[
 	TODO: Validate key types and append the event/idempotency record before mutating the projection
+	TODO: Single weakest point in the project. Big black box in a foreign language
+
 
 	Performs an atomic score write:
 		- (if idempotency key) idempotency check (replay a matching write, reject a conflicting one)
 		- Existence check (player, board)
+		- Range check on the resulting score
 		- apply to the board's projection
 		- append event
 		- (if idempotency key) record the idempotency key
@@ -20,17 +23,19 @@
 	ARGV[4] = request_id           (server-generated UUID)
 	ARGV[5] = board_id
 	ARGV[6] = idempotency_key      (optional)
+	ARGV[7] = max_abs              (score.Max: the resulting score must be in [-max_abs, max_abs])
 
 	Returns: { code, entry_id }
 		code:  1 applied | 0 deduped (same key, same fingerprint -> same entry_id)
 		      -1 player not found | -2 board not found | -3 board closed
 		      -4 idempotency key fingerptint mismatch
+		      -5 resulting score out of range
 ]]
 
 local zset_key, stream_key, idempotency_key, profile_key, board_key =
 	KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5]
-local op_type, player_id, amount, req_id, board_id, idem_key =
-	ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6]
+local op_type, player_id, amount, req_id, board_id, idem_key, max_abs =
+	ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6], tonumber(ARGV[7])
 
 -- Idempotency check
 -- Record value is "entry_id|op|amount"
@@ -61,6 +66,18 @@ if redis.call('EXISTS', board_key) == 0 then
 end
 if redis.call('HGET', board_key, 'board_state') == 'closed' then
 	return { -3, '' }
+end
+
+-- Bound the resulting score. Checked before any write, so a rejected event is never appended
+-- and the replay paths need no clamping logic.
+local current = 0
+if op_type ~= 'set' then
+	-- tonumber(false) is nil: a missing member starts from 0 (first-write auto-enrol)
+	current = tonumber(redis.call('ZSCORE', zset_key, player_id)) or 0
+end
+local resulting = current + tonumber(amount)
+if resulting > max_abs or resulting < -max_abs then
+	return { -5, '' }
 end
 
 -- Apply to the projection

@@ -346,6 +346,8 @@ paths:
     put:
       tags: [Scores]
       summary: Sets a player's absolute score
+      description: >
+        The score is a integer number within +-1e13 (ten trillion).
       requestBody:
         required: true
         content:
@@ -380,6 +382,8 @@ paths:
     post:
       tags: [Scores]
       summary: Increments the score (supports negative values for decrementing)
+      description: >
+        The amount is an integer number within +-1e13 (ten trillion)
       requestBody:
         required: true
         content:
@@ -402,7 +406,10 @@ paths:
               schema:
                 type: string
         "409":
-          description: Board is closed, or the Idempotency-Key was reused with a different request
+          description: >
+            Nothing is applied or appended. Possible reasons: Board is closed; 
+            the Idempotency-Key was reused with a different request; the
+            resulting score exceeded the allowed range.
           content:
             text/plain:
               schema:
@@ -580,6 +587,12 @@ components:
         amount:
           type: integer
           format: int64
+          minimum: -10000000000000
+          maximum: 10000000000000
+          description: >
+            Delta to apply, negative to decrement. Integer number within +-1e13 (ten trillion):
+            other values will be rejected. 
+            If the score result exceeds the same +-1e13, it is also rejected.
 
     SetScoreRequest:
       type: object
@@ -590,6 +603,11 @@ components:
         player_score:
           type: integer
           format: int64
+          minimum: -10000000000000
+          maximum: 10000000000000
+          description: >
+            Absolute score. Integer number within +-1e13 (ten trillion):
+            other values will be rejected. Note that unix second and millisecond timestamps fit.
 
     PlayerDataResponse:
       type: object
@@ -640,6 +658,8 @@ components:
         amount:
           type: integer
           format: int64
+          minimum: -10000000000000
+          maximum: 10000000000000
           description: Absolute value (set) or delta (increment)
         request_id:
           type: string
@@ -690,6 +710,8 @@ components:
         score:
           type: integer
           format: int64
+          minimum: -10000000000000
+          maximum: 10000000000000
         rank:
           type: integer
           description: 1-based position on the leaderboard (rank 1 = highest score)
@@ -711,6 +733,8 @@ components:
         score:
           type: integer
           format: int64
+          minimum: -10000000000000
+          maximum: 10000000000000
         total:
           type: integer
           description: Total ranked players (the denominator for rank)

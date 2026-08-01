@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/salandered/apex/handlers"
+	"github.com/salandered/apex/score"
 )
 
 func (s *APISuite) TestPutScore() {
@@ -74,6 +75,46 @@ func (s *APISuite) TestIncrementScoreRejectsFractionalAmount() {
 	resp := s.postJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
 		map[string]any{"amount": 0.5},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreAcceptsScoreAtMax() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		handlers.PutScoreReq{PlayerScore: score.Max},
+	)
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreRejectsScoreAboveMax() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		handlers.PutScoreReq{PlayerScore: score.Max + 1},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreRejectsScoreBelowMin() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		handlers.PutScoreReq{PlayerScore: score.Min - 1},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestIncrementScoreRejectsAmountAboveMax() {
+	resp := s.postJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		handlers.IncrementScoreReq{Amount: score.Max + 1},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestIncrementScoreRejectsAmountBelowMin() {
+	resp := s.postJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		handlers.IncrementScoreReq{Amount: score.Min - 1},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }

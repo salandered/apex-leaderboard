@@ -8,6 +8,7 @@ import (
 
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/player"
+	"github.com/salandered/apex/score"
 	"github.com/salandered/apex/storage"
 )
 
@@ -68,6 +69,10 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}
+	if err := score.Validate(data.PlayerScore); err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
 	err = h.Storage.SetScore(
 		req.Context(),
 		playerId,
@@ -97,6 +102,11 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 	var data IncrementScoreReq
 	err = json.NewDecoder(req.Body).Decode(&data)
 	if err != nil {
+		writeErrorToResponse(w, err, http.StatusBadRequest)
+		return
+	}
+	// bounds the delta only: the resulting score is bounded atomically in the write script
+	if err := score.Validate(data.Amount); err != nil {
 		writeErrorToResponse(w, err, http.StatusBadRequest)
 		return
 	}

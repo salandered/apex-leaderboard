@@ -13,6 +13,7 @@ import (
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/ledger"
 	"github.com/salandered/apex/player"
+	"github.com/salandered/apex/score"
 )
 
 // Rank is 1-based (rank 1 means highest score).
@@ -182,7 +183,8 @@ func (rs *redisStorage) ListStandingsAsOf(
 		case ledger.EventSet:
 			scores[event.PlayerID] = event.Amount
 		case ledger.EventIncrement:
-			// nothing caps a stored score yet, so the running total can wrap
+			// unreachable while the cap holds (every accepted event kept the total in range, so
+			// every prefix replay is in range too), kept as defence against a hand-edited ledger
 			current := scores[event.PlayerID]
 			sum := current + event.Amount
 			if (event.Amount > 0 && sum < current) || (event.Amount < 0 && sum > current) {
@@ -233,6 +235,7 @@ const (
 	applyCodeBoardNotFound       = -2 // board hash missing
 	applyCodeBoardClosed         = -3 // board state is "closed": writes rejected
 	applyCodeIdempotencyConflict = -4 // key reused with a different op/amount
+	applyCodeScoreOutOfRange     = -5 // the resulting score would leave [score.Min, score.Max]
 )
 
 // Runs the write script. Both a new and retried applies are non-errors.
@@ -249,7 +252,7 @@ func (rs *redisStorage) applyEvent(
 ) error {
 	result, err := applyScoreScript.Run(ctx, rs.client,
 		[]string{leaderboardKey(boardId), ledgerKey, idempotencyHashKey, playerProfileKey(playerId), boardProfileKey(boardId)},
-		string(etype), string(playerId), amount, requestID, string(boardId), idempotencyKey,
+		string(etype), string(playerId), amount, requestID, string(boardId), idempotencyKey, score.Max,
 	).Slice()
 	if err != nil {
 		return fmt.Errorf("storage apply %s event: %w", etype, err)
@@ -273,6 +276,8 @@ func (rs *redisStorage) applyEvent(
 		return ErrBoardClosed
 	case applyCodeIdempotencyConflict:
 		return ErrIdempotencyConflict
+	case applyCodeScoreOutOfRange:
+		return ErrScoreOutOfRange
 	default:
 		return fmt.Errorf("storage apply %s event: unexpected script code %d", etype, code)
 	}

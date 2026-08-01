@@ -169,6 +169,11 @@ func writeStorageError(w http.ResponseWriter, err error) {
 		writeErrorToResponse(w, fmt.Errorf("idempotency key reused with a different request"), http.StatusConflict)
 		return
 	}
+	if errors.Is(err, storage.ErrScoreOutOfRange) {
+		writeErrorToResponse(w, fmt.Errorf(
+			"resulting score must be in [-1e13, 1e13]"), http.StatusConflict)
+		return
+	}
 	slog.Error("internal storage error", "error", err)
 	writeErrorToResponse(w, fmt.Errorf("internal server error"), http.StatusInternalServerError)
 }

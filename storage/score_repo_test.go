@@ -10,6 +10,7 @@ import (
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/ledger"
 	"github.com/salandered/apex/player"
+	"github.com/salandered/apex/score"
 )
 
 // unregistered board id, used by the "board missing" cases
@@ -224,6 +225,99 @@ func (s *StorageSuite) TestScoreOperationSequence() {
 	s.Require().NoError(err)
 	s.Require().Equal(56.0, projected)
 	s.requireStreamLen(ctx, 6)
+}
+
+func (s *StorageSuite) TestIncrementScoreRejectsResultAboveMax() {
+	ctx := s.ctx()
+
+	s.createMainBoard()
+	playerId := s.createPlayer("bob")
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, score.Max, "r-set", ""))
+
+	// when
+	err := s.storage.IncrementScore(ctx, playerId, testBoardId, 1, "r-inc", "")
+
+	// then
+	s.Require().ErrorIs(err, ErrScoreOutOfRange)
+
+	projected, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(float64(score.Max), projected)
+	s.requireStreamLen(ctx, 1) // only the set
+}
+
+func (s *StorageSuite) TestIncrementScoreRejectsResultBelowMin() {
+	ctx := s.ctx()
+
+	s.createMainBoard()
+	playerId := s.createPlayer("bob")
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, score.Min, "r-set", ""))
+
+	// when
+	err := s.storage.IncrementScore(ctx, playerId, testBoardId, -1, "r-inc", "")
+
+	// then
+	s.Require().ErrorIs(err, ErrScoreOutOfRange)
+
+	projected, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(float64(score.Min), projected)
+	s.requireStreamLen(ctx, 1)
+}
+
+func (s *StorageSuite) TestIncrementScoreAcceptsResultAtMax() {
+	ctx := s.ctx()
+
+	s.createMainBoard()
+	playerId := s.createPlayer("bob")
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, score.Max-1, "r-set", ""))
+
+	// when
+	err := s.storage.IncrementScore(ctx, playerId, testBoardId, 1, "r-inc", "")
+
+	// then
+	s.Require().NoError(err)
+
+	projected, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(float64(score.Max), projected)
+	s.requireStreamLen(ctx, 2)
+}
+
+// the handler rejects this first, so the script branch is only reachable through the storage API
+func (s *StorageSuite) TestSetScoreRejectsScoreAboveMax() {
+	ctx := s.ctx()
+
+	s.createMainBoard()
+	playerId := s.createPlayer("bob")
+
+	// when
+	err := s.storage.SetScore(ctx, playerId, testBoardId, score.Max+1, "r-set", "")
+
+	// then
+	s.Require().ErrorIs(err, ErrScoreOutOfRange)
+
+	_, err = s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
+	s.Require().ErrorIs(err, redis.Nil)
+	s.requireStreamLen(ctx, 0)
+}
+
+// a first increment for an unenrolled player starts from 0
+func (s *StorageSuite) TestIncrementScoreOnUnenrolledPlayerBoundsFromZero() {
+	ctx := s.ctx()
+
+	s.createMainBoard()
+	playerId := s.createPlayer("bob")
+
+	// when
+	err := s.storage.IncrementScore(ctx, playerId, testBoardId, score.Max, "r-inc", "")
+
+	// then
+	s.Require().NoError(err)
+
+	projected, err := s.rawClient.ZScore(ctx, leaderboardKey(testBoardId), string(playerId)).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(float64(score.Max), projected)
 }
 
 func (s *StorageSuite) TestListScores() {

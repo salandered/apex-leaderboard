@@ -87,6 +87,8 @@ Next page op will look something like `ZRANGE key (S_last -inf REV BYSCORE LIMIT
 * Solution: bake a tiebreaker into the score (e.g. `points·BIG + seq`, or an inverse
   timestamp in the fraction), so no two members collide.
   UPD: scores are now integers a fractional tiebreaker doesnt fit.
+  UPD: scores are also capped at `1e13`, so `points·BIG + seq` has to fit that budget too -
+  the composite would have to shrink the usable points range.
 
 Pros: the "correct" cursor — anchors on a *fixed value* in the total order, so every
   *stationary* row is returned exactly once.
