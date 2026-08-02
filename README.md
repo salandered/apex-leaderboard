@@ -10,7 +10,6 @@
 	- [Compile](#compile)
 - [Misc](#misc)
 
-
 ![alt text](logo.png)
 
 Apex is a backend web service for leaderboards, built as an MVP to prove out two things:
@@ -133,7 +132,10 @@ For example,
 LOG_LEVEL=debug LOG_FORMAT=text LOG_FILE=./apex.log go run .
 ```
 
-will be logging messages like `05:23:40 INFO starting server addr=:8090` into file.
+will be logging messages like `05:23:40 INFO starting server addr=:8090` into a file.
+
+Envs can be overriden in `docker compose up` runs: by exporting them in the
+shell or via an `.env` file. See `/.env.template`.
 
 ### API Walk
 
