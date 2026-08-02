@@ -7,12 +7,12 @@ services:
     ports:
       - "${PORT:-8090}:${PORT:-8090}"
     environment:
-      PORT: "${PORT:-8090}" 
-      REDIS_URL: redis://redis:6379/0
-      LOG_LEVEL: info
-      LOG_FORMAT: text # or "json"
-      LOG_FILE:
-      LOG_TIME: short # or "nano" (text timestamp precision)
+      PORT: "${PORT:-8090}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_FORMAT: "${LOG_FORMAT:-text}"
+      LOG_FILE: "${LOG_FILE:-}"
+      LOG_TIME: "${LOG_TIME:-short}"
     depends_on:
       - redis
 

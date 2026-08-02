@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -43,7 +44,7 @@ func main() {
 		stop()
 	}()
 
-	logCloser, err := logging.Setup()
+	logCloser, err := setupLogging()
 	if err != nil {
 		// logger isn't ready yet, report to stderr directly
 		fmt.Fprintln(os.Stderr, err)
@@ -100,6 +101,14 @@ func main() {
 	if err := activityStore.Close(); err != nil {
 		slog.Error("activity store close failed", "error", err)
 	}
+}
+
+func setupLogging() (io.Closer, error) {
+	cfg, err := logging.ConfigFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	return logging.Setup(cfg)
 }
 
 func startServer(ctx context.Context, store storage.Storage) error {
