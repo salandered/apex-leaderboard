@@ -37,8 +37,9 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 }
 
 // Creates server-generated correlation id.
+// Adds it in the request context, from where the logging handler picks it up: every log call
+// taking a ctx below this middleware carries the id, so no log site adds it by hand.
 // Adds it to the X-Request-ID response header.
-// Adds it in the request context.
 // The request header is intentionally ignored (see docs).
 func requestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -61,7 +62,6 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 				panic(v) // sentinel, we repanic
 			}
 			slog.LogAttrs(req.Context(), slog.LevelError, "panic recovered",
-				slog.String("request_id", requestid.FromContext(req.Context())),
 				slog.Any("panic", v),
 				slog.String("stack", string(debug.Stack())),
 			)
@@ -93,7 +93,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			req.Context(),
 			level,
 			"request",
-			slog.String("request_id", requestid.FromContext(req.Context())),
 			slog.String("method", req.Method),
 			slog.String("path", req.URL.Path),
 			slog.Int("status", rec.status),

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -136,23 +137,25 @@ func exactInt64(v float64) (int64, bool) {
 // Soft, unlike the ledger decode above: projections are disposable, and failing the read
 // would let one drifted member break every page containing it.
 // Returns false if int64 can't hold the value, the caller decides what to do.
-func zScoreToInt64(raw float64, key, member string) (int64, bool) {
+func zScoreToInt64(ctx context.Context, raw float64, key, member string) (int64, bool) {
 	v, ok := exactInt64(raw)
 	if !ok {
 		// NaN and ±Inf round to themselves, so exactInt64 still rejects them
 		v, ok = exactInt64(math.Round(raw))
 		if !ok {
-			slog.Error("projection score is not representable", "key", key, "member", member, "score", raw)
+			slog.ErrorContext(ctx, "projection score is not representable",
+				"key", key, "member", member, "score", raw,
+			)
 			return 0, false
 		}
-		slog.Warn("projection score is not integral, rounding",
+		slog.WarnContext(ctx, "projection score is not integral, rounding",
 			"key", key, "member", member, "score", raw, "rounded", v,
 		)
 	}
 	// Out of range is drift the write path can no longer produce, but the value still serves
 	// fine, so report it instead of dropping the row.
 	if score.Validate(v) != nil {
-		slog.Warn("projection score is out of range", "key", key, "member", member, "score", v)
+		slog.WarnContext(ctx, "projection score is out of range", "key", key, "member", member, "score", v)
 	}
 	return v, true
 }

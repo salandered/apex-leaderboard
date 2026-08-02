@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/player"
@@ -37,7 +39,7 @@ func GetVersion() string {
 
 func HandleRoot(w http.ResponseWriter, req *http.Request) {
 	if _, err := fmt.Fprintf(w, "apex version %v", GetVersion()); err != nil {
-		slog.Error("failed writing root response", "error", err)
+		slog.ErrorContext(req.Context(), "failed writing root response", "error", err)
 	}
 }
 
@@ -118,11 +120,12 @@ func parsePlayerBoardPathValues(w http.ResponseWriter, req *http.Request) (playe
 
 // Response Utils
 
-func writeJSONToResponse(w http.ResponseWriter, statusCode int, data any) {
+func writeJSONToResponse(ctx context.Context, w http.ResponseWriter, statusCode int, data any) {
 	createHeaders(w)
 
 	rawJSON, err := json.Marshal(data)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed marshalling response body", "error", err)
 		writeErrorToResponse(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -132,11 +135,12 @@ func writeJSONToResponse(w http.ResponseWriter, statusCode int, data any) {
 	_, err = w.Write(rawJSON)
 	if err != nil {
 		// headers with the status code were already sent to the client
-		slog.Error("failed writing response body", "status", statusCode, "error", err)
+		slog.ErrorContext(ctx, "failed writing response body", "status", statusCode, "error", err)
 		return
 	}
-	// TODO: trim payload, may be too big
-	slog.Debug("response sent", "payload", string(rawJSON))
+	slog.DebugContext(ctx, "response sent",
+		"bytes", len(rawJSON), "payload", truncatePayload(rawJSON),
+	)
 }
 
 func createHeaders(w http.ResponseWriter) {
@@ -148,7 +152,7 @@ func writeErrorToResponse(w http.ResponseWriter, err error, statusCode int) {
 }
 
 // maps a storage-layer error to an HTTP response
-func writeStorageError(w http.ResponseWriter, err error) {
+func writeStorageError(ctx context.Context, w http.ResponseWriter, err error) {
 	if errors.Is(err, storage.ErrNotFound) {
 		writeErrorToResponse(w, fmt.Errorf("not found"), http.StatusNotFound)
 		return
@@ -174,6 +178,16 @@ func writeStorageError(w http.ResponseWriter, err error) {
 			"resulting score must be in [-1e13, 1e13]"), http.StatusConflict)
 		return
 	}
-	slog.Error("internal storage error", "error", err)
+	slog.ErrorContext(ctx, "internal storage error", "error", err)
 	writeErrorToResponse(w, fmt.Errorf("internal server error"), http.StatusInternalServerError)
+}
+
+const maxLoggedPayload = 512
+
+func truncatePayload(rawJSON []byte) string {
+	if len(rawJSON) <= maxLoggedPayload {
+		return string(rawJSON)
+	}
+	// json.Marshal emits raw UTF-8, so jsut a cut might split a rune
+	return strings.ToValidUTF8(string(rawJSON[:maxLoggedPayload]), "") + "..."
 }

@@ -56,7 +56,7 @@ func (h *EventHandler) HandleListEvents(w http.ResponseWriter, req *http.Request
 
 	events, err := h.Storage.ListEventsAfter(req.Context(), after, limit)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -71,7 +71,7 @@ func (h *EventHandler) HandleListEvents(w http.ResponseWriter, req *http.Request
 		response.NextAfter = events[len(events)-1].ID
 	}
 
-	writeJSONToResponse(w, http.StatusOK, response)
+	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
 }
 
 func scoreEventFromLedger(event ledger.Event) ScoreEvent {

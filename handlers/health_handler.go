@@ -22,7 +22,7 @@ type HealthResp struct {
 }
 
 func (h *HealthHandler) HandleLive(w http.ResponseWriter, req *http.Request) {
-	writeJSONToResponse(w, http.StatusOK, HealthResp{Status: "ok"})
+	writeJSONToResponse(req.Context(), w, http.StatusOK, HealthResp{Status: "ok"})
 }
 
 func (h *HealthHandler) HandleReady(w http.ResponseWriter, req *http.Request) {
@@ -30,11 +30,11 @@ func (h *HealthHandler) HandleReady(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 
 	if err := h.Storage.Ping(ctx); err != nil {
-		writeJSONToResponse(w, http.StatusServiceUnavailable, HealthResp{
+		writeJSONToResponse(ctx, w, http.StatusServiceUnavailable, HealthResp{
 			Status:     "unavailable",
 			Dependency: "redis",
 		})
 		return
 	}
-	writeJSONToResponse(w, http.StatusOK, HealthResp{Status: "ok"})
+	writeJSONToResponse(ctx, w, http.StatusOK, HealthResp{Status: "ok"})
 }

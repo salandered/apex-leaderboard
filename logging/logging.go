@@ -42,7 +42,7 @@ func Setup(cfg Config) (io.Closer, error) {
 		})
 	}
 
-	slog.SetDefault(slog.New(h))
+	slog.SetDefault(slog.New(contextHandler{h}))
 
 	output := "stdout"
 	if toFile {

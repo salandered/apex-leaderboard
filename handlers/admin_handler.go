@@ -31,7 +31,7 @@ func (h *AdminHandler) HandleRebuildProjection(w http.ResponseWriter, req *http.
 	}
 	err = h.Storage.RebuildProjection(req.Context(), boardId)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -45,7 +45,7 @@ func (h *AdminHandler) HandleVerifyProjection(w http.ResponseWriter, req *http.R
 	}
 	mismatches, err := h.Storage.VerifyProjection(req.Context(), boardId)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -62,5 +62,5 @@ func (h *AdminHandler) HandleVerifyProjection(w http.ResponseWriter, req *http.R
 			ReplayPresent: mismatch.ReplayPresent,
 		})
 	}
-	writeJSONToResponse(w, http.StatusOK, response)
+	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
 }

@@ -66,7 +66,7 @@ func (rs *redisStorage) GetStanding(ctx context.Context, playerId player.ID, boa
 	}
 
 	// a single-player read returns a error on an unusable score
-	score, ok := zScoreToInt64(rankScore.Score, leaderboardKey(boardId), string(playerId))
+	score, ok := zScoreToInt64(ctx, rankScore.Score, leaderboardKey(boardId), string(playerId))
 	if !ok {
 		return Standing{}, 0, fmt.Errorf(
 			"%w: projection score %v for player '%s' is not representable",
@@ -120,7 +120,7 @@ func (rs *redisStorage) ListStandings(
 	out := make([]Standing, 0, len(zs))
 	for i, z := range zs {
 		member := z.Member.(string)
-		score, ok := zScoreToInt64(z.Score, key, member)
+		score, ok := zScoreToInt64(ctx, z.Score, key, member)
 		if !ok {
 			// one unusable member must not break the page for everyone; rank stays positional
 			continue

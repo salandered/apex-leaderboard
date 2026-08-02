@@ -61,7 +61,7 @@ func TestZScoreToInt64RoundsNonIntegralAndRejectsInvalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v, ok := zScoreToInt64(tt.raw, "app:view:leaderboard:test", "member")
+			v, ok := zScoreToInt64(t.Context(), tt.raw, "app:view:leaderboard:test", "member")
 
 			require.Equal(t, tt.wantOk, ok)
 			if tt.wantOk {

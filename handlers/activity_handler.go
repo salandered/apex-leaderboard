@@ -48,7 +48,7 @@ func (h *ViewHandler) HandleListDailyActivity(w http.ResponseWriter, req *http.R
 
 	entries, err := h.Storage.ListDailyActivity(req.Context(), date, limit)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -59,5 +59,5 @@ func (h *ViewHandler) HandleListDailyActivity(w http.ResponseWriter, req *http.R
 	for _, e := range entries {
 		response.Entries = append(response.Entries, activityEntry{PlayerId: e.PlayerID, Count: e.Count})
 	}
-	writeJSONToResponse(w, http.StatusOK, response)
+	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
 }

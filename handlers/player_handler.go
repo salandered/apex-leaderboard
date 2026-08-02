@@ -49,12 +49,12 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 		},
 		idempotencyKey)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
 	w.Header().Set("Location", "/api/v1/players/"+string(playerId))
-	writeJSONToResponse(w, http.StatusCreated, PostPlayerResp{PlayerId: string(playerId)})
+	writeJSONToResponse(req.Context(), w, http.StatusCreated, PostPlayerResp{PlayerId: string(playerId)})
 }
 
 func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request) {
@@ -67,7 +67,7 @@ func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request
 	profile, err := h.Storage.GetPlayerProfile(req.Context(), playerId)
 
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -76,5 +76,5 @@ func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request
 		PlayerName: profile.PlayerName,
 	}
 
-	writeJSONToResponse(w, http.StatusOK, response)
+	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
 }

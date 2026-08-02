@@ -60,7 +60,7 @@ func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) 
 			CreatedAt: apextime.Now(),
 		})
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -77,17 +77,17 @@ func (h *BoardHandler) HandleGetBoard(w http.ResponseWriter, req *http.Request) 
 
 	b, err := h.Storage.GetBoard(req.Context(), boardId)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
-	writeJSONToResponse(w, http.StatusOK, boardToResp(b))
+	writeJSONToResponse(req.Context(), w, http.StatusOK, boardToResp(b))
 }
 
 func (h *BoardHandler) HandleListBoards(w http.ResponseWriter, req *http.Request) {
 	boards, err := h.Storage.ListBoards(req.Context())
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *BoardHandler) HandleListBoards(w http.ResponseWriter, req *http.Request
 		response.Boards = append(response.Boards, boardToResp(&boards[i]))
 	}
 
-	writeJSONToResponse(w, http.StatusOK, response)
+	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
 }
 
 func (h *BoardHandler) HandleCloseBoard(w http.ResponseWriter, req *http.Request) {
@@ -115,7 +115,7 @@ func (h *BoardHandler) handleSetState(w http.ResponseWriter, req *http.Request, 
 	}
 
 	if err := h.Storage.SetBoardState(req.Context(), boardId, state); err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 

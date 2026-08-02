@@ -82,7 +82,7 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 		idempotencyKey,
 	)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 		idempotencyKey,
 	)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -134,11 +134,11 @@ func (h *ScoreHandler) HandleGetRank(w http.ResponseWriter, req *http.Request) {
 
 	standing, total, err := h.Storage.GetStanding(req.Context(), playerId, boardId)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
-	writeJSONToResponse(w, http.StatusOK, RankResp{
+	writeJSONToResponse(req.Context(), w, http.StatusOK, RankResp{
 		PlayerId: playerId,
 		Rank:     standing.Rank,
 		Score:    standing.Score,
@@ -186,7 +186,7 @@ func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request
 		)
 	}
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -204,7 +204,7 @@ func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request
 		})
 	}
 
-	writeJSONToResponse(w, http.StatusOK, response)
+	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
 }
 
 func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request) {
@@ -221,7 +221,7 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 
 	events, err := h.Storage.PlayerHistory(req.Context(), playerId, boardId, limit)
 	if err != nil {
-		writeStorageError(w, err)
+		writeStorageError(req.Context(), w, err)
 		return
 	}
 
@@ -234,5 +234,5 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 		response.Events = append(response.Events, scoreEventFromLedger(e))
 	}
 
-	writeJSONToResponse(w, http.StatusOK, response)
+	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
 }
