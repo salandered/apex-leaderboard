@@ -55,7 +55,7 @@ func Setup() (io.Closer, error) {
 			Level:       level,
 			TimeFormat:  timeFormat,
 			NoColor:     toFile,
-			ReplaceAttr: fullLevelName,
+			ReplaceAttr: customAttr,
 		})
 	}
 
@@ -64,7 +64,7 @@ func Setup() (io.Closer, error) {
 }
 
 // maps levels to tint's built-in coloring;
-// no Debug: tint leaves it uncolored
+// no Debug
 var tintLevelColors = map[slog.Level]uint8{
 	slog.LevelInfo:  10, // bright green
 	slog.LevelWarn:  11, // bright yellow
@@ -72,11 +72,54 @@ var tintLevelColors = map[slog.Level]uint8{
 
 }
 
-// renders the level as its full name (INFO, not INF)
-func fullLevelName(groups []string, attr slog.Attr) slog.Attr {
-	if len(groups) != 0 || attr.Key != slog.LevelKey {
+// the http status attr colored;
+// no 1xx
+var tintStatusColors = []struct {
+	min   int64
+	color uint8
+}{
+	{500, 9},  // bright red
+	{400, 11}, // bright yellow
+	{300, 13}, // bright magenta
+	{200, 10}, // bright green
+}
+
+// key of the http status attr colored by [tintStatus]
+const statusKey = "status"
+
+/*
+from docs https://pkg.go.dev/log/slog#HandlerOptions
+
+The built-in attributes with keys "time", "level", "source", and "msg" are passed to this function.
+
+The first argument is a list of currently open groups that contain the Attr.
+For example, the attribute list
+
+	Int("a", 1), Group("g", Int("b", 2)), Int("c", 3)
+
+results in consecutive calls to ReplaceAttr with the following arguments:
+
+	nil, Int("a", 1)
+	[]string{"g"}, Int("b", 2)
+	nil, Int("c", 3)
+*/
+func customAttr(groups []string, attr slog.Attr) slog.Attr {
+	if len(groups) != 0 {
 		return attr
 	}
+	switch attr.Key {
+	case slog.LevelKey:
+		return fullLevelTintedName(attr)
+	case statusKey:
+		return tintStatus(attr)
+	default:
+		return attr
+	}
+}
+
+// Renders the level as its full name (INFO, not INF)
+// Makes a tint.
+func fullLevelTintedName(attr slog.Attr) slog.Attr {
 	level, ok := attr.Value.Any().(slog.Level)
 	if !ok {
 		return attr
@@ -86,6 +129,20 @@ func fullLevelName(groups []string, attr slog.Attr) slog.Attr {
 		return tint.Attr(color, named)
 	}
 	return named
+}
+
+// Tints the status code (e.g. 2xx are green)
+func tintStatus(attr slog.Attr) slog.Attr {
+	if attr.Value.Kind() != slog.KindInt64 {
+		return attr
+	}
+	code := attr.Value.Int64()
+	for _, c := range tintStatusColors {
+		if code >= c.min {
+			return tint.Attr(c.color, attr)
+		}
+	}
+	return attr
 }
 
 func parseLevel(s string) (slog.Level, error) {

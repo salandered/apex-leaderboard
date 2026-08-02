@@ -168,4 +168,4 @@ Other basic commands:
 
 Clear (!) the database: `docker compose exec redis redis-cli FLUSHALL`
 
-List all events in the stream: `XRANGE ledger:events - +`
+List all events in the stream: `XRANGE app:ledger:events - +`
