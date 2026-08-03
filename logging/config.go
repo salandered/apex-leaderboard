@@ -8,87 +8,114 @@ import (
 	"time"
 )
 
-// Format selects the log encoding. Maps to the [slog.Handler] type.
-// The zero value is text.
-type Format int
+// Format selects the log encoding: maps to the [slog.Handler] type.
+// Configured via LOG_FORMAT.
+// The zero value resolves to [FormatText].
+type Format string
 
 const (
-	FormatText Format = iota
-	FormatJSON
+	FormatText Format = "text"
+	FormatJSON Format = "json"
 )
 
-// mirrors the LOG_FORMAT vocabulary
-func (f Format) String() string {
-	if f == FormatJSON {
-		return "json"
-	}
-	return "text"
-}
-
-// TimePrecision selects the text handler's timestamp layout. The zero value is short.
-type TimePrecision int
+// TimeFormat selects the text handler's timestamp layout.
+// Configured via LOG_TIME.
+// The zero value resolves to [TimeDateMilli].
+type TimeFormat string
 
 const (
-	TimeShort TimePrecision = iota
-	TimeNano
+	TimeSec         TimeFormat = "sec"
+	TimeMilli       TimeFormat = "milli"
+	TimeNano        TimeFormat = "nano"
+	TimeDateSec     TimeFormat = "dt-sec"
+	TimeDateMilli   TimeFormat = "dt-milli"
+	TimeRFC3339     TimeFormat = "rfc3339"
+	TimeRFC3339Nano TimeFormat = "rfc3339nano"
 )
 
-// mirrors the LOG_TIME vocabulary
-func (p TimePrecision) String() string {
-	if p == TimeNano {
-		return "nano"
-	}
-	return "short"
+var timeFormats = []struct {
+	name   TimeFormat
+	layout string
+}{
+	{TimeSec, time.TimeOnly},         // 15:04:05
+	{TimeMilli, "15:04:05.000"},      // fixed 3 digits
+	{TimeNano, "15:04:05.999999999"}, // trailing zeros dropped
+	{TimeDateSec, time.DateTime},     // 2006-01-02 15:04:05
+	{TimeDateMilli, "2006-01-02 15:04:05.000"},
+	{TimeRFC3339, time.RFC3339},         // 2006-01-02T15:04:05Z07:00
+	{TimeRFC3339Nano, time.RFC3339Nano}, // same as [FormatJSON] uses
 }
 
-// Picks the text handler's timestamp layout;
-// TimeNano (1) mirrors json's RFC3339Nano precision (trailing zeros dropped) but keeps only the time part
-func (p TimePrecision) layout() string {
-	if p == TimeNano {
-		return "15:04:05.999999999"
+// Returns the layout f selects, or "" if f is not a known format.
+func (f TimeFormat) layout() string {
+	for _, tf := range timeFormats {
+		if tf.name == f {
+			return tf.layout
+		}
 	}
-	return time.TimeOnly
+	return ""
 }
 
-// Config is a logging setup. Its zero value is the documented default.
+// Config is a logging setup. Its zero value resolves to the documented defaults.
 type Config struct {
-	Level         slog.Level
-	Format        Format
-	TimePrecision TimePrecision
-	File          string // empty writes to stdout
+	Level      slog.Level
+	Format     Format
+	TimeFormat TimeFormat
+	File       string // empty writes to stdout
+}
+
+// Fills the empty fields with their defaults and rejects unknown values.
+// [Setup] must call it.
+// Idempotent.
+// Level needs no resolving: its zero value is already the default.
+func (c *Config) resolve() error {
+	c.Format = Format(normalizeName(string(c.Format)))
+	switch c.Format {
+	case "":
+		c.Format = FormatText
+	case FormatText, FormatJSON:
+	default:
+		return fmt.Errorf("logging: unknown log format %q (LOG_FORMAT; want 'text' or 'json')", c.Format)
+	}
+
+	c.TimeFormat = TimeFormat(normalizeName(string(c.TimeFormat)))
+	switch {
+	case c.TimeFormat == "":
+		c.TimeFormat = TimeDateMilli
+	case c.TimeFormat.layout() == "":
+		return fmt.Errorf("logging: unknown time format %q (LOG_TIME; want one of %s)", c.TimeFormat, timeFormatNames())
+	}
+
+	return nil
 }
 
 // Env vars:
 //   - LOG_LEVEL:  debug | info (default) | warn | error
 //   - LOG_FORMAT: text (default) | json
 //   - LOG_FILE:   path; empty writes to stdout (default)
-//   - LOG_TIME:   short (default) | nano; text timestamp precision (json unaffected)
+//   - LOG_TIME:   sec | milli | nano | dt-sec | dt-milli (default) | rfc3339 | rfc3339nano;
+//     text timestamp layout ('dt-' prefixed ones add the date). json is unaffected,
+//     it always writes RFC3339Nano.
 func ConfigFromEnv() (Config, error) {
 	level, err := parseLevel(os.Getenv("LOG_LEVEL"))
 	if err != nil {
 		return Config{}, err
 	}
 
-	format, err := parseFormat(os.Getenv("LOG_FORMAT"))
-	if err != nil {
+	cfg := Config{
+		Level:      level,
+		Format:     Format(os.Getenv("LOG_FORMAT")),
+		TimeFormat: TimeFormat(os.Getenv("LOG_TIME")),
+		File:       os.Getenv("LOG_FILE"),
+	}
+	if err := cfg.resolve(); err != nil {
 		return Config{}, err
 	}
-
-	precision, err := parseTimePrecision(os.Getenv("LOG_TIME"))
-	if err != nil {
-		return Config{}, err
-	}
-
-	return Config{
-		Level:         level,
-		Format:        format,
-		TimePrecision: precision,
-		File:          os.Getenv("LOG_FILE"),
-	}, nil
+	return cfg, nil
 }
 
 func parseLevel(s string) (slog.Level, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
+	switch normalizeName(s) {
 	case "", "info":
 		return slog.LevelInfo, nil
 	case "debug":
@@ -102,24 +129,15 @@ func parseLevel(s string) (slog.Level, error) {
 	}
 }
 
-func parseFormat(s string) (Format, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", "text":
-		return FormatText, nil
-	case "json":
-		return FormatJSON, nil
-	default:
-		return 0, fmt.Errorf("logging: unknown LOG_FORMAT %q (want 'text' or 'json')", s)
+// "'sec', 'milli', ..." for error messages; keeps in sync with timeFormats
+func timeFormatNames() string {
+	quoted := make([]string, len(timeFormats))
+	for i, f := range timeFormats {
+		quoted[i] = "'" + string(f.name) + "'"
 	}
+	return strings.Join(quoted, ", ")
 }
 
-func parseTimePrecision(s string) (TimePrecision, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", "short":
-		return TimeShort, nil
-	case "nano":
-		return TimeNano, nil
-	default:
-		return 0, fmt.Errorf("logging: unknown LOG_TIME %q (want 'short' or 'nano')", s)
-	}
+func normalizeName(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
 }

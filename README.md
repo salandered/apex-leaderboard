@@ -109,22 +109,19 @@ docker compose up -d redis # or: docker run -p 6379:6379 redis:8.8.0-alpine
 go run .
 ```
 
-The server listens on `PORT` (default `8090`) and connects to Redis via `REDIS_URL`
-(default `redis://localhost:6379/0`)
-
 ### Configuration
 
 All envs are optional, but a set and invalid one will abort the start up:
 
-| Variable           | Values                        | Default                    | Description                                                                                                              |
-| ------------------ | ----------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `PORT`             | `1`..`65535`                  | `8090`                     | HTTP listen port.                                                                                                        |
-| `REDIS_URL`        | Redis connection URL          | `redis://localhost:6379/0` | Storage url.                                                                                                             |
-| `SHUTDOWN_TIMEOUT` | Go duration, e.g. `30s`       | `10s`                      | Max time to gracefully stop in-flight requests on shutdown. Keep below the deployment's termination grace period.        |
-| `LOG_LEVEL`        | `debug` `info` `warn` `error` | `info`                     | Minimum log level being printed.                                                                                         |
-| `LOG_FORMAT`       | `text` `json`                 | `text`                     | `text` is a human readable format (colorized if using stdout), `json` is for machines.                                   |
-| `LOG_FILE`         | file path                     | *(empty → stdout)*         | If set, logs go to this file only.                                                                                       |
-| `LOG_TIME`         | `short` `nano`                | `short`                    | `text` timestamp precision; `nano` adds fractional seconds. Does not affect `LOG_FORMAT = json` (always full precision). |
+| Variable           | Values                                                           | Default                                                        | Description                                                                                                       |
+| ------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `PORT`             | `1`..`65535`                                                     | `8090`                                                         | HTTP listen port.                                                                                                 |
+| `REDIS_URL`        | Redis connection URL                                             | `redis://localhost:6379/0`<br> compose: `redis://redis:6379/0` | Storage url.                                                                                                      |
+| `SHUTDOWN_TIMEOUT` | Go duration, e.g. `30s`                                          | `10s`                                                          | Max time to gracefully stop in-flight requests on shutdown. Keep below the deployment's termination grace period. |
+| `LOG_LEVEL`        | `debug` `info` `warn` `error`                                    | `info`                                                         | Minimum log level being printed.                                                                                  |
+| `LOG_FORMAT`       | `text` `json`                                                    | `text`                                                         | `text` is a human readable format (colorized if using stdout), `json` is for machines.                            |
+| `LOG_FILE`         | file path                                                        | *(empty → stdout)*                                             | If set, logs go to this file only.                                                                                |
+| `LOG_TIME`         | `sec` `milli` `nano` `dt-sec` `dt-milli` `rfc3339` `rfc3339nano` | `dt-milli`                                                     | timestamp layout; `dt-` means the date is printed. Does not affect `LOG_FORMAT = json` (always RFC3339Nano).      |
 
 For example,
 
@@ -132,9 +129,9 @@ For example,
 LOG_LEVEL=debug LOG_FORMAT=text LOG_FILE=./apex.log go run .
 ```
 
-will be logging messages like `05:23:40 INFO starting server addr=:8090` into a file.
+will be logging messages like `2026-08-03 05:23:40.123 INFO starting server addr=:8090` into a file.
 
-Envs can be overriden in `docker compose up` runs: by exporting them in the
+Envs can be overriden for `docker compose` runs by exporting them in the
 shell or via an `.env` file. See `/.env.template`.
 
 Example:
@@ -155,7 +152,9 @@ go run ./apiscripts/apiwalk -base-url http://localhost:8090 -board demo-cup
 
 ```bash
 go test ./...                    # unit tests
-go test -tags=integration ./...  # integration tests with db (uses Docker)
+go test -tags=integration ./...  # unit + integration tests with db (uses Docker)
+
+go test -tags=integration -run TestStorageSuite ./storage/  # integration tests only
 ```
 
 See [docs/tests.md](docs/tests.md) for details.

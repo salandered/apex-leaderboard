@@ -17,20 +17,55 @@ func TestConfigFromEnvReadsAllVars(t *testing.T) {
 	cfg, err := ConfigFromEnv()
 	require.NoError(t, err)
 	require.Equal(t, Config{
-		Level:         slog.LevelDebug,
-		Format:        FormatJSON,
-		TimePrecision: TimeNano,
-		File:          "/tmp/apex.log",
+		Level:      slog.LevelDebug,
+		Format:     FormatJSON,
+		TimeFormat: TimeNano,
+		File:       "/tmp/apex.log",
 	}, cfg)
 }
 
-func TestZeroConfigUsesDocumentedDefaults(t *testing.T) {
+func TestZeroConfigResolvesToDocumentedDefaults(t *testing.T) {
 	var cfg Config
+	require.NoError(t, cfg.resolve())
 	require.Equal(t, slog.LevelInfo, cfg.Level)
 	require.Equal(t, FormatText, cfg.Format)
-	require.Equal(t, TimeShort, cfg.TimePrecision)
+	require.Equal(t, TimeDateMilli, cfg.TimeFormat)
 	require.Empty(t, cfg.File) // stdout
-	require.Equal(t, time.TimeOnly, cfg.TimePrecision.layout())
+	require.Equal(t, "2006-01-02 15:04:05.000", cfg.TimeFormat.layout())
+}
+
+func TestResolveKeepsKnownValues(t *testing.T) {
+	cfg := Config{Level: slog.LevelWarn, Format: FormatJSON, TimeFormat: TimeSec, File: "/tmp/apex.log"}
+	before := cfg
+
+	require.NoError(t, cfg.resolve())
+	require.Equal(t, before, cfg)
+}
+
+func TestResolveIsIdempotent(t *testing.T) {
+	var cfg Config
+	require.NoError(t, cfg.resolve())
+	once := cfg
+
+	require.NoError(t, cfg.resolve())
+	require.Equal(t, once, cfg)
+}
+
+func TestResolveTrimsAndLowercasesNames(t *testing.T) {
+	cfg := Config{Format: " JSON ", TimeFormat: "\tDT-Milli\n"}
+	require.NoError(t, cfg.resolve())
+	require.Equal(t, FormatJSON, cfg.Format)
+	require.Equal(t, TimeDateMilli, cfg.TimeFormat)
+}
+
+func TestResolveUnknownValuesReturnError(t *testing.T) {
+	for _, cfg := range []Config{
+		{Format: "yaml"},
+		{TimeFormat: "hh:mm:ss"},
+		{TimeFormat: "dt-nano"},
+	} {
+		require.Errorf(t, cfg.resolve(), "config %+v", cfg)
+	}
 }
 
 func TestConfigFromEnvUnknownLevelReturnsError(t *testing.T) {
@@ -84,9 +119,9 @@ func TestParseLevelUnknownReturnsError(t *testing.T) {
 	}
 }
 
-func TestParseFormat(t *testing.T) {
+func TestResolveFormat(t *testing.T) {
 	cases := []struct {
-		in   string
+		in   Format
 		want Format
 	}{
 		{"", FormatText}, // unset defaults to text
@@ -96,46 +131,85 @@ func TestParseFormat(t *testing.T) {
 		{" text ", FormatText}, // spaces are trimmed
 	}
 	for _, c := range cases {
-		got, err := parseFormat(c.in)
-		require.NoErrorf(t, err, "input %q", c.in)
-		require.Equalf(t, c.want, got, "input %q", c.in)
+		cfg := Config{Format: c.in}
+		require.NoErrorf(t, cfg.resolve(), "input %q", c.in)
+		require.Equalf(t, c.want, cfg.Format, "input %q", c.in)
 	}
 }
 
-func TestParseFormatUnknownReturnsError(t *testing.T) {
-	for _, in := range []string{"jsonn", "yaml", "txt"} {
-		_, err := parseFormat(in)
+func TestResolveUnknownFormatReturnsError(t *testing.T) {
+	for _, in := range []Format{"jsonn", "yaml", "txt"} {
+		cfg := Config{Format: in}
+		err := cfg.resolve()
 		require.Errorf(t, err, "input %q", in)
-		require.Containsf(t, err.Error(), in, "error should quote the bad input %q", in)
+		require.Containsf(t, err.Error(), string(in), "error should quote the bad input %q", in)
 	}
 }
 
-func TestParseTimePrecision(t *testing.T) {
+func TestResolveTimeFormat(t *testing.T) {
 	cases := []struct {
-		in   string
-		want TimePrecision
+		in   TimeFormat
+		want TimeFormat
 	}{
-		{"", TimeShort}, // unset defaults to short
-		{"short", TimeShort},
+		{"", TimeDateMilli}, // unset defaults to dt-milli
+		{"sec", TimeSec},
+		{"milli", TimeMilli},
 		{"nano", TimeNano},
-		{"NANO", TimeNano},     // case insensitive
-		{" short ", TimeShort}, // spaces are trimmed
+		{"dt-sec", TimeDateSec},
+		{"dt-milli", TimeDateMilli},
+		{"rfc3339", TimeRFC3339},
+		{"rfc3339nano", TimeRFC3339Nano},
+		{"DT-MILLI", TimeDateMilli}, // case insensitive
+		{" milli ", TimeMilli},      // spaces are trimmed
 	}
 	for _, c := range cases {
-		got, err := parseTimePrecision(c.in)
-		require.NoErrorf(t, err, "input %q", c.in)
-		require.Equalf(t, c.want, got, "input %q", c.in)
+		cfg := Config{TimeFormat: c.in}
+		require.NoErrorf(t, cfg.resolve(), "input %q", c.in)
+		require.Equalf(t, c.want, cfg.TimeFormat, "input %q", c.in)
 	}
 }
 
-func TestParseTimePrecisionUnknownReturnsError(t *testing.T) {
-	for _, in := range []string{"long", "rfc3339", "micro"} {
-		_, err := parseTimePrecision(in)
+func TestResolveUnknownTimeFormatReturnsError(t *testing.T) {
+	for _, in := range []TimeFormat{"short", "long", "micro", "dt", "dt-nano", "rfc3339milli"} {
+		cfg := Config{TimeFormat: in}
+		err := cfg.resolve()
 		require.Errorf(t, err, "input %q", in)
+		require.Containsf(t, err.Error(), string(in), "error should quote the bad input %q", in)
 	}
 }
 
-func TestTimePrecisionLayout(t *testing.T) {
-	require.Equal(t, time.TimeOnly, TimeShort.layout())
-	require.Equal(t, "15:04:05.999999999", TimeNano.layout())
+func TestEveryTimeFormatNameResolves(t *testing.T) {
+	for _, tf := range timeFormats {
+		cfg := Config{TimeFormat: tf.name}
+		require.NoErrorf(t, cfg.resolve(), "format %s", tf.name)
+		require.Equalf(t, tf.name, cfg.TimeFormat, "format %s", tf.name)
+		require.Containsf(t, timeFormatNames(), string(tf.name), "format %s must be listed in errors", tf.name)
+	}
+}
+
+// guards against a typo in a layout, which would otherwise print literally
+func TestTimeFormatLayoutRendersReferenceTime(t *testing.T) {
+	ts := time.Date(2026, 8, 3, 5, 23, 40, 123456789, time.UTC)
+	cases := []struct {
+		format TimeFormat
+		want   string
+	}{
+		{TimeSec, "05:23:40"},
+		{TimeMilli, "05:23:40.123"},
+		{TimeNano, "05:23:40.123456789"},
+		{TimeDateSec, "2026-08-03 05:23:40"},
+		{TimeDateMilli, "2026-08-03 05:23:40.123"},
+		{TimeRFC3339, "2026-08-03T05:23:40Z"},
+		{TimeRFC3339Nano, "2026-08-03T05:23:40.123456789Z"},
+	}
+	require.Len(t, cases, len(timeFormats), "every format needs a case")
+	for _, c := range cases {
+		require.Equalf(t, c.want, ts.Format(c.format.layout()), "format %s", c.format)
+	}
+}
+
+func TestUnknownTimeFormatHasNoLayout(t *testing.T) {
+	require.Empty(t, TimeFormat("").layout())
+	require.Empty(t, TimeFormat("kitchen").layout())
+	require.Empty(t, TimeFormat("dt-nano").layout())
 }

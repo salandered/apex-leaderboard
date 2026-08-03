@@ -14,6 +14,9 @@ type noopCloser struct{}
 func (noopCloser) Close() error { return nil }
 
 func Setup(cfg Config) (io.Closer, error) {
+	if err := cfg.resolve(); err != nil {
+		return nil, err
+	}
 
 	var w io.Writer = os.Stdout
 	var closer io.Closer = noopCloser{}
@@ -36,7 +39,7 @@ func Setup(cfg Config) (io.Closer, error) {
 		// tint auto drops keys like 'time' and 'level'
 		h = tint.NewTextHandler(w, &tint.Options{
 			Level:       cfg.Level,
-			TimeFormat:  cfg.TimePrecision.layout(),
+			TimeFormat:  cfg.TimeFormat.layout(), // non-empty after resolve
 			NoColor:     toFile,
 			ReplaceAttr: customAttr,
 		})
@@ -48,10 +51,10 @@ func Setup(cfg Config) (io.Closer, error) {
 	if toFile {
 		output = cfg.File
 	}
-	slog.Debug("logging configured",
+	slog.Info("logging configured",
 		"cfg_level", cfg.Level,
-		"cfg_format", cfg.Format.String(),
-		"cfg_time_precision", cfg.TimePrecision.String(),
+		"cfg_format", string(cfg.Format),
+		"cfg_time_format", string(cfg.TimeFormat),
 		"cfg_output", output,
 	)
 

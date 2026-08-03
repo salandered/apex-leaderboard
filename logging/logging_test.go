@@ -45,8 +45,21 @@ func TestSetupAppendsToExistingLogFileNotTruncate(t *testing.T) {
 	require.NoError(t, err)
 
 	lines := splitNonEmptyLines(string(content))
-	require.Len(t, lines, 2)
+	require.Len(t, lines, 3) // the previous run, the Setup config line, ours
 	require.Equal(t, "previous run", lines[0])
+}
+
+func TestSetupRejectsBadConfigBeforeCreatingLogFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "apex.log")
+
+	// when
+	// expected error, ok not to use setupForTest
+	closer, err := Setup(Config{TimeFormat: "hh:mm:ss", File: path})
+
+	// then
+	require.Error(t, err)
+	require.Nil(t, closer)
+	require.NoFileExists(t, path)
 }
 
 func TestContextHandlerAddsRequestIDFromContext(t *testing.T) {
@@ -98,7 +111,10 @@ func TestSetupWrapsHandlerForRequestIDCorrelation(t *testing.T) {
 
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.Equal(t, "req-42", decodeLogLine(t, string(content))[requestIDKey])
+
+	lines := splitNonEmptyLines(string(content))
+	require.Len(t, lines, 2) // the Setup config line, then ours
+	require.Equal(t, "req-42", decodeLogLine(t, lines[1])[requestIDKey])
 }
 
 // 'Setup' must not be called directly.

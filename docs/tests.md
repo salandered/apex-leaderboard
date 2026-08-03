@@ -21,7 +21,7 @@ Unit tests
 go test ./...
 ```
 
-Integration tests
+Everything (the `integration` tag adds files, does not exclude unit)
 
 ```bash
 go test -tags=integration ./...
@@ -29,6 +29,12 @@ go test -tags=integration ./...
 
 ```bash
 go test -race -tags=integration ./...
+```
+
+Integration tests only
+
+```bash
+go test -tags=integration -run TestStorageSuite ./storage/
 ```
 
 ## More about tests

@@ -33,7 +33,20 @@ const banner = `
       \_________\/     \_________\/     \_________\/     \_________\/`
 
 func main() {
-	fmt.Printf("apex version %v %v \n\n", handlers.GetVersion(), banner)
+	cfg, logCloser, err := setupLogging()
+	if err != nil {
+		// logger isn't ready yet, report to stderr directly
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer func() { _ = logCloser.Close() }()
+
+	// decoration, not a log record
+	if cfg.Format == logging.FormatText && cfg.File == "" {
+		fmt.Printf("%v\n\n", banner)
+	}
+
+	slog.Info("apex starting", "version", handlers.GetVersion())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -43,14 +56,6 @@ func main() {
 		// a second Ctrl+C kills immediately (not gracefull shutdown)
 		stop()
 	}()
-
-	logCloser, err := setupLogging()
-	if err != nil {
-		// logger isn't ready yet, report to stderr directly
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	defer func() { _ = logCloser.Close() }()
 
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {
@@ -103,12 +108,17 @@ func main() {
 	}
 }
 
-func setupLogging() (io.Closer, error) {
+// Returns the resolved config too: it tells whether stdout is human readable.
+func setupLogging() (logging.Config, io.Closer, error) {
 	cfg, err := logging.ConfigFromEnv()
 	if err != nil {
-		return nil, err
+		return logging.Config{}, nil, err
 	}
-	return logging.Setup(cfg)
+	closer, err := logging.Setup(cfg)
+	if err != nil {
+		return logging.Config{}, nil, err
+	}
+	return cfg, closer, nil
 }
 
 func startServer(ctx context.Context, store storage.Storage) error {
