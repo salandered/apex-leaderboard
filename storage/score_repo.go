@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"time"
@@ -238,6 +239,24 @@ const (
 	applyCodeScoreOutOfRange     = -5 // the resulting score would leave [score.Min, score.Max]
 )
 
+// Names for the write log line.
+var applyCodeNames = map[int64]string{
+	applyCodeApplied:             "applied",
+	applyCodeDeduped:             "deduped",
+	applyCodePlayerNotFound:      "player_not_found",
+	applyCodeBoardNotFound:       "board_not_found",
+	applyCodeBoardClosed:         "board_closed",
+	applyCodeIdempotencyConflict: "idempotency_conflict",
+	applyCodeScoreOutOfRange:     "score_out_of_range",
+}
+
+func applyCodeName(code int64) string {
+	if name, ok := applyCodeNames[code]; ok {
+		return name
+	}
+	return "unknown(" + strconv.FormatInt(code, 10) + ")"
+}
+
 // Runs the write script. Both a new and retried applies are non-errors.
 // A rejected write appends nothing and maps to an error.
 // idempotencyKey is the client-supplied key, used if not empty.
@@ -265,6 +284,25 @@ func (rs *redisStorage) applyEvent(
 	if !ok {
 		return fmt.Errorf("storage apply %s event: non-integer script code %v", etype, result[0])
 	}
+
+	// what the script decided (the hooked command log can't show this)
+	// entry_id is empty if nothing was appended
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
+		var entryID string
+		if len(result) > 1 {
+			entryID, _ = result[1].(string)
+		}
+		slog.LogAttrs(ctx, slog.LevelDebug, "score write",
+			slog.String("component", logComponent),
+			slog.String("op", string(etype)),
+			slog.String("board", string(boardId)),
+			slog.String("player", string(playerId)),
+			slog.Int64("amount", amount),
+			slog.String("result", applyCodeName(code)),
+			slog.String("entry_id", entryID),
+		)
+	}
+
 	switch code {
 	case applyCodeApplied, applyCodeDeduped:
 		return nil

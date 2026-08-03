@@ -24,6 +24,7 @@ func NewActivityStore(redisURL string) (*redisActivityStore, error) {
 		return nil, fmt.Errorf("activity store: parse redis url: %w", err)
 	}
 	client := redis.NewClient(opts)
+	client.AddHook(logHook{})
 	pingWithRetry(client, opts.Addr)
 	return newActivityStore(client), nil
 }

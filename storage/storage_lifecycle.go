@@ -20,6 +20,7 @@ func init() {
 	redis.SetLogger(redisLogger{})
 }
 
+// satisfies [redis.internal.Logging]
 type redisLogger struct{}
 
 func (redisLogger) Printf(ctx context.Context, format string, v ...any) {
@@ -64,6 +65,8 @@ func NewStorage(url string) (Storage, error) {
 		return nil, fmt.Errorf("storage: parse redis url: %w", err)
 	}
 	client := redis.NewClient(opts)
+
+	client.AddHook(logHook{}) // before the ping, so the startup probe is logged
 	pingWithRetry(client, opts.Addr)
 	return &redisStorage{client: client}, nil
 }

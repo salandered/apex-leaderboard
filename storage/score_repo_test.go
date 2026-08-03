@@ -3,7 +3,10 @@
 package storage
 
 import (
+	"encoding/json"
+	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -723,6 +726,65 @@ func (s *StorageSuite) TestPlayerHistoryRejectsFractionalLedgerAmount() {
 
 	s.Require().ErrorIs(err, ErrInconsistent)
 	s.Require().Nil(events)
+}
+
+// a no-op write is a 204 like a real one, but the log line should capture this
+func (s *StorageSuite) TestScoreWriteLogsAppliedThenNoOpWithTheSameEntryID() {
+	ctx := s.ctx()
+	s.createMainBoard()
+	playerId := s.createPlayer("bob")
+	buf := captureLogs(s.T(), slog.LevelDebug)
+
+	// when
+	s.Require().NoError(
+		s.storage.IncrementScore(ctx, playerId, testBoardId, 25, "req-1", "idem-1"),
+	)
+	s.Require().NoError(
+		s.storage.IncrementScore(ctx, playerId, testBoardId, 25, "req-2", "idem-1"),
+	)
+
+	// then
+	lines := s.scoreWriteLines(buf.String())
+	s.Require().Len(lines, 2)
+
+	s.Require().Equal("applied", lines[0]["result"])
+	s.Require().Equal("increment", lines[0]["op"])
+	s.Require().Equal(float64(25), lines[0]["amount"]) // json numbers decode as float64
+	s.Require().NotEmpty(lines[0]["entry_id"])
+
+	s.Require().Equal("deduped", lines[1]["result"])
+	s.Require().Equal(lines[0]["entry_id"], lines[1]["entry_id"]) // the replayed entry
+}
+
+func (s *StorageSuite) TestScoreWriteLogsARejectionWithoutAnEntryID() {
+	ctx := s.ctx()
+	s.createMainBoard()
+	playerId := s.createPlayer("bob")
+	s.closeBoard(testBoardId)
+	buf := captureLogs(s.T(), slog.LevelDebug)
+
+	// when
+	err := s.storage.IncrementScore(ctx, playerId, testBoardId, 25, "req-1", "")
+
+	// then
+	s.Require().ErrorIs(err, ErrBoardClosed)
+	lines := s.scoreWriteLines(buf.String())
+	s.Require().Len(lines, 1)
+	s.Require().Equal("board_closed", lines[0]["result"])
+	s.Require().Empty(lines[0]["entry_id"])
+}
+
+// decodes the "score write" lines out of the captured log, in order
+func (s *StorageSuite) scoreWriteLines(raw string) []map[string]any {
+	var out []map[string]any
+	for line := range strings.SplitSeq(strings.TrimSpace(raw), "\n") {
+		var entry map[string]any
+		s.Require().NoError(json.Unmarshal([]byte(line), &entry))
+		if entry["msg"] == "score write" {
+			out = append(out, entry)
+		}
+	}
+	return out
 }
 
 func (s *StorageSuite) appendHistoricalEvent(

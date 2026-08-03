@@ -131,6 +131,9 @@ LOG_LEVEL=debug LOG_FORMAT=text LOG_FILE=./apex.log go run .
 
 will be logging messages like `2026-08-03 05:23:40.123 INFO starting server addr=:8090` into a file.
 
+Note: `LOG_LEVEL=debug` is a diagnostic mode, not a production setting.
+In particular, it will log every Redis command with its arguments, duration and the result.
+
 Envs can be overriden for `docker compose` runs by exporting them in the
 shell or via an `.env` file. See `/.env.template`.
 
