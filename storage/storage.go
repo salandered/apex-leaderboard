@@ -35,6 +35,10 @@ type redisStorage struct {
 	client *redis.Client
 }
 
+func NewStorage(client *redis.Client) Storage {
+	return &redisStorage{client: client}
+}
+
 // Field keys stored in each ledger:events entry.
 // Must match the Lua write script.
 const (

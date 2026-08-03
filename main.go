@@ -12,14 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/salandered/apex/apexredis"
 	"github.com/salandered/apex/consumer"
 	"github.com/salandered/apex/handlers"
 	"github.com/salandered/apex/logging"
 	"github.com/salandered/apex/server"
 	"github.com/salandered/apex/storage"
 )
-
-const defaultRedisURL = "redis://localhost:6379/0"
 
 var ErrConfig = errors.New("invalid config")
 
@@ -53,28 +52,34 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		// after the first signal, restore default handling
-		// a second Ctrl+C kills immediately (not gracefull shutdown)
+		// a second Ctrl+C kills immediately (not a gracefull shutdown)
 		stop()
 	}()
 
-	redisURL := os.Getenv("REDIS_URL")
-	if redisURL == "" {
-		redisURL = defaultRedisURL
-	}
-
-	store, err := storage.NewStorage(redisURL)
+	redisCfg, err := apexredis.ConfigFromEnv()
 	if err != nil {
-		slog.Error("storage init failed", "error", err)
+		slog.Error("invalid configuration", "error", err)
 		os.Exit(1)
 	}
 
-	activityStore, err := storage.NewActivityStore(redisURL)
+	// Redis clients are built here and are closed here in main.
+
+	requestClient, err := apexredis.New(redisCfg, "storage")
 	if err != nil {
-		slog.Error("activity store init failed", "error", err)
+		slog.Error("redis client init failed", "error", err)
 		os.Exit(1)
 	}
 
-	dailyActivityConsumer := consumer.NewDailyActivityConsumer(activityStore)
+	// A second client: the consumer's blocking XREAD holds its connection,
+	// should not interfere with the requestClient.
+	ledgerClient, err := apexredis.New(redisCfg, "consumer")
+	if err != nil {
+		slog.Error("ledger redis client init failed", "error", err)
+		os.Exit(1)
+	}
+
+	store := storage.NewStorage(requestClient)
+	dailyActivityConsumer := consumer.NewDailyActivityConsumer(storage.NewActivityStore(ledgerClient))
 	consumerDone := make(chan struct{})
 	go func() {
 		defer close(consumerDone)
@@ -97,14 +102,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	// server stopped, closing storage
-	if err := store.Close(); err != nil {
-		slog.Error("store close failed", "error", err)
+	// server stopped, closing the request pool
+	if err := requestClient.Close(); err != nil {
+		slog.Error("redis client close failed", "error", err)
 	}
 
-	waitFor(consumerDone, "activity consumer", dailyActivityConsumer.MaxStopDelay()+workerStopMargin)
-	if err := activityStore.Close(); err != nil {
-		slog.Error("activity store close failed", "error", err)
+	// the ledger pool only after the consumer actually stopped using it
+	waitFor(
+		consumerDone,
+		"activity consumer",
+		dailyActivityConsumer.MaxStopDelay()+workerStopMargin,
+	)
+	if err := ledgerClient.Close(); err != nil {
+		slog.Error("ledger redis client close failed", "error", err)
 	}
 }
 

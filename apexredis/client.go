@@ -1,4 +1,5 @@
-package storage
+// Works with a redis client provided by go-redis.
+package apexredis
 
 import (
 	"context"
@@ -27,10 +28,28 @@ func (redisLogger) Printf(ctx context.Context, format string, v ...any) {
 	slog.DebugContext(ctx, fmt.Sprintf(format, v...))
 }
 
+// component labels this client's commands in the debug log (e.g. "storage", "consumer"):
+// two clients built from the same Config stay distinguishable.
+// The caller owns the returned client and must Close it.
+func New(cfg Config, component string) (*redis.Client, error) {
+	cfg.resolve()
+
+	opts, err := redis.ParseURL(cfg.URL)
+	if err != nil {
+		return nil, fmt.Errorf("apexredis: parse redis url: %w", err)
+	}
+	client := redis.NewClient(opts)
+
+	client.AddHook(logHook{component: component}) // before the ping, so the startup probe is logged
+
+	pingWithRetry(client, opts.Addr, component)
+	return client, nil
+}
+
 // Probes Redis at startup so an unreachable server is reported early
-// (not first request with default lazy client)
+// (not on first request with the default lazy client).
 // On timeout it warns and returns, leaving go-redis to connect lazily.
-func pingWithRetry(client *redis.Client, addr string) {
+func pingWithRetry(client *redis.Client, addr, component string) {
 	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()
 
@@ -38,7 +57,7 @@ func pingWithRetry(client *redis.Client, addr string) {
 	for attempt := 1; ; attempt++ {
 		err := client.Ping(ctx).Err()
 		if err == nil {
-			slog.Info("redis connected", "addr", addr)
+			slog.Info("redis connected", "addr", addr, "component", component)
 			return
 		}
 		if ctx.Err() != nil { // prefer a real dial error over the deadline
@@ -56,21 +75,5 @@ func pingWithRetry(client *redis.Client, addr string) {
 		}
 	}
 	slog.Warn("redis unreachable at startup, continuing (will connect on first use)",
-		"waited", pingTimeout, "error", lastErr)
-}
-
-func NewStorage(url string) (Storage, error) {
-	opts, err := redis.ParseURL(url)
-	if err != nil {
-		return nil, fmt.Errorf("storage: parse redis url: %w", err)
-	}
-	client := redis.NewClient(opts)
-
-	client.AddHook(logHook{}) // before the ping, so the startup probe is logged
-	pingWithRetry(client, opts.Addr)
-	return &redisStorage{client: client}, nil
-}
-
-func (s *redisStorage) Close() error {
-	return s.client.Close()
+		"waited", pingTimeout, "component", component, "error", lastErr)
 }

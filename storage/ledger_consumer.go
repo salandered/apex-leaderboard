@@ -18,10 +18,6 @@ type redisLedgerConsumer struct {
 	client *redis.Client
 }
 
-func (s *redisLedgerConsumer) Close() error {
-	return s.client.Close()
-}
-
 func (s *redisLedgerConsumer) LoadCursor(
 	ctx context.Context, consumerName string,
 ) (string, bool, error) {

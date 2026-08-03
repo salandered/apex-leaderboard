@@ -239,7 +239,7 @@ it takes the current function and returns its replacement.
 
 ### How project uses it
 
-`storage/redis_hook.go` registers a `logHook` hook on redis clients
+`apexredis/hook.go` defines a `logHook`, and `apexredis.New` attaches it to every client it builds
 (before the startup ping so it is covered).
 It will print logs for every command with its args and duration, correlated by `request_id`.
 
@@ -250,6 +250,7 @@ DEBUG redis cmd component=storage request_id=8f2a cmd=evalsha args="evalsha 3c9f
 Some notes:
 
 - Everything is Debug and if logger run with min level > debug the hook does nothing (costs one additional call)
+- `component` names the client the command are going through (like `storage`  or `consumer`)
 - `redis.Nil` is logged as `miss=true`, not an error (see about redis.Nil above)
 - A pipeline is one line (`redis pipeline` with `n` and `cmds`), not one line per queued command.
 - Args are truncated per arg and in total. See `### EVALSHA and the NOSCRIPT fallback`

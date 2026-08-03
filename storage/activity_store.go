@@ -13,20 +13,8 @@ type redisActivityStore struct {
 	redisLedgerConsumer
 }
 
-func newActivityStore(client *redis.Client) *redisActivityStore {
+func NewActivityStore(client *redis.Client) *redisActivityStore {
 	return &redisActivityStore{redisLedgerConsumer{client: client}}
-}
-
-// Own Redis client isolates the blocking ledger read from the request pool.
-func NewActivityStore(redisURL string) (*redisActivityStore, error) {
-	opts, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return nil, fmt.Errorf("activity store: parse redis url: %w", err)
-	}
-	client := redis.NewClient(opts)
-	client.AddHook(logHook{})
-	pingWithRetry(client, opts.Addr)
-	return newActivityStore(client), nil
 }
 
 func (s *redisActivityStore) ApplyDailyCounts(

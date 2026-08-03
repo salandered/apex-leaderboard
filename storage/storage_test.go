@@ -3,7 +3,9 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
+	"github.com/salandered/apex/apexredis"
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/player"
@@ -46,14 +49,13 @@ func (s *StorageSuite) SetupSuite() {
 	url, err := ctr.ConnectionString(ctx)
 	s.Require().NoError(err)
 
-	s.storage, err = NewStorage(url)
+	// one client for all three, for tests it's fine
+	s.rawClient, err = apexredis.New(apexredis.Config{URL: url}, "storage")
 	s.Require().NoError(err)
-
-	opts, err := redis.ParseURL(url)
-	s.Require().NoError(err)
-	s.rawClient = redis.NewClient(opts)
-	s.activityStore = newActivityStore(s.rawClient)
 	s.T().Cleanup(func() { s.rawClient.Close() })
+
+	s.storage = NewStorage(s.rawClient)
+	s.activityStore = NewActivityStore(s.rawClient)
 }
 
 // Cleans up the db so tests stay order-independent.
@@ -149,4 +151,15 @@ func (s *StorageSuite) requireEqualBoardRegistry(eboardIds []string) {
 	boardIds, err := s.rawClient.ZRange(s.ctx(), boardIndexKey, 0, -1).Result()
 	s.Require().NoError(err)
 	s.Require().ElementsMatch(eboardIds, boardIds)
+}
+
+// Points the default logger at a buffer for the duration of the test.
+func captureLogs(t *testing.T, level slog.Leveler) *bytes.Buffer {
+	t.Helper()
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: level})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return &buf
 }

@@ -17,6 +17,8 @@ import (
 	"github.com/salandered/apex/score"
 )
 
+const logComponent = "storage"
+
 // Rank is 1-based (rank 1 means highest score).
 type Standing struct {
 	// consider moving out of storage

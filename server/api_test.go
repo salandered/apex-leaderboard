@@ -190,10 +190,6 @@ func (ms *mockStorage) Ping(context.Context) error {
 	return ms.pingErr
 }
 
-func (ms *mockStorage) Close() error {
-	return nil
-}
-
 func (ms *mockStorage) CreatePlayerProfile(c context.Context, profile *player.Profile, idempotencyKey string) (player.ID, error) {
 	fmt.Printf("creating profile %v to mocked storage", profile)
 	if idempotencyKey == MockedConflictIdempotencyKey {

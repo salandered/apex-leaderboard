@@ -1,4 +1,4 @@
-package storage
+package apexredis
 
 import (
 	"context"
@@ -11,17 +11,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const logComponent = "storage"
-
 // Automatically logs every command and pipeline at Debug.
-type logHook struct{}
+// component names the client it is attached to (see [New]).
+type logHook struct{ component string }
 
 var _ redis.Hook = logHook{} // should satisfy [redis.Hook]
 
 // go-redis already logs dial errors to its own logger (see [redisLogger])
 func (logHook) DialHook(next redis.DialHook) redis.DialHook { return next }
 
-func (logHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+func (h logHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 	return func(ctx context.Context, cmd redis.Cmder) error {
 		// just wrap when not debugging
 		if !slog.Default().Enabled(ctx, slog.LevelDebug) {
@@ -31,13 +30,13 @@ func (logHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 		start := time.Now()
 		err := next(ctx, cmd)
 		// the error must come from next, not from cmd.Err(): go-redis attaches it to the
-		// command in Client.Process, i.e. *after* the whole hook chain returned
-		logCommand(ctx, cmd, err, time.Since(start))
+		// command in Client.Process, after the whole hook chain returned
+		h.logCommand(ctx, cmd, err, time.Since(start))
 		return err
 	}
 }
 
-func (logHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+func (h logHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
 	return func(ctx context.Context, cmds []redis.Cmder) error {
 		// just wrap when not debugging
 		if !slog.Default().Enabled(ctx, slog.LevelDebug) {
@@ -49,7 +48,7 @@ func (logHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.Process
 
 		// one line per pipeline, not per command
 		attrs := []slog.Attr{
-			slog.String("component", logComponent),
+			slog.String("component", h.component),
 			slog.Int("n", len(cmds)),
 			slog.String("cmds", cmdNames(cmds)),
 			slog.Duration("dur", time.Since(start)),
@@ -62,9 +61,8 @@ func (logHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.Process
 	}
 }
 
-// The level stays Debug even on error: the caller wraps and reports the failure itself,
-// a second Error line for the same fault is noise.
-func logCommand(ctx context.Context, cmd redis.Cmder, err error, dur time.Duration) {
+// The level stays Debug even on error: the caller wraps and reports the failure itself.
+func (h logHook) logCommand(ctx context.Context, cmd redis.Cmder, err error, dur time.Duration) {
 	// redis.Nil is a plain miss, not an error (see docs)
 	miss := errors.Is(err, redis.Nil)
 
@@ -78,7 +76,7 @@ func logCommand(ctx context.Context, cmd redis.Cmder, err error, dur time.Durati
 	}
 
 	attrs := []slog.Attr{
-		slog.String("component", logComponent),
+		slog.String("component", h.component),
 		slog.String("cmd", cmd.FullName()),
 		slog.String("args", formatArgs(cmd.Args())),
 		slog.Duration("dur", dur),
@@ -128,6 +126,7 @@ func cmdNames(cmds []redis.Cmder) string {
 	return b.String()
 }
 
+// TODO: consider a common trancating util (same func in handlers)
 func truncateArg(arg string) string {
 	if len(arg) <= maxLoggedArg {
 		return arg
