@@ -30,13 +30,13 @@ type GetPlayerResp struct {
 func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request) {
 	idempotencyKey, err := readIdempotencyKey(req)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	var data PostPlayerReq
 	err = json.NewDecoder(req.Body).Decode(&data)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request) {
 	playerId := player.ID(req.PathValue(playerIDPathValue))
 	if err := playerId.Validate(); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 

@@ -26,7 +26,7 @@ type VerifyProjectionResp struct {
 func (h *AdminHandler) HandleRebuildProjection(w http.ResponseWriter, req *http.Request) {
 	boardId, err := boardIdFromPath(req)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	err = h.Storage.RebuildProjection(req.Context(), boardId)
@@ -40,7 +40,7 @@ func (h *AdminHandler) HandleRebuildProjection(w http.ResponseWriter, req *http.
 func (h *AdminHandler) HandleVerifyProjection(w http.ResponseWriter, req *http.Request) {
 	boardId, err := boardIdFromPath(req)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	mismatches, err := h.Storage.VerifyProjection(req.Context(), boardId)

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -30,6 +31,7 @@ func (h *HealthHandler) HandleReady(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 
 	if err := h.Storage.Ping(ctx); err != nil {
+		slog.WarnContext(ctx, "readiness check failed", "dependency", "redis", "error", err)
 		writeJSONToResponse(ctx, w, http.StatusServiceUnavailable, HealthResp{
 			Status:     "unavailable",
 			Dependency: "redis",

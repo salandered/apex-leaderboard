@@ -40,17 +40,17 @@ type ListEventsResp struct {
 func (h *EventHandler) HandleListEvents(w http.ResponseWriter, req *http.Request) {
 	after := req.URL.Query().Get(afterQuery)
 	if after == "" {
-		writeErrorToResponse(w, fmt.Errorf("%s is required", afterQuery), http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, fmt.Errorf("%s is required", afterQuery), http.StatusBadRequest)
 		return
 	}
 	if err := validateEventID(after); err != nil {
-		writeErrorToResponse(w, fmt.Errorf("invalid %s: %w", afterQuery, err), http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, fmt.Errorf("invalid %s: %w", afterQuery, err), http.StatusBadRequest)
 		return
 	}
 
 	limit, err := parseIntQuery(req, limitQuery, defaultEventLimit, 1, maxEventLimit)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 

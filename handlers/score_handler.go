@@ -60,17 +60,17 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 	}
 	idempotencyKey, err := readIdempotencyKey(req)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	var data PutScoreReq
 	err = json.NewDecoder(req.Body).Decode(&data)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	if err := score.Validate(data.PlayerScore); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	err = h.Storage.SetScore(
@@ -96,18 +96,18 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 	}
 	idempotencyKey, err := readIdempotencyKey(req)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	var data IncrementScoreReq
 	err = json.NewDecoder(req.Body).Decode(&data)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	// bounds the delta only: the resulting score is bounded atomically in the write script
 	if err := score.Validate(data.Amount); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	err = h.Storage.IncrementScore(
@@ -149,17 +149,17 @@ func (h *ScoreHandler) HandleGetRank(w http.ResponseWriter, req *http.Request) {
 func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request) {
 	limit, err := parseIntQuery(req, limitQuery, defaultListLimit, 1, maxListLimit)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	offset, err := parseIntQuery(req, offsetQuery, 0, 0, 0)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	boardId, err := boardIdFromPath(req)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -172,13 +172,13 @@ func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request
 		asOf := asOfValues[0]
 		date, parseErr := apextime.ParseDate(asOf)
 		if parseErr != nil {
-			writeErrorToResponse(w, parseErr, http.StatusBadRequest)
+			writeErrorToResponse(req.Context(), w, parseErr, http.StatusBadRequest)
 			return
 		}
 		now := apextime.Now()
 		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 		if date.After(today) {
-			writeErrorToResponse(w, fmt.Errorf("%s must not be in the future", asOfQuery), http.StatusBadRequest)
+			writeErrorToResponse(req.Context(), w, fmt.Errorf("%s must not be in the future", asOfQuery), http.StatusBadRequest)
 			return
 		}
 		scores, total, err = h.Storage.ListStandingsAsOf(
@@ -215,7 +215,7 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 
 	limit, err := parseIntQuery(req, limitQuery, defaultHistoryLimit, 1, 0)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 

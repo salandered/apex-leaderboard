@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/salandered/apex/board"
@@ -24,11 +26,17 @@ func (rs *redisStorage) RebuildProjection(ctx context.Context, boardId board.ID)
 	if err := rs.requireBoard(ctx, boardId); err != nil {
 		return err
 	}
+	start := time.Now()
 	events, err := rs.readBoardEvents(ctx, boardId)
 	if err != nil {
 		return err
 	}
-	return rs.foldInto(ctx, events, boardId, leaderboardKey)
+	if err := rs.foldInto(ctx, events, boardId, leaderboardKey); err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "projection rebuilt",
+		"board_id", boardId, "events", len(events), "dur", time.Since(start))
+	return nil
 }
 
 func (rs *redisStorage) requireBoard(ctx context.Context, boardId board.ID) error {
@@ -103,6 +111,7 @@ func (rs *redisStorage) VerifyProjection(
 	if err := rs.requireBoard(ctx, boardId); err != nil {
 		return nil, err
 	}
+	start := time.Now()
 	events, err := rs.readBoardEvents(ctx, boardId)
 	if err != nil {
 		return nil, err
@@ -114,7 +123,18 @@ func (rs *redisStorage) VerifyProjection(
 	// best-effort cleanup with a fresh context so a cancelled ctx doesn't leak the scratch key
 	defer rs.client.Del(context.Background(), boardVerifyKey(boardId))
 
-	return rs.diffBoard(ctx, boardId)
+	mismatches, err := rs.diffBoard(ctx, boardId)
+	if err != nil {
+		return nil, err
+	}
+	if len(mismatches) > 0 {
+		slog.WarnContext(ctx, "projection drift detected",
+			"board_id", boardId, "events", len(events), "mismatches", len(mismatches))
+	} else {
+		slog.InfoContext(ctx, "projection verified",
+			"board_id", boardId, "events", len(events), "dur", time.Since(start))
+	}
+	return mismatches, nil
 }
 
 func (rs *redisStorage) diffBoard(ctx context.Context, b board.ID) ([]ScoreMismatch, error) {

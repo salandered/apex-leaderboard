@@ -133,6 +133,9 @@ func Start(ctx context.Context, handler http.Handler, opts ...Option) error {
 	case <-ctx.Done(): // signal -> graceful shutdown
 	}
 
+	slog.Info("shutting down server", "timeout", cfg.shutdownTimeout)
+	shutDownStart := time.Now()
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil { // when succeeds -> ListenAndServe returns ErrServerClosed
@@ -146,6 +149,6 @@ func Start(ctx context.Context, handler http.Handler, opts ...Option) error {
 	default:
 	}
 
-	slog.Info("server stopped")
+	slog.Info("server stopped", "shutdown took", time.Since(shutDownStart))
 	return nil
 }

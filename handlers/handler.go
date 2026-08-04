@@ -107,12 +107,12 @@ func boardIdFromPath(req *http.Request) (board.ID, error) {
 func parsePlayerBoardPathValues(w http.ResponseWriter, req *http.Request) (player.ID, board.ID, error) {
 	playerId := player.ID(req.PathValue(playerIDPathValue))
 	if err := playerId.Validate(); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return "", "", err
 	}
 	boardId, err := boardIdFromPath(req)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return "", "", err
 	}
 	return playerId, boardId, nil
@@ -125,8 +125,12 @@ func writeJSONToResponse(ctx context.Context, w http.ResponseWriter, statusCode 
 
 	rawJSON, err := json.Marshal(data)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed marshalling response body", "error", err)
-		writeErrorToResponse(w, err, http.StatusInternalServerError)
+		writeErrorToResponse(
+			ctx,
+			w,
+			fmt.Errorf("marshalling response body: %w", err),
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
@@ -147,39 +151,44 @@ func createHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 }
 
-func writeErrorToResponse(w http.ResponseWriter, err error, statusCode int) {
+func writeErrorToResponse(ctx context.Context, w http.ResponseWriter, err error, statusCode int) {
+	if statusCode >= http.StatusInternalServerError {
+		slog.ErrorContext(ctx, "request failed", "status", statusCode, "error", err)
+		http.Error(w, "internal server error", statusCode)
+		return
+	}
+	slog.WarnContext(ctx, "request rejected", "status", statusCode, "error", err)
 	http.Error(w, err.Error(), statusCode)
 }
 
 // maps a storage-layer error to an HTTP response
 func writeStorageError(ctx context.Context, w http.ResponseWriter, err error) {
 	if errors.Is(err, storage.ErrNotFound) {
-		writeErrorToResponse(w, fmt.Errorf("not found"), http.StatusNotFound)
+		writeErrorToResponse(ctx, w, fmt.Errorf("not found"), http.StatusNotFound)
 		return
 	}
 	if errors.Is(err, storage.ErrBoardNotFound) {
-		writeErrorToResponse(w, fmt.Errorf("board not found"), http.StatusNotFound)
+		writeErrorToResponse(ctx, w, fmt.Errorf("board not found"), http.StatusNotFound)
 		return
 	}
 	if errors.Is(err, storage.ErrBoardExists) {
-		writeErrorToResponse(w, fmt.Errorf("board already exists"), http.StatusConflict)
+		writeErrorToResponse(ctx, w, fmt.Errorf("board already exists"), http.StatusConflict)
 		return
 	}
 	if errors.Is(err, storage.ErrBoardClosed) {
-		writeErrorToResponse(w, fmt.Errorf("board closed"), http.StatusConflict)
+		writeErrorToResponse(ctx, w, fmt.Errorf("board closed"), http.StatusConflict)
 		return
 	}
 	if errors.Is(err, storage.ErrIdempotencyConflict) {
-		writeErrorToResponse(w, fmt.Errorf("idempotency key reused with a different request"), http.StatusConflict)
+		writeErrorToResponse(ctx, w, fmt.Errorf("idempotency key reused with a different request"), http.StatusConflict)
 		return
 	}
 	if errors.Is(err, storage.ErrScoreOutOfRange) {
-		writeErrorToResponse(w, fmt.Errorf(
+		writeErrorToResponse(ctx, w, fmt.Errorf(
 			"resulting score must be in [-1e13, 1e13]"), http.StatusConflict)
 		return
 	}
-	slog.ErrorContext(ctx, "internal storage error", "error", err)
-	writeErrorToResponse(w, fmt.Errorf("internal server error"), http.StatusInternalServerError)
+	writeErrorToResponse(ctx, w, err, http.StatusInternalServerError)
 }
 
 const maxLoggedPayload = 512
@@ -188,6 +197,6 @@ func truncatePayload(rawJSON []byte) string {
 	if len(rawJSON) <= maxLoggedPayload {
 		return string(rawJSON)
 	}
-	// json.Marshal emits raw UTF-8, so jsut a cut might split a rune
+	// json.Marshal emits raw UTF-8, so just a cut might split a rune
 	return strings.ToValidUTF8(string(rawJSON[:maxLoggedPayload]), "") + "..."
 }

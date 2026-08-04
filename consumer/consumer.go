@@ -72,6 +72,9 @@ func (c *DailyActivityConsumer) MaxStopDelay() time.Duration {
 // Run tails the ledger until ctx is cancelled (gracefull shutdown).
 // Batch failures are logged and retried.
 func (c *DailyActivityConsumer) Run(ctx context.Context) error {
+	slog.InfoContext(ctx, "activity consumer: started", "consumer", c.name)
+	defer slog.InfoContext(ctx, "activity consumer: stopped", "consumer", c.name)
+
 	for {
 		if ctx.Err() != nil {
 			return nil

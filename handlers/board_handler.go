@@ -33,20 +33,20 @@ type ListBoardsResp struct {
 func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) {
 	boardId := board.ID(req.PathValue(boardIDPathValue))
 	if err := boardId.Validate(); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	var data PutBoardReq
 	err := json.NewDecoder(req.Body).Decode(&data)
 	if err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 	state := board.BoardActive
 	if data.State != "" {
 		state = board.BoardState(data.State)
 		if err := state.Validate(); err != nil {
-			writeErrorToResponse(w, err, http.StatusBadRequest)
+			writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 			return
 		}
 	}
@@ -71,7 +71,7 @@ func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) 
 func (h *BoardHandler) HandleGetBoard(w http.ResponseWriter, req *http.Request) {
 	boardId := board.ID(req.PathValue(boardIDPathValue))
 	if err := boardId.Validate(); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *BoardHandler) HandleOpenBoard(w http.ResponseWriter, req *http.Request)
 func (h *BoardHandler) handleSetState(w http.ResponseWriter, req *http.Request, state board.BoardState) {
 	boardId := board.ID(req.PathValue(boardIDPathValue))
 	if err := boardId.Validate(); err != nil {
-		writeErrorToResponse(w, err, http.StatusBadRequest)
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
 

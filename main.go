@@ -84,7 +84,8 @@ func main() {
 	go func() {
 		defer close(consumerDone)
 		if err := dailyActivityConsumer.Run(ctx); err != nil {
-			slog.Error("activity consumer stopped", "error", err)
+			// Run logs its start/stop, this is the failure case only
+			slog.Error("activity consumer failed", "error", err)
 		}
 	}()
 
