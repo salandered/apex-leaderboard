@@ -1,5 +1,21 @@
 const POLL_MS = 5000;
-const PAGE_LIMIT = 50;
+// The API caps a leaderboard page at 100 (maxListLimit) and rejects anything outside [1, 100]
+// with a 400, so every offered size has to stay inside that range.
+const PAGE_SIZES = [10, 25, 50, 100];
+const DEFAULT_PAGE_SIZE = 25;
+const EVENT_LIMIT = 100; // maxEventLimit on the API
+const TICKER_MAX = 30;   // rows kept in the DOM; the ledger itself is never trimmed
+
+// A stored cursor older than this starts at the tail instead of resuming. Previously displayed
+// rows are still kept; new events shift the oldest ones out of the capped list.
+const TICKER_RESUME_MS = 15 * 60 * 1000;
+
+// "theme" is written by the inline script in <head> and stays a raw string; everything here is
+// JSON, so the two never share a key.
+const BOARD_KEY = "board_id";
+const PAGE_SIZE_KEY = "page_size";
+const CURSOR_KEY = "ticker_cursor";
+const EVENTS_KEY = "ticker_events";
 
 // The API reports errors as text/plain (http.Error), not JSON, so a failed response body
 // must not be handed to res.json().
@@ -9,6 +25,23 @@ async function getJSON(url) {
 		throw new Error(`${res.status} - ${(await res.text()).trim()}`);
 	}
 	return res.json();
+}
+
+async function sendJSON(url, method, body) {
+	const options = { method };
+	if (body !== undefined) {
+		options.headers = { "Content-Type": "application/json" };
+		options.body = JSON.stringify(body);
+	}
+	const res = await fetch(url, options);
+	if (!res.ok) {
+		throw new Error(`${res.status} - ${(await res.text()).trim()}`);
+	}
+	if (res.status === 204) {
+		return null;
+	}
+	const text = await res.text();
+	return text === "" ? null : JSON.parse(text);
 }
 
 // Standings rows carry player_id only, so a board of N rows costs N extra lookups. 
@@ -33,18 +66,101 @@ function playerName(playerId) {
 	return pending;
 }
 
+// A stored entry can be corrupt or written by an older shape of this page, so a bad one is
+// dropped rather than allowed to break init.
+function readStored(key, fallback) {
+	try {
+		const raw = localStorage.getItem(key);
+		return raw === null ? fallback : JSON.parse(raw);
+	} catch {
+		localStorage.removeItem(key);
+		return fallback;
+	}
+}
+
+function writeStored(key, value) {
+	localStorage.setItem(key, JSON.stringify(value));
+}
+
 document.addEventListener("alpine:init", () => {
 	Alpine.data("leaderboard", () => ({
 		boards: [],
 		boardId: "",
 		rows: [],
 		total: 0,
+		limit: DEFAULT_PAGE_SIZE,
+		offset: 0,
 		error: "",
 		pollSeconds: POLL_MS / 1000,
+		writeBusy: false,
+		writeMessage: "",
+		writeError: "",
+		newBoard: { id: "", name: "", status: "active" },
+		newPlayerName: "",
+		scoreWrite: { boardId: "", playerId: "", operation: "set", amount: 0 },
+		brandColors: ["", "vibrant-orange", "soft-peach"],
+		brandColorIndex: 0,
+		boardBusy: false,
+		boardActionError: "",
+		historyPlayerId: "",
+		historyPlayerName: "",
+		historyEvents: [],
+		historyLoading: false,
+		historyError: "",
+
+		// The ledger is global, so the ticker deliberately ignores the selected board and
+		// labels each row with the board it landed on.
+		events: [],
+		eventCursor: "",
+		tickerError: "",
 
 		// The attribute is already set by the inline script in <head>; this only mirrors it so
 		// the button icon can react to it.
 		theme: document.documentElement.dataset.theme,
+
+		// Ranks come from the API already absolute (the row at result index i has rank
+		// offset+i+1), so the pager only ever describes the window, never renumbers it.
+		get pageCount() {
+			return Math.max(1, Math.ceil(this.total / this.limit));
+		},
+
+		get pageLabel() {
+			return `page ${Math.floor(this.offset / this.limit) + 1} of ${this.pageCount}`;
+		},
+
+		get rangeLabel() {
+			if (this.total === 0) {
+				return "no players";
+			}
+			return `${this.offset + 1}-${this.offset + this.rows.length} of ${this.total} players`;
+		},
+
+		get hasPrev() {
+			return this.offset > 0;
+		},
+
+		get hasNext() {
+			return this.offset + this.limit < this.total;
+		},
+
+		get selectedBoard() {
+			return this.boards.find(b => b.board_id === this.boardId) ?? null;
+		},
+
+		get boardCreatedLabel() {
+			if (!this.selectedBoard) {
+				return "";
+			}
+			return `created ${new Date(this.selectedBoard.created_at).toLocaleDateString()}`;
+		},
+
+		get brandColor() {
+			return this.brandColors[this.brandColorIndex];
+		},
+
+		cycleBrandColor() {
+			this.brandColorIndex = (this.brandColorIndex + 1) % this.brandColors.length;
+		},
 
 		toggleTheme() {
 			this.theme = this.theme === "dark" ? "light" : "dark";
@@ -53,17 +169,36 @@ document.addEventListener("alpine:init", () => {
 		},
 
 		async init() {
+			const storedLimit = readStored(PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE);
+			this.limit = PAGE_SIZES.includes(storedLimit) ? storedLimit : DEFAULT_PAGE_SIZE;
 			await this.loadBoards();
+			await this.restoreTicker();
 			await this.refresh();
-			setInterval(() => this.refresh(), POLL_MS);
+			setInterval(() => {
+				this.refresh();
+				this.pollEvents();
+			}, POLL_MS);
 		},
 
 		async loadBoards() {
 			try {
 				const data = await getJSON("/api/v1/boards");
+				const stored = readStored(BOARD_KEY, "");
 				this.boards = data.boards;
-				if (!this.boardId && this.boards.length > 0) {
-					this.boardId = this.boards[0].board_id;
+
+				// boardId is assigned in the same tick as boards on purpose: x-model syncs the
+				// select against whatever options exist when its effect runs, so restoring the
+				// id any earlier would leave the dropdown showing a different board than the
+				// one being fetched.
+				//
+				// A stored id can also name a board this instance does not have (a different or
+				// a flushed redis), so it is checked against the list rather than trusted. An
+				// empty id is never in the list either, which covers the first visit.
+				const known = this.boards.some(b => b.board_id === stored);
+				this.boardId = known ? stored : (this.boards[0]?.board_id ?? "");
+				const scoreBoardKnown = this.boards.some(b => b.board_id === this.scoreWrite.boardId);
+				if (!scoreBoardKnown) {
+					this.scoreWrite.boardId = this.boardId;
 				}
 				this.error = "";
 			} catch (err) {
@@ -72,9 +207,275 @@ document.addEventListener("alpine:init", () => {
 		},
 
 		async selectBoard() {
+			writeStored(BOARD_KEY, this.boardId);
+			this.scoreWrite.boardId = this.boardId;
+			this.boardActionError = "";
+			this.clearHistory();
 			this.rows = [];
 			this.total = 0;
+			this.offset = 0;
 			await this.refresh();
+		},
+
+		async toggleBoard() {
+			const board = this.selectedBoard;
+			if (!board) {
+				return;
+			}
+
+			this.boardBusy = true;
+			this.boardActionError = "";
+			const action = board.status === "closed" ? "open" : "close";
+			try {
+				const id = encodeURIComponent(board.board_id);
+				await sendJSON(`/api/v1/boards/${id}/${action}`, "POST");
+				board.status = action === "open" ? "active" : "closed";
+			} catch (err) {
+				this.boardActionError = String(err.message ?? err);
+			} finally {
+				this.boardBusy = false;
+			}
+		},
+
+		async loadHistory(row) {
+			const selection = window.getSelection();
+			if (selection && !selection.isCollapsed) {
+				return;
+			}
+
+			if (this.historyPlayerId === row.player_id) {
+				this.clearHistory();
+				return;
+			}
+
+			this.historyPlayerId = row.player_id;
+			this.historyPlayerName = row.player_name;
+			this.historyEvents = [];
+			this.historyLoading = true;
+			this.historyError = "";
+			try {
+				const board = encodeURIComponent(this.boardId);
+				const player = encodeURIComponent(row.player_id);
+				const data = await getJSON(`/api/v1/boards/${board}/scores/${player}/history?limit=10`);
+				if (this.historyPlayerId === row.player_id) {
+					this.historyEvents = data.events;
+				}
+			} catch (err) {
+				this.historyError = String(err.message ?? err);
+			} finally {
+				this.historyLoading = false;
+			}
+		},
+
+		clearHistory() {
+			this.historyPlayerId = "";
+			this.historyPlayerName = "";
+			this.historyEvents = [];
+			this.historyError = "";
+		},
+
+		async createBoard() {
+			this.writeBusy = true;
+			this.writeMessage = "";
+			this.writeError = "";
+			try {
+				const id = this.newBoard.id;
+				await sendJSON(`/api/v1/boards/${encodeURIComponent(id)}`, "PUT", {
+					board_name: this.newBoard.name,
+					status: this.newBoard.status,
+				});
+				await this.loadBoards();
+				this.boardId = id;
+				this.scoreWrite.boardId = id;
+				writeStored(BOARD_KEY, id);
+				this.offset = 0;
+				await this.refresh();
+				this.writeMessage = `created board ${id}`;
+				this.newBoard = { id: "", name: "", status: "active" };
+			} catch (err) {
+				this.writeError = String(err.message ?? err);
+			} finally {
+				this.writeBusy = false;
+			}
+		},
+
+		async createPlayer() {
+			this.writeBusy = true;
+			this.writeMessage = "";
+			this.writeError = "";
+			try {
+				const name = this.newPlayerName;
+				const data = await sendJSON("/api/v1/players", "POST", { player_name: name });
+				this.scoreWrite.playerId = data.player_id;
+				this.writeMessage = `created ${name} - ${data.player_id}`;
+				this.newPlayerName = "";
+			} catch (err) {
+				this.writeError = String(err.message ?? err);
+			} finally {
+				this.writeBusy = false;
+			}
+		},
+
+		async writeScore() {
+			this.writeBusy = true;
+			this.writeMessage = "";
+			this.writeError = "";
+			try {
+				const board = encodeURIComponent(this.scoreWrite.boardId);
+				const player = encodeURIComponent(this.scoreWrite.playerId);
+				const increment = this.scoreWrite.operation === "increment";
+				const suffix = increment ? "/increment" : "";
+				const method = increment ? "POST" : "PUT";
+				const body = increment
+					? { amount: this.scoreWrite.amount }
+					: { player_score: this.scoreWrite.amount };
+				await sendJSON(`/api/v1/boards/${board}/scores/${player}${suffix}`, method, body);
+				this.writeMessage = `${this.scoreWrite.operation} score on ${this.scoreWrite.boardId}`;
+				await Promise.all([this.refresh(), this.pollEvents()]);
+			} catch (err) {
+				this.writeError = String(err.message ?? err);
+			} finally {
+				this.writeBusy = false;
+			}
+		},
+
+		// Rows per page changed, so the current offset points into a different page. Going back
+		// to the top is predictable; trying to keep a row in view is not worth the arithmetic.
+		async setPageSize() {
+			writeStored(PAGE_SIZE_KEY, this.limit);
+			this.offset = 0;
+			await this.refresh();
+		},
+
+		async prevPage() {
+			this.offset = Math.max(0, this.offset - this.limit);
+			await this.refresh();
+		},
+
+		async nextPage() {
+			this.offset += this.limit;
+			await this.refresh();
+		},
+
+		// /events is forward-only and `after` is required, so "0-0" would replay the whole ledger
+		// just to reach the tail - there is no reverse order and no latest-N form. Stream ids
+		// are <unix millis>-<sequence> and the endpoint only validates that shape, so a cursor
+		// built from the clock reads as "from now on". The boundary is only as accurate as this
+		// browser's clock agrees with the redis one; both are on this host.
+		//
+		// A stored cursor carries its own age in that millisecond half. Resuming a recent one
+		// closes the gap a reload would otherwise leave; resuming a days-old one would crawl the
+		// backlog a page per tick, so anything staler than TICKER_RESUME_MS starts at the tail.
+		async restoreTicker() {
+			const cursor = readStored(CURSOR_KEY, "");
+			const stored = readStored(EVENTS_KEY, []);
+			const storedEvents = Array.isArray(stored) ? stored.slice(0, TICKER_MAX) : [];
+			const millis = Number.parseInt(cursor, 10);
+			const fresh = Number.isFinite(millis) && Date.now() - millis < TICKER_RESUME_MS;
+
+			if (!fresh) {
+				if (Number.isFinite(millis) && !(await this.ledgerContinuesFrom(millis))) {
+					this.eventCursor = `${Date.now()}-0`;
+					this.events = [];
+					localStorage.removeItem(CURSOR_KEY);
+					localStorage.removeItem(EVENTS_KEY);
+					return;
+				}
+				this.eventCursor = `${Date.now()}-0`;
+				this.events = storedEvents;
+				localStorage.removeItem(CURSOR_KEY);
+				return;
+			}
+
+			if (!(await this.ledgerContinuesFrom(millis))) {
+				this.eventCursor = `${Date.now()}-0`;
+				this.events = [];
+				localStorage.removeItem(CURSOR_KEY);
+				localStorage.removeItem(EVENTS_KEY);
+				return;
+			}
+
+			this.eventCursor = cursor;
+			this.events = storedEvents;
+		},
+
+		// Stored rows are only meaningful if the ledger they came from is still the same one.
+		// A flushed (or otherwise reset) redis breaks that silently: the cursor keeps working,
+		// no request fails, and the page happily shows events that exist nowhere any more.
+		// The head of the feed settles it - an empty ledger has nothing to resume, and a head
+		// newer than where we stopped means the stream restarted underneath us.
+		async ledgerContinuesFrom(cursorMillis) {
+			try {
+				const data = await getJSON("/api/v1/events?after=0-0&limit=1");
+				if (data.events.length === 0) {
+					return false;
+				}
+				return Number.parseInt(data.events[0].event_id, 10) <= cursorMillis;
+			} catch {
+				// A probe that could not run is not evidence of a reset, so keep what we have
+				// rather than discarding rows over a transient failure.
+				return true;
+			}
+		},
+
+		async pollEvents() {
+			try {
+				const after = encodeURIComponent(this.eventCursor);
+				const data = await getJSON(`/api/v1/events?after=${after}&limit=${EVENT_LIMIT}`);
+				this.tickerError = "";
+				if (data.events.length === 0) {
+					return; // next_after echoes the input cursor, so there is nothing to advance
+				}
+
+				const names = await Promise.all(data.events.map(e => playerName(e.player_id)));
+
+				// The feed is oldest first; the ticker reads newest first.
+				const fresh = data.events
+					.map((e, i) => ({ ...e, player_name: names[i] }))
+					.reverse();
+
+				// A burst larger than EVENT_LIMIT is not lost: the cursor advances one page per
+				// tick until the feed catches up.
+				this.eventCursor = data.next_after;
+				this.events = [...fresh, ...this.events].slice(0, TICKER_MAX);
+				writeStored(CURSOR_KEY, this.eventCursor);
+				writeStored(EVENTS_KEY, this.events);
+			} catch (err) {
+				// Kept apart from `error`: a failing ticker must not blank out the board's own
+				// status line, and vice versa.
+				this.tickerError = String(err.message ?? err);
+			}
+		},
+
+		// Events carry board_id only. The board list is already loaded for the picker, so this
+		// costs no request; an event on a board not in the list falls back to the raw id.
+		boardName(boardId) {
+			return this.boards.find(b => b.board_id === boardId)?.board_name ?? boardId;
+		},
+
+		// The ticker prints the slug next to the name, but boardName falls back to the slug for
+		// a board the picker does not know, and printing it twice would read as a bug.
+		boardLabel(boardId) {
+			const name = this.boardName(boardId);
+			return name === boardId ? "" : name;
+		},
+
+		eventAmount(event) {
+			if (event.type === "set") {
+				return `= ${event.amount}`;
+			}
+			return event.amount >= 0 ? `+${event.amount}` : String(event.amount);
+		},
+
+		// Full UTC timestamps keep history and the live feed comparable. Milliseconds matter
+		// because the ledger orders events by them.
+		eventTimestamp(event) {
+			return new Date(event.created_at).toISOString().replace("T", " ").slice(0, 23);
+		},
+
+		fetchPage(offset) {
+			const board = encodeURIComponent(this.boardId);
+			return getJSON(`/api/v1/boards/${board}/scores?limit=${this.limit}&offset=${offset}`);
 		},
 
 		async refresh() {
@@ -82,8 +483,17 @@ document.addEventListener("alpine:init", () => {
 				return;
 			}
 			try {
-				const board = encodeURIComponent(this.boardId);
-				const data = await getJSON(`/api/v1/boards/${board}/scores?limit=${PAGE_LIMIT}`);
+				let data = await this.fetchPage(this.offset);
+
+				// A board can shrink under the poll (or under a projection rebuild) and leave
+				// the offset past the end: the API answers an empty page while still reporting
+				// the real total. Snap to the last page that has rows rather than showing an
+				// empty table next to a live prev button.
+				if (data.scores.length === 0 && this.offset > 0 && data.total > 0) {
+					this.offset = (Math.ceil(data.total / this.limit) - 1) * this.limit;
+					data = await this.fetchPage(this.offset);
+				}
+
 				const names = await Promise.all(data.scores.map(r => playerName(r.player_id)));
 
 				// One assignment after every name resolved, so the table never renders a

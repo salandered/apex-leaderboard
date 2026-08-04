@@ -32,6 +32,7 @@
 			--control-bg: #fbf7ee;
 			--control-border: #d9cbb0;
 			--error: #a4341f;
+			--success: #397847;
 		}
 
 		:root[data-theme="dark"] {
@@ -43,6 +44,7 @@
 			--control-bg: #2b2620;
 			--control-border: #453d32;
 			--error: #e08b73;
+			--success: #83bd8a;
 		}
 
 		html {
@@ -52,11 +54,19 @@
 
 		body {
 			font-family: system-ui, sans-serif;
-			max-width: 50rem;
+			max-width: 72rem;
 			margin: 2rem auto;
 			padding: 0 1rem;
 			background: var(--bg); /* propagates from body to the whole canvas */
 			color: var(--fg);
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 19rem;
+			column-gap: 2rem;
+			align-items: start;
+		}
+
+		.viewer {
+			min-width: 0;
 		}
 
 		header {
@@ -66,13 +76,46 @@
 			flex-wrap: wrap;
 		}
 
+		.board-info {
+			display: flex;
+			align-items: baseline;
+			gap: 0.75rem;
+			min-height: 1.75rem;
+			margin-top: 0.5rem;
+			color: var(--muted);
+			font-size: 0.8rem;
+		}
+
+		.board-info button {
+			margin-left: auto;
+		}
+
+		.board-status.active {
+			color: var(--success);
+		}
+
+		.board-status.closed {
+			color: var(--error);
+		}
+
 		h1 {
 			font-size: 1.25rem;
 			margin: 0;
+			cursor: pointer;
+			user-select: none;
+		}
+
+		h1[data-color="vibrant-orange"] {
+			color: #f47a33;
+		}
+
+		h1[data-color="soft-peach"] {
+			color: #fad8c5;
 		}
 
 		select,
-		.toggle {
+		input,
+		button {
 			font: inherit;
 			padding: 0.2rem;
 			background: var(--control-bg);
@@ -81,11 +124,19 @@
 			border-radius: 3px;
 		}
 
+		button {
+			cursor: pointer;
+			padding: 0.2rem 0.6rem;
+			line-height: 1;
+		}
+
+		button:disabled {
+			color: var(--faint);
+			cursor: default;
+		}
+
 		.toggle {
 			margin-left: auto;
-			cursor: pointer;
-			padding: 0.2rem 0.5rem;
-			line-height: 1;
 		}
 
 		.meta {
@@ -107,7 +158,12 @@
 		}
 
 		th:first-child {
-			width: 3.5rem;
+			width: 2.5rem;
+		}
+
+		th:first-child,
+		td:first-child {
+			padding-left: 0;
 		}
 
 		th:last-child {
@@ -136,23 +192,275 @@
 			color: var(--faint);
 			font-size: 0.8rem;
 		}
+
+		.player-row {
+			cursor: pointer;
+		}
+
+		.player-row:hover,
+		.player-row.selected {
+			background: var(--control-bg);
+		}
+
+		.pager {
+			display: flex;
+			align-items: center;
+			gap: 0.75rem;
+			margin: 0.75rem 0;
+			color: var(--muted);
+			font-size: 0.85rem;
+		}
+
+		/* pushed to the right edge, like the theme toggle in the header */
+		.pager label {
+			margin-left: auto;
+			display: flex;
+			align-items: center;
+			gap: 0.4rem;
+		}
+
+		.history {
+			margin-top: 1.5rem;
+			padding-top: 0.75rem;
+			border-top: 1px solid var(--line);
+		}
+
+		.history h2 {
+			display: flex;
+			align-items: baseline;
+			gap: 0.5rem;
+			font-size: 0.8rem;
+			font-weight: normal;
+			text-transform: uppercase;
+			color: var(--muted);
+			margin: 0 0 0.25rem;
+		}
+
+		.history h2 button {
+			margin-left: auto;
+			text-transform: none;
+		}
+
+		.history ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			font-size: 0.85rem;
+		}
+
+		.history li {
+			display: grid;
+			grid-template-columns: 11rem 1fr 6rem;
+			gap: 0.75rem;
+			padding: 0.35rem 0;
+			border-bottom: 1px solid var(--line);
+		}
+
+		.history-head {
+			display: grid;
+			grid-template-columns: 11rem 1fr 6rem;
+			gap: 0.75rem;
+			padding: 0.35rem 0;
+			border-bottom: 1px solid var(--line);
+			color: var(--muted);
+			font-size: 0.75rem;
+			font-weight: bold;
+			text-transform: uppercase;
+		}
+
+		.history-head span:last-child {
+			text-align: right;
+		}
+
+		.ticker {
+			margin-top: 2.5rem;
+		}
+
+		.ticker h2 {
+			font-size: 0.8rem;
+			font-weight: normal;
+			text-transform: uppercase;
+			color: var(--muted);
+			margin: 0 0 0.25rem;
+		}
+
+		.ticker ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			font-size: 0.85rem;
+		}
+
+		.ticker-head {
+			display: grid;
+			grid-template-columns: 11rem minmax(0, 16rem) 5rem 6rem minmax(0, 1fr);
+			gap: 0.6rem;
+			align-items: baseline;
+			padding: 0.35rem 0;
+			border-bottom: 1px solid var(--line);
+			color: var(--muted);
+			font-size: 0.75rem;
+			font-weight: bold;
+			text-transform: uppercase;
+		}
+
+		.ticker li {
+			display: grid;
+			grid-template-columns: 11rem minmax(0, 16rem) 5rem 6rem minmax(0, 1fr);
+			gap: 0.6rem;
+			align-items: baseline;
+			padding: 0.35rem 0;
+			border-bottom: 1px solid var(--line);
+			/*
+				x-for keys on event_id, so alpine reuses the existing rows and only builds nodes
+				for genuinely new events - which is what keeps this from replaying on every poll.
+			*/
+			animation: ticker-in 0.25s ease-out;
+		}
+
+		@keyframes ticker-in {
+			from {
+				opacity: 0;
+				transform: translateY(-0.3rem);
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.ticker li {
+				animation: none;
+			}
+		}
+
+		.ts {
+			color: var(--faint);
+			font-variant-numeric: tabular-nums;
+		}
+
+		.op {
+			color: var(--muted);
+		}
+
+		.amount {
+			text-align: right;
+			font-variant-numeric: tabular-nums;
+		}
+
+		.on {
+			color: var(--muted);
+			text-align: right;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.write-panel {
+			grid-column: 2;
+			grid-row: 1;
+			position: sticky;
+			top: 2rem;
+			border-left: 1px solid var(--line);
+			padding-left: 1.5rem;
+		}
+
+		.write-panel h2 {
+			font-size: 1rem;
+			margin: 0;
+		}
+
+		.write-panel h3 {
+			font-size: 0.8rem;
+			font-weight: normal;
+			text-transform: uppercase;
+			color: var(--muted);
+			margin: 0 0 0.65rem;
+		}
+
+		.write-panel section {
+			border-top: 1px solid var(--line);
+			margin-top: 1rem;
+			padding-top: 1rem;
+		}
+
+		.write-panel form {
+			display: grid;
+			gap: 0.6rem;
+		}
+
+		.write-panel label {
+			display: grid;
+			gap: 0.2rem;
+			color: var(--muted);
+			font-size: 0.8rem;
+		}
+
+		.write-panel input,
+		.write-panel select {
+			box-sizing: border-box;
+			width: 100%;
+			padding: 0.35rem 0.45rem;
+		}
+
+		.write-panel button {
+			justify-self: start;
+			margin-top: 0.15rem;
+			padding: 0.4rem 0.7rem;
+		}
+
+		.write-result {
+			font-size: 0.85rem;
+			color: var(--muted);
+			overflow-wrap: anywhere;
+		}
+
+		.write-feedback {
+			min-height: 2.5rem;
+		}
+
+		.write-feedback p {
+			margin: 0.65rem 0 0;
+		}
+
+		@media (max-width: 55rem) {
+			body {
+				grid-template-columns: 1fr;
+			}
+
+			.write-panel {
+				grid-column: 1;
+				grid-row: auto;
+				position: static;
+				border-left: 0;
+				border-top: 1px solid var(--line);
+				padding: 1.5rem 0 0;
+			}
+		}
 	</style>
 </head>
 
 <body x-data="leaderboard">
+	<main class="viewer">
 	<header>
-		<h1>apex leaderboard</h1>
+		<h1 :data-color="brandColor" @click="cycleBrandColor()" title="cycle title color">apex leaderboard</h1>
 		<select x-model="boardId" @change="selectBoard()">
 			<template x-for="b in boards" :key="b.board_id">
-				<option :value="b.board_id" x-text="`${b.board_name} (${b.status})`"></option>
+				<option :value="b.board_id" x-text="`${b.board_name} - ${b.board_id}`"></option>
 			</template>
 		</select>
 		<button class="toggle" @click="toggleTheme()" x-text="theme === 'dark' ? '☀' : '☾'"
 			:title="theme === 'dark' ? 'switch to light' : 'switch to dark'"></button>
 	</header>
 
+	<div class="board-info" x-show="selectedBoard">
+		<span class="id" x-text="selectedBoard?.board_id"></span>
+		<span class="board-status" :class="selectedBoard?.status" x-text="selectedBoard?.status"></span>
+		<span x-text="boardCreatedLabel"></span>
+		<span class="error" x-show="boardActionError" x-text="boardActionError"></span>
+		<button @click="toggleBoard()" :disabled="boardBusy"
+			x-text="selectedBoard?.status === 'closed' ? 'open board' : 'close board'"></button>
+	</div>
+
 	<p class="meta">
-		<span x-text="`${total} players`"></span>
+		<span x-text="rangeLabel"></span>
 		<span x-text="` - auto updates every ${pollSeconds}s`"></span>
 		<span class="error" x-show="error" x-text="error"></span>
 	</p>
@@ -167,7 +475,8 @@
 		</thead>
 		<tbody>
 			<template x-for="row in rows" :key="row.player_id">
-				<tr>
+				<tr class="player-row" :class="{ selected: historyPlayerId === row.player_id }"
+					@click="loadHistory(row)">
 					<td class="num" x-text="row.rank"></td>
 					<td>
 						<span x-text="row.player_name"></span>
@@ -183,6 +492,151 @@
 			</template>
 		</tbody>
 	</table>
+
+	<nav class="pager" x-show="total > 0">
+		<button @click="prevPage()" :disabled="!hasPrev">prev</button>
+		<button @click="nextPage()" :disabled="!hasNext">next</button>
+		<span x-text="pageLabel"></span>
+		<label>
+			rows
+			<select x-model.number="limit" @change="setPageSize()">
+				<option value="10">10</option>
+				<option value="25">25</option>
+				<option value="50">50</option>
+				<option value="100">100</option>
+			</select>
+		</label>
+	</nav>
+
+	<section class="history" x-show="historyPlayerId">
+		<h2>
+			history - <span x-text="historyPlayerName"></span>
+			<button @click="clearHistory()">close</button>
+		</h2>
+		<p class="meta" x-show="historyLoading">loading...</p>
+		<p class="error" x-show="historyError" x-text="historyError"></p>
+		<div class="history-head" x-show="!historyLoading && !historyError">
+			<span>time (UTC)</span>
+			<span>operation</span>
+			<span>amount</span>
+		</div>
+		<ul x-show="!historyLoading && !historyError">
+			<template x-for="e in historyEvents" :key="e.event_id">
+				<li>
+					<span class="ts" x-text="eventTimestamp(e)"></span>
+					<span x-text="e.type"></span>
+					<span class="amount" x-text="eventAmount(e)"></span>
+				</li>
+			</template>
+			<template x-if="historyEvents.length === 0">
+				<li class="meta">no score events</li>
+			</template>
+		</ul>
+	</section>
+
+	<section class="ticker">
+		<h2>
+			live ledger - all boards
+			<span class="error" x-show="tickerError" x-text="tickerError"></span>
+		</h2>
+		<div class="ticker-head">
+			<span class="ts">time (UTC)</span>
+			<span>player</span>
+			<span class="op">operation</span>
+			<span class="amount">amount</span>
+			<span class="on">board</span>
+		</div>
+		<ul>
+			<template x-for="e in events" :key="e.event_id">
+				<li>
+					<span class="ts" x-text="eventTimestamp(e)"></span>
+					<span x-text="e.player_name"></span>
+					<span class="op" x-text="e.type"></span>
+					<span class="amount" x-text="eventAmount(e)"></span>
+					<span class="on">
+						<span x-text="boardLabel(e.board_id)"></span>
+						<span class="id" x-text="e.board_id"></span>
+					</span>
+				</li>
+			</template>
+			<template x-if="events.length === 0">
+				<li class="meta">waiting for score events...</li>
+			</template>
+		</ul>
+	</section>
+	</main>
+
+	<aside class="write-panel">
+		<h2>write</h2>
+		<div class="write-feedback">
+			<p class="write-result" x-show="writeMessage" x-text="writeMessage"></p>
+			<p class="error" x-show="writeError" x-text="writeError"></p>
+		</div>
+
+		<section>
+			<h3>create board</h3>
+			<form @submit.prevent="createBoard()">
+				<label>
+					id
+					<input x-model.trim="newBoard.id" required placeholder="weekly-race">
+				</label>
+				<label>
+					name
+					<input x-model.trim="newBoard.name" required placeholder="Weekly race">
+				</label>
+				<label>
+					status
+					<select x-model="newBoard.status">
+						<option value="active">active</option>
+						<option value="closed">closed</option>
+					</select>
+				</label>
+				<button :disabled="writeBusy">create board</button>
+			</form>
+		</section>
+
+		<section>
+			<h3>create player</h3>
+			<form @submit.prevent="createPlayer()">
+				<label>
+					name
+					<input x-model.trim="newPlayerName" required placeholder="alice">
+				</label>
+				<button :disabled="writeBusy">create player</button>
+			</form>
+		</section>
+
+		<section>
+			<h3>add score</h3>
+			<form @submit.prevent="writeScore()">
+				<label>
+					board
+					<select x-model="scoreWrite.boardId" required>
+						<template x-for="b in boards" :key="b.board_id">
+							<option :value="b.board_id" x-text="b.board_name"></option>
+						</template>
+					</select>
+				</label>
+				<label>
+					player id
+					<input x-model.trim="scoreWrite.playerId" required placeholder="uuid">
+				</label>
+				<label>
+					operation
+					<select x-model="scoreWrite.operation">
+						<option value="set">set</option>
+						<option value="increment">increment</option>
+					</select>
+				</label>
+				<label>
+					amount
+					<input type="number" x-model.number="scoreWrite.amount" min="-10000000000000"
+						max="10000000000000" step="1" required>
+				</label>
+				<button :disabled="writeBusy">apply score</button>
+			</form>
+		</section>
+	</aside>
 </body>
 
 </html>
