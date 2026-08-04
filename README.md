@@ -4,11 +4,14 @@
 - [API Spec](#api-spec)
 - [🛠️ Development](#️-development)
 	- [Running the Server](#running-the-server)
+	- [Web UI](#web-ui)
 	- [Configuration](#configuration)
 	- [API Walk](#api-walk)
 	- [Run Tests](#run-tests)
 	- [Compile](#compile)
 - [Misc](#misc)
+
+---
 
 ![alt text](logo.png)
 
@@ -27,7 +30,7 @@ More details in [docs/architecture.md](docs/architecture.md)
 You will only need [Docker](https://docs.docker.com/get-docker/). Run the app:
 
 ```bash
-docker compose up --build
+docker compose up --build redis app
 ```
 
 Make requests:
@@ -97,10 +100,13 @@ curl http://localhost:8090/api/v1/boards
 **Everything in Docker (app + Redis)**
 
 ```bash
-docker compose up -d --build   # app on :8090, Redis on 127.0.0.1:6379 (data persisted in a volume)
-docker compose logs -f app     # follow the app logs
-docker compose down            # stop the stack (add -v to wipe Redis data)
+docker compose up -d --build redis app   # data persisted in a volume
+docker compose logs -f app               # follow the app logs
+docker compose down                      # stop the stack
 ```
+
+The API is on `http://localhost:8090`, Redis on `127.0.0.1:6379`. Both are published on loopback
+only.
 
 **Locally with Go (Redis in Docker)**
 
@@ -109,13 +115,28 @@ docker compose up -d redis # or: docker run -p 6379:6379 redis:8.8.0-alpine
 go run .
 ```
 
+### Web UI
+
+Optional, not needed for anything above and does not affect anything.
+A static page for looking at the leaderboards, served by Caddy:
+
+```bash
+docker compose up -d web   # starts redis and app too
+```
+
+Then open `http://localhost:8089`.
+
+Currently works but WIP.
+
 ### Configuration
 
-All envs are optional, but a set and invalid one will abort the start up:
+All envs are optional, but a set and invalid one will abort the start up.
+`UI_PORT` is the exception: it is read by `docker compose`, not by the app.
 
 | Variable           | Values                                                           | Default                                                        | Description                                                                                                       |
 | ------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `PORT`             | `1`..`65535`                                                     | `8090`                                                         | HTTP listen port.                                                                                                 |
+| `UI_PORT`          | `1`..`65535`                                                     | `8089`                                                         | Compose only: host port for the `web` service (UI + API proxy).                                                   |
 | `REDIS_URL`        | Redis connection URL                                             | `redis://localhost:6379/0`<br> compose: `redis://redis:6379/0` | Storage url.                                                                                                      |
 | `SHUTDOWN_TIMEOUT` | Go duration, e.g. `30s`                                          | `10s`                                                          | Max time to gracefully stop in-flight requests on shutdown. Keep below the deployment's termination grace period. |
 | `LOG_LEVEL`        | `debug` `info` `warn` `error`                                    | `info`                                                         | Minimum log level being printed.                                                                                  |
@@ -180,4 +201,6 @@ go build -o apex .
 
 ## Misc
 
-No connection with the Apex Legends game whatsoever.
+No connection with the game Apex Legends whatsoever.
+
+Apex Legends™ is a trademark of Electronic Arts Inc.

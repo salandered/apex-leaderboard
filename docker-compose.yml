@@ -5,7 +5,7 @@ services:
       args:
         VERSION: "${VERSION:-dev}"
     ports:
-      - "${PORT:-8090}:${PORT:-8090}"
+      - "127.0.0.1:${PORT:-8090}:${PORT:-8090}" # loopback only
     environment:
       PORT: "${PORT:-8090}"
       REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
@@ -16,6 +16,19 @@ services:
       LOG_TIME: "${LOG_TIME:-dt-milli}"
     depends_on:
       - redis
+
+  web:
+    image: caddy:2-alpine
+    ports:
+      # entry point for a browser; 8080 is caddy's port
+      - "127.0.0.1:${UI_PORT:-8089}:8080"
+    environment:
+      APP_PORT: "${PORT:-8090}" # used in Caddyfile
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv:ro # bind mount
+    depends_on:
+      - app
 
   redis:
     image: redis:8.8.0-alpine

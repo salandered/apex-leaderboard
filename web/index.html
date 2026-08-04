@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>apex leaderboard</title>
+
+	<!--
+		Deliberately NOT deferred, and deliberately not in app.js: this has to set the attribute
+		before the first paint, otherwise every load flashes the wrong theme. That also means it
+		runs before <body> exists, which is why the attribute goes on <html>.
+	-->
+	<script>
+		(() => {
+			const stored = localStorage.getItem("theme");
+			const dark = stored ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+			document.documentElement.dataset.theme = dark;
+		})();
+	</script>
+
+	<!-- app.js first: it registers the alpine:init listener that alpine then dispatches -->
+	<script defer src="/app.js"></script>
+	<script defer src="/vendor/alpine-3.15.12.min.js"></script>
+	<style>
+		:root {
+			--bg: #f6efe1; /* sepia */
+			--fg: #3a3229;
+			--muted: #8a7c66;
+			--faint: #a5967d;
+			--line: #e3d7bf;
+			--control-bg: #fbf7ee;
+			--control-border: #d9cbb0;
+			--error: #a4341f;
+		}
+
+		:root[data-theme="dark"] {
+			--bg: #211d18;
+			--fg: #e6ded0;
+			--muted: #9c8f79;
+			--faint: #7d7161;
+			--line: #3a332a;
+			--control-bg: #2b2620;
+			--control-border: #453d32;
+			--error: #e08b73;
+		}
+
+		html {
+			/* reserve the scrollbar track always, so a short board does not shift the page */
+			scrollbar-gutter: stable;
+		}
+
+		body {
+			font-family: system-ui, sans-serif;
+			max-width: 50rem;
+			margin: 2rem auto;
+			padding: 0 1rem;
+			background: var(--bg); /* propagates from body to the whole canvas */
+			color: var(--fg);
+		}
+
+		header {
+			display: flex;
+			align-items: baseline;
+			gap: 1rem;
+			flex-wrap: wrap;
+		}
+
+		h1 {
+			font-size: 1.25rem;
+			margin: 0;
+		}
+
+		select,
+		.toggle {
+			font: inherit;
+			padding: 0.2rem;
+			background: var(--control-bg);
+			color: inherit;
+			border: 1px solid var(--control-border);
+			border-radius: 3px;
+		}
+
+		.toggle {
+			margin-left: auto;
+			cursor: pointer;
+			padding: 0.2rem 0.5rem;
+			line-height: 1;
+		}
+
+		.meta {
+			color: var(--muted);
+			font-size: 0.85rem;
+			margin: 0.75rem 0;
+		}
+
+		.error {
+			color: var(--error);
+			font-size: 0.9rem;
+		}
+
+		table {
+			border-collapse: collapse;
+			width: 100%;
+			/* columns sized from the header row only, not from the widest cell content */
+			table-layout: fixed;
+		}
+
+		th:first-child {
+			width: 3.5rem;
+		}
+
+		th:last-child {
+			width: 7rem;
+		}
+
+		th,
+		td {
+			text-align: left;
+			padding: 0.4rem 0.6rem;
+			border-bottom: 1px solid var(--line);
+		}
+
+		th {
+			font-size: 0.8rem;
+			text-transform: uppercase;
+			color: var(--muted);
+		}
+
+		.num {
+			text-align: right;
+			font-variant-numeric: tabular-nums;
+		}
+
+		.id {
+			color: var(--faint);
+			font-size: 0.8rem;
+		}
+	</style>
+</head>
+
+<body x-data="leaderboard">
+	<header>
+		<h1>apex leaderboard</h1>
+		<select x-model="boardId" @change="selectBoard()">
+			<template x-for="b in boards" :key="b.board_id">
+				<option :value="b.board_id" x-text="`${b.board_name} (${b.status})`"></option>
+			</template>
+		</select>
+		<button class="toggle" @click="toggleTheme()" x-text="theme === 'dark' ? '☀' : '☾'"
+			:title="theme === 'dark' ? 'switch to light' : 'switch to dark'"></button>
+	</header>
+
+	<p class="meta">
+		<span x-text="`${total} players`"></span>
+		<span x-text="` - auto updates every ${pollSeconds}s`"></span>
+		<span class="error" x-show="error" x-text="error"></span>
+	</p>
+
+	<table>
+		<thead>
+			<tr>
+				<th class="num">#</th>
+				<th>player</th>
+				<th class="num">score</th>
+			</tr>
+		</thead>
+		<tbody>
+			<template x-for="row in rows" :key="row.player_id">
+				<tr>
+					<td class="num" x-text="row.rank"></td>
+					<td>
+						<span x-text="row.player_name"></span>
+						<span class="id" x-text="row.player_id"></span>
+					</td>
+					<td class="num" x-text="row.score"></td>
+				</tr>
+			</template>
+			<template x-if="rows.length === 0 && !error">
+				<tr>
+					<td colspan="3" class="meta">no scores yet</td>
+				</tr>
+			</template>
+		</tbody>
+	</table>
+</body>
+
+</html>

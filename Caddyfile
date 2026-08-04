@@ -1,0 +1,9 @@
+:8080 {
+	handle /api/v1/* {
+		reverse_proxy app:{$APP_PORT:8090} # proxies /api/v1/* to app
+	}
+	handle {
+		root * /srv # serves static files from /srv (mounted /web)
+		file_server
+	}
+}
