@@ -226,9 +226,10 @@ func (s *StorageSuite) TestReadsWorkOnClosedBoard() {
 	s.Require().Equal(int64(1), total)
 	s.Require().Equal(int64(10), standing.Score)
 
-	history, err := s.storage.PlayerHistory(ctx, playerId, "weekly", 0)
+	page, total, err := s.storage.ListStandings(ctx, "weekly", 10, 0)
 	s.Require().NoError(err)
-	s.Require().Len(history, 1)
+	s.Require().Equal(int64(1), total)
+	s.Require().Len(page, 1)
 }
 
 func (s *StorageSuite) TestRebuildFoldsClosedBoardEvents() {

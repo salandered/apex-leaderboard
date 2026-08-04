@@ -5,7 +5,7 @@ import (
 	"github.com/salandered/apex/player"
 )
 
-// The whole Redis keyspace of the service. Keys are never concatenated at call sites.
+// All the Redis keys. Keys should be never concatenated at call sites.
 
 // All keys live under this prefix.
 const keyPrefix = "app:"
@@ -20,11 +20,17 @@ const (
 )
 
 const (
-	boardIndexKey            = boardNS + "index"        // ZSET registry: member=board_id, score=created_at unix
-	ledgerKey                = ledgerNS + "events"      // STREAM
-	idempotencyHashKey       = ledgerNS + "idempotency" // HASH {board_id}:{player_id}:{idempotency_key} -> "entry_id|op|amount"
-	playerIdempotencyHashKey = playerNS + "idempotency" // HASH client key -> "player_id|player_name"
+	// ZSET registry: member=board_id, score=created_at unix
+	boardIndexKey = boardNS + "index"
+	// STREAM
+	ledgerKey = ledgerNS + "events"
+	// HASH {board_id}:{player_id}:{idempotency_key} -> "entry_id|op|amount"
+	idempotencyHashKey = ledgerNS + "idempotency"
+	// HASH client key -> "player_id|player_name"
+	playerIdempotencyHashKey = playerNS + "idempotency"
 )
+
+const playerHistoryNS = viewNS + "player:history:"
 
 func playerProfileKey(id player.ID) string { return playerNS + "profile:" + string(id) }
 
@@ -35,6 +41,11 @@ func leaderboardKey(id board.ID) string { return viewNS + "leaderboard:" + strin
 
 // per-board ZSET scratch: transient rebuild target for VerifyProjection
 func boardVerifyKey(id board.ID) string { return adminNS + "temp:verify:" + string(id) }
+
+// per-(player, board) ZSET projection (member=event id, score = millis * 4096 + seq)
+func playerHistoryKey(playerId player.ID, boardId board.ID) string {
+	return playerHistoryNS + string(playerId) + ":" + string(boardId)
+}
 
 // per-day ZSET projection: member=player_id, score=event count. date is UTC YYYY-MM-DD.
 func activityDailyKey(date string) string { return viewNS + "activity:daily:" + date }

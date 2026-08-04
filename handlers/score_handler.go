@@ -213,7 +213,7 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	limit, err := parseIntQuery(req, limitQuery, defaultHistoryLimit, 1, 0)
+	limit, err := parseIntQuery(req, limitQuery, defaultHistoryLimit, 1, maxHistoryLimit)
 	if err != nil {
 		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return

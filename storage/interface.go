@@ -40,7 +40,7 @@ type ScoreRepo interface {
 	// Reconstructs one page at an exclusive UTC cutoff without reading the live projection.
 	ListStandingsAsOf(ctx context.Context, boardId board.ID, before time.Time, limit, offset int64) ([]Standing, int64, error)
 
-	// Reads the ledger (newest first) for one player. limit <= 0 means no cap.
+	// Reads one page of the ledger (newest first) for one player.
 	PlayerHistory(ctx context.Context, playerId player.ID, boardId board.ID, limit int64) ([]ledger.Event, error)
 }
 

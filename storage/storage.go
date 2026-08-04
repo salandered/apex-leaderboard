@@ -39,6 +39,13 @@ func NewStorage(client *redis.Client) Storage {
 	return &redisStorage{client: client}
 }
 
+func (rs *redisStorage) Ping(ctx context.Context) error {
+	if err := rs.client.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("storage ping: %w", err)
+	}
+	return nil
+}
+
 // Field keys stored in each ledger:events entry.
 // Must match the Lua write script.
 const (

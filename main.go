@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -72,21 +73,33 @@ func main() {
 
 	// A second client: the consumer's blocking XREAD holds its connection,
 	// should not interfere with the requestClient.
-	ledgerClient, err := apexredis.New(redisCfg, "consumer")
+	consumerClient, err := apexredis.New(redisCfg, "consumer")
 	if err != nil {
 		slog.Error("ledger redis client init failed", "error", err)
 		os.Exit(1)
 	}
 
 	store := storage.NewStorage(requestClient)
-	dailyActivityConsumer := consumer.NewDailyActivityConsumer(storage.NewActivityStore(ledgerClient))
-	consumerDone := make(chan struct{})
+
+	// Every view derived from the ledger is its own consumer.
+	// Each one blocks on XREAD, but only while idle.
+	// Sharing one client is ok.
+	consumers := []*consumer.Consumer{
+		consumer.NewDailyActivityConsumer(storage.NewActivityStore(consumerClient)),
+		consumer.NewPlayerHistoryConsumer(storage.NewPlayerHistoryStore(consumerClient)),
+	}
+	consumersDone := make(chan struct{})
 	go func() {
-		defer close(consumerDone)
-		if err := dailyActivityConsumer.Run(ctx); err != nil {
-			// Run logs its start/stop, this is the failure case only
-			slog.Error("activity consumer failed", "error", err)
+		defer close(consumersDone)
+		var wg sync.WaitGroup
+		for _, c := range consumers {
+			wg.Go(func() {
+				if err := c.Run(ctx); err != nil {
+					slog.Error("consumer failed", "error", err)
+				}
+			})
 		}
+		wg.Wait()
 	}()
 
 	err = startServer(ctx, store)
@@ -108,13 +121,14 @@ func main() {
 		slog.Error("redis client close failed", "error", err)
 	}
 
-	// the ledger pool only after the consumer actually stopped using it
+	// Close the ledger pool after all consumers stopped.
+	// Using the slowest one for decision.
 	waitFor(
-		consumerDone,
-		"activity consumer",
-		dailyActivityConsumer.MaxStopDelay()+workerStopMargin,
+		consumersDone,
+		"ledger consumers",
+		maxStopDelay(consumers)+workerStopMargin,
 	)
-	if err := ledgerClient.Close(); err != nil {
+	if err := consumerClient.Close(); err != nil {
 		slog.Error("ledger redis client close failed", "error", err)
 	}
 }
@@ -145,6 +159,14 @@ func startServer(ctx context.Context, store storage.Storage) error {
 		server.WithPort(port),
 		server.WithShutdownTimeout(shutdownTimeout),
 	)
+}
+
+func maxStopDelay(consumers []*consumer.Consumer) time.Duration {
+	var slowest time.Duration
+	for _, c := range consumers {
+		slowest = max(slowest, c.BlockDuration)
+	}
+	return slowest
 }
 
 func waitFor(done <-chan struct{}, name string, timeout time.Duration) {

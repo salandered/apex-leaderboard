@@ -19,6 +19,10 @@ import (
 // unregistered board id, used by the "board missing" cases
 const missingBoardId = board.ID("no-such-board")
 
+// Comfortably above what any fixture writes, for the cases that mean "the whole history".
+// PlayerHistory has no "no cap" limit, so a test asking for everything has to name a bound.
+const wholeHistoryLimit = 100
+
 func (s *StorageSuite) TestSetScore() {
 	ctx := s.ctx()
 
@@ -436,10 +440,11 @@ func (s *StorageSuite) TestTwoBoardsOnePlayer() {
 	s.Require().Equal(int64(105), weeklyStanding.Score)
 
 	// per-board history: the shared request ids never cross board boundaries
-	weeklyHistory, err := s.storage.PlayerHistory(ctx, playerId, board.ID("weekly"), 0)
+	s.syncPlayerHistory()
+	weeklyHistory, err := s.storage.PlayerHistory(ctx, playerId, board.ID("weekly"), wholeHistoryLimit)
 	s.Require().NoError(err)
 	s.Require().Len(weeklyHistory, 2)
-	mainHistory, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, 0)
+	mainHistory, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, wholeHistoryLimit)
 	s.Require().NoError(err)
 	s.Require().Len(mainHistory, 1)
 }
@@ -454,46 +459,102 @@ func (s *StorageSuite) TestHistory() {
 
 	s.createMainBoard()
 
-	aliceId := player.GenerateID()
-	_, err := s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: aliceId, PlayerName: "alice"}, "")
-	s.Require().NoError(err)
-	s.Require().NoError(s.storage.SetScore(ctx, aliceId, testBoardId, 5, "a1", ""))
-	s.Require().NoError(s.storage.IncrementScore(ctx, aliceId, testBoardId, 3, "a2", ""))
-	s.Require().NoError(s.storage.IncrementScore(ctx, aliceId, testBoardId, 10, "a3", ""))
+	alice := s.createPlayer("alice")
+	bob := s.createPlayer("bob")
 
-	// a second player must not leak into alice's history
-	bob := player.GenerateID()
-	_, err = s.storage.CreatePlayerProfile(ctx, &player.Profile{PlayerId: bob, PlayerName: "bob"}, "")
-	s.Require().NoError(err)
+	s.Require().NoError(s.storage.SetScore(ctx, alice, testBoardId, 5, "a1", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, alice, testBoardId, 3, "a2", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, alice, testBoardId, 10, "a3", ""))
+	// a second player on the same board must not reach alice's page
+	s.Require().NoError(s.storage.SetScore(ctx, bob, testBoardId, 99, "b1", ""))
+
+	s.syncPlayerHistory()
 
 	// all alice events, newest first
-	all, err := s.storage.PlayerHistory(ctx, aliceId, testBoardId, 0)
+	all, err := s.storage.PlayerHistory(ctx, alice, testBoardId, wholeHistoryLimit)
 	s.Require().NoError(err)
 	s.Require().Len(all, 3)
 	s.Require().Equal(ledger.EventIncrement, all[0].Type)
 	s.Require().Equal(int64(10), all[0].Amount)
 	s.Require().Equal("a3", all[0].RequestID)
 	s.Require().Equal(ledger.EventSet, all[2].Type)
-	s.Require().Equal(aliceId.String(), all[0].PlayerID)
+	s.Require().Equal(alice.String(), all[0].PlayerID)
 	s.Require().False(all[0].CreatedAt.IsZero())
 
 	// limit caps the result
-	limited, err := s.storage.PlayerHistory(ctx, aliceId, testBoardId, 2)
+	limited, err := s.storage.PlayerHistory(ctx, alice, testBoardId, 2)
 	s.Require().NoError(err)
 	s.Require().Len(limited, 2)
 	s.Require().Equal("a3", limited[0].RequestID)
 
 	// unknown player yields an empty (non-nil) slice
-	none, err := s.storage.PlayerHistory(ctx, player.GenerateID(), testBoardId, 0)
+	none, err := s.storage.PlayerHistory(ctx, player.GenerateID(), testBoardId, wholeHistoryLimit)
 	s.Require().NoError(err)
 	s.Require().Empty(none)
+}
+
+// A non-positive limit must not read as "everything": stop = limit-1 would be -1, which wraps to
+// the last element and returns the player's whole history.
+func (s *StorageSuite) TestHistoryReadsANonPositiveLimitAsAnEmptyPage() {
+	ctx := s.ctx()
+	s.createMainBoard()
+	playerId := s.createPlayer("alice")
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 5, "a1", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, testBoardId, 7, "a2", ""))
+	s.syncPlayerHistory()
+
+	for _, limit := range []int64{0, -1} {
+		events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, limit)
+		s.Require().NoError(err)
+		s.Require().Empty(events, "limit %d must not read as no cap", limit)
+	}
+}
+
+func (s *StorageSuite) TestApplyingThePlayerHistoryTwiceIsANoOp() {
+	ctx := s.ctx()
+	s.createMainBoard()
+	playerId := s.createPlayer("alice")
+	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 5, "r1", ""))
+	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, testBoardId, 7, "r2", ""))
+
+	// when
+	s.syncPlayerHistory()
+	s.syncPlayerHistory() // e.g. the crash replay
+
+	// then
+	indexed, err := s.rawClient.ZCard(ctx, playerHistoryKey(playerId, testBoardId)).Result()
+	s.Require().NoError(err)
+	s.Require().Equal(int64(2), indexed)
+}
+
+// Two events in the same millisecond differ only by the stream id's sequence half, which the
+// score has to preserve - a plain millisecond score would let the ZSET order them by member,
+// where "10" sorts before "2".
+func (s *StorageSuite) TestPlayerHistoryOrdersEventsInsideOneMillisecond() {
+	ctx := s.ctx()
+	s.createMainBoard()
+	playerId := s.createPlayer("alice")
+
+	for seq := 0; seq < 12; seq++ {
+		entryID := "1700000000000-" + strconv.Itoa(seq)
+		s.appendHistoricalEvent(entryID, ledger.EventIncrement, playerId, testBoardId, 1)
+		s.indexPlayerEvent(entryID, playerId, testBoardId)
+	}
+
+	events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, wholeHistoryLimit)
+	s.Require().NoError(err)
+	s.Require().Len(events, 12)
+	for i, event := range events {
+		expected := "1700000000000-" + strconv.Itoa(11-i) // newest first
+		s.Require().Equal(expected, event.ID)
+	}
 }
 
 func (s *StorageSuite) TestHistoryRejectsMalformedMatchingEvent() {
 	ctx := s.ctx()
 	s.createMainBoard()
 	playerId := s.createPlayer("alice")
-	s.Require().NoError(s.rawClient.XAdd(ctx, &redis.XAddArgs{
+	entryID, err := s.rawClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: ledgerKey,
 		Values: map[string]any{
 			entryFieldType:      "unknown",
@@ -502,30 +563,25 @@ func (s *StorageSuite) TestHistoryRejectsMalformedMatchingEvent() {
 			entryFieldAmount:    "5",
 			entryFieldRequestID: "broken",
 		},
-	}).Err())
+	}).Result()
+	s.Require().NoError(err)
+	s.indexPlayerEvent(entryID, playerId, testBoardId)
 
-	events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, 0)
+	events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, wholeHistoryLimit)
 
 	s.Require().ErrorIs(err, ErrInconsistent)
 	s.Require().Nil(events)
 }
 
-func (s *StorageSuite) TestHistoryIgnoresMalformedEventsOutsideRequestedScope() {
+func (s *StorageSuite) TestHistorySkipsIndexPointerWithNoLedgerEntry() {
 	ctx := s.ctx()
 	s.createMainBoard()
 	playerId := s.createPlayer("alice")
 	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 20, "r1", ""))
-	s.Require().NoError(s.rawClient.XAdd(ctx, &redis.XAddArgs{
-		Stream: ledgerKey,
-		Values: map[string]any{
-			entryFieldType:     "unknown",
-			entryFieldPlayerID: string(playerId),
-			entryFieldBoardID:  "weekly",
-			entryFieldAmount:   "not-a-number",
-		},
-	}).Err())
+	s.syncPlayerHistory()
+	s.indexPlayerEvent("1-0", playerId, testBoardId)
 
-	events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, 0)
+	events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, wholeHistoryLimit)
 
 	s.Require().NoError(err)
 	s.Require().Len(events, 1)
@@ -718,9 +774,11 @@ func (s *StorageSuite) TestPlayerHistoryRejectsFractionalLedgerAmount() {
 	ctx := s.ctx()
 	s.createMainBoard()
 	playerId := s.createPlayer("bob")
-	s.appendHistoricalEvent(
-		streamIDAt(time.UnixMilli(1)), ledger.EventSet, playerId, testBoardId, 10.5,
-	)
+	entryID := streamIDAt(time.UnixMilli(1))
+	s.appendHistoricalEvent(entryID, ledger.EventSet, playerId, testBoardId, 10.5)
+	// Rebuild would skip this entry, so the pointer is placed directly.
+	// Reachable event still fails the strict decode
+	s.indexPlayerEvent(entryID, playerId, testBoardId)
 
 	events, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, 10)
 
@@ -801,6 +859,35 @@ func (s *StorageSuite) appendHistoricalEvent(
 			entryFieldRequestID: "historical-test",
 		},
 	}).Err())
+}
+
+// The player history lags the ledger in its own consumer.
+// A test that seeds events and then reads history need to be in sync.
+// Folds the whole ledger synchronously, standing in
+// for the consumer having got there.
+func (s *StorageSuite) syncPlayerHistory() {
+	ctx := s.ctx()
+	entries, err := s.rawClient.XRange(ctx, ledgerKey, "-", "+").Result()
+	s.Require().NoError(err)
+
+	events := make([]ledger.Event, 0, len(entries))
+	for _, entry := range entries {
+		event, err := entryToEvent(entry)
+		if err != nil {
+			continue // a real consumer skips what it cannot decode
+		}
+		events = append(events, event)
+	}
+	s.Require().NoError(NewPlayerHistoryStore(s.rawClient).ApplyPlayerHistory(ctx, events))
+}
+
+// Places a pointer directly, for the cases a caught-up consumer cannot produce.
+func (s *StorageSuite) indexPlayerEvent(entryID string, playerID player.ID, boardID board.ID) {
+	score, err := streamIDScore(s.ctx(), entryID)
+	s.Require().NoError(err)
+	s.Require().NoError(s.rawClient.ZAdd(
+		s.ctx(), playerHistoryKey(playerID, boardID), redis.Z{Score: score, Member: entryID},
+	).Err())
 }
 
 func streamIDAt(timestamp time.Time) string {

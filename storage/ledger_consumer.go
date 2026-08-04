@@ -11,9 +11,8 @@ import (
 	"github.com/salandered/apex/ledger"
 )
 
-// redisLedgerConsumer is the storage every ledger consumer shares: cursor
-// tracking (consumer.CursorRepo) and batch tailing of the ledger stream
-// (consumer.LedgerReader). Embed it in a concrete consumer store.
+// redisLedgerConsumer is the storage that tracks cursor and
+// batch tails the ledger stream.
 type redisLedgerConsumer struct {
 	client *redis.Client
 }
@@ -40,6 +39,7 @@ func (s *redisLedgerConsumer) SaveCursor(
 	return nil
 }
 
+// Blocks for 'block' duration (see XREAD BLOCK)
 func (s *redisLedgerConsumer) ReadLedgerBatch(
 	ctx context.Context, after string, limit int64, block time.Duration,
 ) (consumer.LedgerBatch, error) {

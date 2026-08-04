@@ -25,6 +25,7 @@ const (
 	offsetQuery string = "offset"
 
 	defaultHistoryLimit int64 = 50  // history page size
+	maxHistoryLimit     int64 = 100 // cap on a single history page
 	defaultListLimit    int64 = 10  // leaderboard page size (top 10)
 	maxListLimit        int64 = 100 // cap on a single leaderboard page
 )

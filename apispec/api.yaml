@@ -272,10 +272,11 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Max number of events to return (positive integer)
+          description: Max number of events to return (defaults to 50)
           schema:
             type: integer
             minimum: 1
+            maximum: 100
       responses:
         "200":
           description: All ok (empty list if the player has no events on the board)

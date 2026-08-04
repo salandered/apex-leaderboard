@@ -137,29 +137,57 @@ func (rs *redisStorage) ListStandings(
 	return out, total, nil
 }
 
-// TODO we scan the whole stream (XREVRANGE + -) and filter by player_id, no pagination
+// Reads a page (limit) of entry ids from the player's index, then fetches them from ledger.
+// The index is maintained by an async consumer, so this read is eventually consistent.
+// limit <=0 produces no-op and returns a zero value.
+// Complexity is O(limit).
 func (rs *redisStorage) PlayerHistory(
 	ctx context.Context, playerId player.ID, boardId board.ID, limit int64,
 ) ([]ledger.Event, error) {
-	entries, err := rs.client.XRevRange(ctx, ledgerKey, "+", "-").Result()
-	if err != nil {
-		return nil, fmt.Errorf("storage history: %w", err)
+	if limit <= 0 {
+		slog.WarnContext(ctx, "storage history: called with a non-positive limit",
+			"component", logComponent, "player_id", playerId, "board_id", boardId, "limit", limit)
+		return []ledger.Event{}, nil
 	}
 
-	events := make([]ledger.Event, 0)
-	for _, entry := range entries {
-		if getStreamEntryValue(entry, entryFieldPlayerID) != string(playerId) ||
-			getStreamEntryValue(entry, entryFieldBoardID) != string(boardId) {
+	// rs.client.ZRevRange is deprecated
+	ids, err := rs.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key: playerHistoryKey(playerId, boardId), Start: 0, Stop: limit - 1, Rev: true,
+	}).Result()
+	if err != nil {
+		return nil, fmt.Errorf("storage history: read index: %w", err)
+	}
+	if len(ids) == 0 {
+		return []ledger.Event{}, nil
+	}
+
+	// each id resolves to at most one entry
+	pipe := rs.client.Pipeline()
+	cmds := make([]*redis.XMessageSliceCmd, len(ids))
+	for i, id := range ids {
+		cmds[i] = pipe.XRange(ctx, ledgerKey, id, id)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, fmt.Errorf("storage history: read events: %w", err)
+	}
+
+	events := make([]ledger.Event, 0, len(ids))
+	for i, cmd := range cmds {
+		entries, err := cmd.Result()
+		if err != nil {
+			return nil, fmt.Errorf("storage history: read event '%s': %w", ids[i], err)
+		}
+		if len(entries) == 0 {
+			slog.WarnContext(ctx, "player history points at a missing ledger entry",
+				"component", logComponent, "player_id", playerId,
+				"board_id", boardId, "entry_id", ids[i])
 			continue
 		}
-		event, err := entryToEvent(entry)
+		event, err := entryToEvent(entries[0])
 		if err != nil {
 			return nil, fmt.Errorf("storage history: %w", err)
 		}
 		events = append(events, event)
-		if limit > 0 && int64(len(events)) >= limit {
-			break
-		}
 	}
 	return events, nil
 }
@@ -272,7 +300,10 @@ func (rs *redisStorage) applyEvent(
 	idempotencyKey string,
 ) error {
 	result, err := applyScoreScript.Run(ctx, rs.client,
-		[]string{leaderboardKey(boardId), ledgerKey, idempotencyHashKey, playerProfileKey(playerId), boardProfileKey(boardId)},
+		[]string{
+			leaderboardKey(boardId), ledgerKey, idempotencyHashKey,
+			playerProfileKey(playerId), boardProfileKey(boardId),
+		},
 		string(etype), string(playerId), amount, requestID, string(boardId), idempotencyKey, score.Max,
 	).Slice()
 	if err != nil {

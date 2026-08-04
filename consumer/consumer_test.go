@@ -22,12 +22,15 @@ func TestConsumerBuildsDailyCountsAndStartsAtLedgerHead(t *testing.T) {
 		LastID: "3-0",
 	}}
 
+	// when
 	n, err := NewDailyActivityConsumer(store).processOnce(context.Background())
+
+	// then
 	require.NoError(t, err)
 	require.Equal(t, 3, n)
 	require.Equal(t, cursorHead, store.readAfter)
 	require.Equal(t, int64(batchCount), store.readLimit)
-	require.Equal(t, blockDuration, store.readBlock)
+	require.Equal(t, DefaultBlockDuration, store.readBlock)
 	require.Equal(t, []DailyIncrement{
 		{Date: "2026-01-15", PlayerID: "alice", Count: 1},
 		{Date: "2026-01-15", PlayerID: "bob", Count: 1},
@@ -83,18 +86,27 @@ func TestConsumerAppliesBeforeSavingCursor(t *testing.T) {
 }
 
 type fakeStore struct {
-	cursor      string
-	cursorFound bool
-	batch       LedgerBatch
-	readAfter   string
-	readLimit   int64
-	readBlock   time.Duration
-	applied     []DailyIncrement
-	appliedTTL  time.Duration
-	saveErr     error
+	cursor         string
+	cursorFound    bool
+	loadedCursorID string
+	savedCursorID  string
+	batch          LedgerBatch
+	readAfter      string
+	readLimit      int64
+	readBlock      time.Duration
+	applied        []DailyIncrement
+	appliedTTL     time.Duration
+	history        []ledger.Event
+	saveErr        error
 }
 
-func (s *fakeStore) LoadCursor(context.Context, string) (string, bool, error) {
+func (s *fakeStore) ApplyPlayerHistory(_ context.Context, events []ledger.Event) error {
+	s.history = append(s.history, events...)
+	return nil
+}
+
+func (s *fakeStore) LoadCursor(_ context.Context, consumer string) (string, bool, error) {
+	s.loadedCursorID = consumer
 	return s.cursor, s.cursorFound, nil
 }
 
@@ -115,7 +127,8 @@ func (s *fakeStore) ApplyDailyCounts(
 	return nil
 }
 
-func (s *fakeStore) SaveCursor(_ context.Context, _ string, cursor string) error {
+func (s *fakeStore) SaveCursor(_ context.Context, consumer, cursor string) error {
+	s.savedCursorID = consumer
 	if s.saveErr != nil {
 		return s.saveErr
 	}
