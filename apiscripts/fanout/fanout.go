@@ -17,8 +17,11 @@ type player struct {
 	score int64
 }
 
-// rankingsShown caps how many leaderboard rows a run prints.
-const rankingsShown = 10
+const (
+	// rankingsShown caps how many leaderboard rows a run prints.
+	rankingsShown = 10
+	errorsShown   = 20
+)
 
 func main() {
 	cfg := parseFlags()
@@ -38,13 +41,7 @@ func main() {
 	errs := runFanoutSets(rc, boardID, players, cfg.chunkSize, cfg.chunkDelay)
 
 	fmt.Printf("set %d scores in %s: failed=%d\n", len(players)-len(errs), time.Since(started), len(errs))
-	for i, err := range errs {
-		if i >= 20 {
-			fmt.Printf("... %d additional errors omitted\n", len(errs)-20)
-			break
-		}
-		fmt.Printf("error: %v\n", err)
-	}
+	apexhttp.PrintErrors(errs, errorsShown)
 	if len(errs) != 0 {
 		log.Fatalf("fan-out writes failed")
 	}
@@ -56,7 +53,7 @@ func main() {
 	verifyProjection(rc, boardID)
 
 	// rows[0] is the verified top-ranked player; persist its ledger as a run artifact.
-	history, err := apexhttp.FetchHistory(rc, boardID, rows[0].PlayerID)
+	history, err := apexhttp.FetchHistory(rc, boardID, rows[0].PlayerID, 0)
 	if err != nil {
 		log.Fatalf("top player history: %v", err)
 	}

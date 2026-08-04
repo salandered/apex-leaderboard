@@ -6,6 +6,7 @@ package apexhttp
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"strings"
@@ -22,7 +23,7 @@ func NewClient(baseURL string, maxConns int) *resty.Client {
 		IdleConnTimeout:     30 * time.Second,
 	}
 	return resty.New().
-		SetBaseURL(baseURL).
+		SetBaseURL(strings.TrimRight(baseURL, "/")).
 		SetTransport(transport).
 		SetTimeout(30 * time.Second)
 }
@@ -71,6 +72,10 @@ type ScoreEvent struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type verifyProjectionResp struct {
+	Mismatches []any `json:"mismatches"`
+}
+
 type History struct {
 	PlayerID string       `json:"player_id"`
 	Events   []ScoreEvent `json:"events"`
@@ -85,6 +90,29 @@ func ScorePath(boardID, playerID string) string {
 // repeated runs write to a fresh board instead of colliding on a fixed id.
 func SeedBoardID(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixMilli())
+}
+
+var playerNames = []string{
+	"Alice", "Bob", "Carol", "Dave", "Erin", "Frank",
+	"Grace", "Heidi", "Ivan", "Judy", "Mallory", "Steven Even", "Todd Odd",
+}
+
+// last 5 digits of the start millisecond
+var runStamp = time.Now().UnixMilli() % 100_000
+
+// A pool name, the optional tags, and the run stamp.
+// Example: "Alice-73412-smth").
+func PlayerName(i int, tags ...string) string {
+	parts := append([]string{playerNames[i%len(playerNames)]}, tags...)
+	name := fmt.Sprintf("%s-%d", strings.Join(parts, "-"), runStamp)
+	if wrap := i / len(playerNames); wrap > 0 {
+		name = fmt.Sprintf("%s-%d", name, wrap)
+	}
+	return name
+}
+
+func RandomPlayerName(tags ...string) string {
+	return PlayerName(rand.IntN(len(playerNames)), tags...)
 }
 
 // CreatePlayer creates a player and returns the server-generated id.
@@ -109,10 +137,26 @@ func CreateBoard(rc *resty.Client, boardID, name string) error {
 	return err
 }
 
+// EnsureBoard is CreateBoard that tolerates the board already existing
+func EnsureBoard(rc *resty.Client, boardID, name string) error {
+	_, err := DoJSON[any](rc, resty.MethodPut, "/api/v1/boards/"+boardID, map[string]any{
+		"board_name": name,
+	}, http.StatusCreated, http.StatusConflict)
+	return err
+}
+
 // SetScore sets a player's score on a board (the first write enrolls the player).
 func SetScore(rc *resty.Client, boardID, playerID string, score int64) error {
 	_, err := DoJSON[any](rc, resty.MethodPut, ScorePath(boardID, playerID), map[string]any{
 		"player_score": score,
+	}, http.StatusNoContent)
+	return err
+}
+
+// IncrementScore adds a delta (may be negative) to a player's score on a board.
+func IncrementScore(rc *resty.Client, boardID, playerID string, amount int64) error {
+	_, err := DoJSON[any](rc, resty.MethodPost, ScorePath(boardID, playerID)+"/increment", map[string]any{
+		"amount": amount,
 	}, http.StatusNoContent)
 	return err
 }
@@ -123,8 +167,38 @@ func FetchStanding(rc *resty.Client, boardID, playerID string) (Standing, error)
 }
 
 // FetchHistory reads a player's score events on a board (newest first).
-func FetchHistory(rc *resty.Client, boardID, playerID string) (History, error) {
-	return DoJSON[History](rc, resty.MethodGet, ScorePath(boardID, playerID)+"/history", nil, http.StatusOK)
+// A limit of 0 leaves the page size to the server default.
+func FetchHistory(rc *resty.Client, boardID, playerID string, limit int) (History, error) {
+	path := ScorePath(boardID, playerID) + "/history"
+	if limit > 0 {
+		path += fmt.Sprintf("?limit=%d", limit)
+	}
+	return DoJSON[History](rc, resty.MethodGet, path, nil, http.StatusOK)
+}
+
+// VerifyProjection fails the caller when the board's projection has drifted from its ledger.
+func VerifyProjection(rc *resty.Client, boardID string) error {
+	resp, err := DoJSON[verifyProjectionResp](
+		rc, resty.MethodGet, "/api/v1/admin/boards/"+boardID+"/projection/verify", nil, http.StatusOK,
+	)
+	if err != nil {
+		return err
+	}
+	if len(resp.Mismatches) != 0 {
+		return fmt.Errorf("projection drift: %d mismatches", len(resp.Mismatches))
+	}
+	return nil
+}
+
+// PrintErrors prints up to limit errors and summarizes the rest, so a failing run stays readable.
+func PrintErrors(errs []error, limit int) {
+	for i, err := range errs {
+		if i >= limit {
+			fmt.Printf("... %d additional errors omitted\n", len(errs)-limit)
+			break
+		}
+		fmt.Printf("error: %v\n", err)
+	}
 }
 
 // SaveHistoryToFile writes a player's history to path as indented JSON.

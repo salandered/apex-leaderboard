@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ func main() {
 		log.Fatal("timeout must be positive")
 	}
 
-	rc := apexhttp.NewClient(strings.TrimRight(*baseURL, "/"), 4)
+	rc := apexhttp.NewClient(*baseURL, 4)
 	defer rc.GetClient().CloseIdleConnections()
 
 	boardID := apexhttp.SeedBoardID("daily-activity")
@@ -52,11 +53,13 @@ func main() {
 	}
 
 	players := []activityPlayer{
-		{name: "daily-activity-3", expectedCount: 30},
-		{name: "daily-activity-2", expectedCount: 20},
-		{name: "daily-activity-1", expectedCount: 10},
+		{expectedCount: 30},
+		{expectedCount: 20},
+		{expectedCount: 10},
 	}
 	for i := range players {
+		// the expected count is part of the name, so a failure log points at the fixture
+		players[i].name = apexhttp.PlayerName(i, strconv.FormatInt(players[i].expectedCount, 10))
 		playerID, err := apexhttp.CreatePlayer(rc, players[i].name)
 		if err != nil {
 			log.Fatalf("create player %q: %v", players[i].name, err)
@@ -100,16 +103,8 @@ func writeActivity(rc *resty.Client, boardID string, player activityPlayer) erro
 		return fmt.Errorf("set score: %w", err)
 	}
 
-	incrementPath := apexhttp.ScorePath(boardID, player.id) + "/increment"
 	for i := int64(1); i < player.expectedCount; i++ {
-		_, err := apexhttp.DoJSON[any](
-			rc,
-			resty.MethodPost,
-			incrementPath,
-			map[string]any{"amount": 1},
-			http.StatusNoContent,
-		)
-		if err != nil {
+		if err := apexhttp.IncrementScore(rc, boardID, player.id, 1); err != nil {
 			return fmt.Errorf("increment %d: %w", i, err)
 		}
 	}

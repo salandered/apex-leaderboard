@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+
+	"github.com/salandered/apex/loadtest/apexhttp"
 )
 
 const (
@@ -41,7 +43,7 @@ func main() {
 	w.call("GET", "/", nil)
 
 	w.step("POST create player (id is server-generated)")
-	created := w.callWithKey("POST", "/api/v1/players", map[string]any{"player_name": "alice"}, key("player"))
+	created := w.callWithKey("POST", "/api/v1/players", map[string]any{"player_name": apexhttp.PlayerName(0)}, key("player"))
 	playerID := jsonField(created, "player_id")
 
 	playerPath := "/api/v1/players/" + playerID
@@ -51,7 +53,7 @@ func main() {
 	w.call("GET", playerPath, nil)
 
 	w.step(fmt.Sprintf("PUT create board %q (201 first run, then 409 - already exists)", *boardID))
-	w.call("PUT", "/api/v1/boards/"+*boardID, map[string]any{"board_name": "Demo Cup"})
+	w.call("PUT", "/api/v1/boards/"+*boardID, map[string]any{"board_name": "Demo Cup 🌳"})
 
 	w.step("GET boards list (creation order)")
 	w.call("GET", "/api/v1/boards", nil)

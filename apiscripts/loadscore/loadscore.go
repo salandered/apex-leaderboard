@@ -14,6 +14,8 @@ import (
 	"github.com/salandered/apex/loadtest/apexhttp"
 )
 
+const errorsShown = 20
+
 type loadTestResult struct {
 	Succeeded int64
 	Errors    []error
@@ -84,17 +86,7 @@ func sendIncrementRequest(
 func printLoadTestSummary(result loadTestResult, requestCount int) {
 	failed := requestCount - int(result.Succeeded)
 	fmt.Printf("completed in %s: succeeded=%d failed=%d\n", result.Duration, result.Succeeded, failed)
-
-	printed := 0
-	for _, err := range result.Errors {
-		if printed < 20 {
-			fmt.Printf("error: %v\n", err)
-		}
-		printed++
-	}
-	if printed > 20 {
-		fmt.Printf("... %d additional errors omitted\n", printed-20)
-	}
+	apexhttp.PrintErrors(result.Errors, errorsShown)
 }
 
 func verifyFinalScore(standing apexhttp.Standing, requestCount int, amount int64) {
@@ -131,7 +123,7 @@ func main() {
 	}
 
 	// Fetch and persist the ledger before verification, so the artifact survives a mismatch.
-	history, err := apexhttp.FetchHistory(rc, boardId, playerId)
+	history, err := apexhttp.FetchHistory(rc, boardId, playerId, 0)
 	if err != nil {
 		log.Fatalf("get history: %v", err)
 	}

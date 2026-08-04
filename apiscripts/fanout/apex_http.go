@@ -21,10 +21,6 @@ type listScoresResp struct {
 	Total  int              `json:"total"`
 }
 
-type verifyResp struct {
-	Mismatches []any `json:"mismatches"`
-}
-
 func createBoard(rc *resty.Client) string {
 	boardID := apexhttp.SeedBoardID("fanout")
 	if err := apexhttp.CreateBoard(rc, boardID, "Fan-out Test"); err != nil {
@@ -37,7 +33,7 @@ func createBoard(rc *resty.Client) string {
 func createPlayers(rc *resty.Client, n int) []player {
 	players := make([]player, 0, n)
 	for i := 0; i < n; i++ {
-		id, err := apexhttp.CreatePlayer(rc, fmt.Sprintf("fanout-player-%d", i))
+		id, err := apexhttp.CreatePlayer(rc, apexhttp.PlayerName(i))
 		if err != nil {
 			log.Fatalf("create player %d: %v", i, err)
 		}
@@ -77,13 +73,7 @@ func fetchStanding(rc *resty.Client, boardID, playerID string) apexhttp.Standing
 }
 
 func verifyProjection(rc *resty.Client, boardID string) {
-	resp, err := apexhttp.DoJSON[verifyResp](
-		rc, resty.MethodGet, "/api/v1/admin/boards/"+boardID+"/projection/verify", nil, http.StatusOK,
-	)
-	if err != nil {
+	if err := apexhttp.VerifyProjection(rc, boardID); err != nil {
 		log.Fatalf("projection verify: %v", err)
-	}
-	if len(resp.Mismatches) != 0 {
-		log.Fatalf("projection drift: %d mismatches", len(resp.Mismatches))
 	}
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -31,7 +30,7 @@ func parseFlags() fanoutConfig {
 	}
 
 	return fanoutConfig{
-		baseURL:     strings.TrimRight(*baseURL, "/"),
+		baseURL:     *baseURL,
 		playerCount: *playerCount,
 		chunkSize:   *chunkSize,
 		chunkDelay:  *chunkDelay,

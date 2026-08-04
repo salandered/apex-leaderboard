@@ -9,7 +9,7 @@ import (
 )
 
 func createApexFixtures(rc *resty.Client) (string, string, string) {
-	playerId, err := apexhttp.CreatePlayer(rc, "load-test-player")
+	playerId, err := apexhttp.CreatePlayer(rc, apexhttp.PlayerName(0))
 	if err != nil {
 		log.Fatalf("create player: %v", err)
 	}

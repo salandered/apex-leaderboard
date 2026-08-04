@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -33,7 +32,7 @@ func parseFlags() loadTestConfig {
 	}
 
 	return loadTestConfig{
-		baseURL:      strings.TrimRight(*baseURL, "/"),
+		baseURL:      *baseURL,
 		requestCount: *requestCount,
 		amount:       *amount,
 		chunkSize:    *chunkSize,
