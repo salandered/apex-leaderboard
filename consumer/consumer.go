@@ -18,7 +18,7 @@ const (
 	retryBackoff = time.Second
 )
 
-// ConsumerStore is what Consumer needs.
+// ConsumerStore is a standard database API the [Consumer] needs.
 // (interface "discovered" on a client side, intentionally not a part of the [storage] package)
 type ConsumerStore interface {
 	LoadCursor(ctx context.Context, consumer string) (cursor string, found bool, err error)
@@ -49,15 +49,6 @@ type Consumer struct {
 	// How long consumer blocks on a stream read.
 	// Callers waiting for a clean stop should allow this long (+ some margin).
 	BlockDuration time.Duration
-}
-
-func new(store ConsumerStore, id string, apply ApplyFunc) *Consumer {
-	return &Consumer{
-		store:         store,
-		Apply:         apply,
-		ID:            id,
-		BlockDuration: DefaultBlockDuration, // may be config in the future
-	}
 }
 
 // Run tails the ledger until ctx is cancelled (gracefull shutdown).

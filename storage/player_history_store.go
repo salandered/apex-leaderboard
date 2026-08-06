@@ -26,8 +26,9 @@ func NewPlayerHistoryStore(client *redis.Client) *redisPlayerHistoryStore {
 	return &redisPlayerHistoryStore{redisLedgerConsumer{client: client}}
 }
 
-// Writes pointers only: the member is the entry id and the score derives from it, so a replayed
-// batch rewrites the same pairs. Nothing of the event itself lands here.
+// Writes pointers to events in the ledger to ZSET.
+// ZSET's member is the entry id and the score derives from it.
+// Replayed batch rewrites the same pairs.
 func (s *redisPlayerHistoryStore) ApplyPlayerHistory(
 	ctx context.Context, events []ledger.Event,
 ) error {
@@ -48,6 +49,8 @@ func (s *redisPlayerHistoryStore) ApplyPlayerHistory(
 	return nil
 }
 
+// streamIDScore turns a Redis stream entry id into the ZSET score.
+// See unit test for examples.
 func streamIDScore(ctx context.Context, entryID string) (float64, error) {
 	millisStr, seqStr, ok := strings.Cut(entryID, "-")
 	if !ok {
@@ -70,6 +73,3 @@ func streamIDScore(ctx context.Context, entryID string) (float64, error) {
 	}
 	return float64(millis*seqScale + seq), nil
 }
-
-// No rebuild op: ZADD adds and corrects, so dropping the consumer's cursor re-folds the whole
-// ledger into an identical view. See docs/redis.md, "Resetting a consumer".

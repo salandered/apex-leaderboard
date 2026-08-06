@@ -20,6 +20,7 @@ import (
 	"github.com/salandered/apex/apexredis"
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/board"
+	"github.com/salandered/apex/ledger"
 	"github.com/salandered/apex/player"
 )
 
@@ -33,9 +34,11 @@ var (
 
 type StorageSuite struct {
 	suite.Suite
-	storage       Storage
-	activityStore *redisActivityStore
-	rawClient     *redis.Client // for assertions + flushing
+	storage            Storage
+	activityStore      *redisActivityStore
+	playerHistoryStore *redisPlayerHistoryStore
+	ledgerConsumer     *redisLedgerConsumer
+	rawClient          *redis.Client // for assertions + flushing
 }
 
 func TestStorageSuite(t *testing.T) {
@@ -59,6 +62,8 @@ func (s *StorageSuite) SetupSuite() {
 
 	s.storage = NewStorage(s.rawClient)
 	s.activityStore = NewActivityStore(s.rawClient)
+	s.playerHistoryStore = NewPlayerHistoryStore(s.rawClient)
+	s.ledgerConsumer = &redisLedgerConsumer{client: s.rawClient}
 }
 
 // Cleans up the db so tests stay order-independent.
@@ -139,6 +144,26 @@ func (s *StorageSuite) createPlayer(name string) player.ID {
 	).Err()
 	s.Require().NoError(err)
 	return playerId
+}
+
+func (s *StorageSuite) addLedgerEntryAt(
+	ctx context.Context, t time.Time, playerId player.ID, reqID string,
+) string {
+	// creates an explicit stream ID like '1768471200000-1'
+	id := strconv.FormatInt(t.UnixMilli(), 10) + "-1"
+	err := s.rawClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: ledgerKey,
+		ID:     id,
+		Values: map[string]any{
+			entryFieldType:      string(ledger.EventIncrement),
+			entryFieldPlayerID:  string(playerId),
+			entryFieldBoardID:   string(testBoardId),
+			entryFieldAmount:    "1",
+			entryFieldRequestID: reqID,
+		},
+	}).Err()
+	s.Require().NoError(err)
+	return id
 }
 
 // asserts the ledger holds n events

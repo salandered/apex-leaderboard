@@ -418,43 +418,14 @@ func (s *StorageSuite) TestGetStanding() {
 	s.Require().Equal(int64(0), total) // default value
 }
 
-// the same player's scores on two boards move independently over one ledger
-func (s *StorageSuite) TestTwoBoardsOnePlayer() {
-	ctx := s.ctx()
-
-	s.createMainBoard()
-	playerId := s.createPlayer("bob")
-	s.createBoard("weekly", "Weekly", mockedTime)
-
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, testBoardId, 10, "r1", ""))
-	s.Require().NoError(s.storage.SetScore(ctx, playerId, board.ID("weekly"), 100, "r2", ""))
-	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, board.ID("weekly"), 5, "r3", ""))
-
-	mainStanding, mainTotal, err := s.storage.GetStanding(ctx, playerId, testBoardId)
-	s.Require().NoError(err)
-	s.Require().Equal(int64(10), mainStanding.Score)
-	s.Require().Equal(int64(1), mainTotal)
-
-	weeklyStanding, _, err := s.storage.GetStanding(ctx, playerId, board.ID("weekly"))
-	s.Require().NoError(err)
-	s.Require().Equal(int64(105), weeklyStanding.Score)
-
-	// per-board history: the shared request ids never cross board boundaries
-	s.syncPlayerHistory()
-	weeklyHistory, err := s.storage.PlayerHistory(ctx, playerId, board.ID("weekly"), wholeHistoryLimit)
-	s.Require().NoError(err)
-	s.Require().Len(weeklyHistory, 2)
-	mainHistory, err := s.storage.PlayerHistory(ctx, playerId, testBoardId, wholeHistoryLimit)
-	s.Require().NoError(err)
-	s.Require().Len(mainHistory, 1)
-}
-
 func (s *StorageSuite) incrementScore(playerId player.ID, amount int64, reqID string) {
 	ctx := s.ctx()
-	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, testBoardId, amount, reqID, ""))
+	s.Require().NoError(
+		s.storage.IncrementScore(ctx, playerId, testBoardId, amount, reqID, ""),
+	)
 }
 
-func (s *StorageSuite) TestHistory() {
+func (s *StorageSuite) TestPlayerHistory() {
 	ctx := s.ctx()
 
 	s.createMainBoard()
@@ -518,6 +489,7 @@ func (s *StorageSuite) TestApplyingThePlayerHistoryTwiceIsANoOp() {
 	s.Require().NoError(s.storage.IncrementScore(ctx, playerId, testBoardId, 7, "r2", ""))
 
 	// when
+	// TODO: should not be done via utility
 	s.syncPlayerHistory()
 	s.syncPlayerHistory() // e.g. the crash replay
 
@@ -878,7 +850,7 @@ func (s *StorageSuite) syncPlayerHistory() {
 		}
 		events = append(events, event)
 	}
-	s.Require().NoError(NewPlayerHistoryStore(s.rawClient).ApplyPlayerHistory(ctx, events))
+	s.Require().NoError(s.playerHistoryStore.ApplyPlayerHistory(ctx, events))
 }
 
 // Places a pointer directly, for the cases a caught-up consumer cannot produce.

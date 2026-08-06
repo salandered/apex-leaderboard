@@ -10,20 +10,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConsumerBuildsDailyCountsAndStartsAtLedgerHead(t *testing.T) {
-	day1 := time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC)
-	day2 := time.Date(2026, 1, 16, 3, 0, 0, 0, time.UTC)
+const testConsumerID = "test_view"
+
+func TestConsumerAppliesBatchAndStartsAtLedgerHead(t *testing.T) {
 	store := &fakeStore{batch: LedgerBatch{
 		Events: []ledger.Event{
-			{ID: "1-0", PlayerID: "alice", CreatedAt: day1},
-			{ID: "2-0", PlayerID: "bob", CreatedAt: day1.Add(time.Minute)},
-			{ID: "3-0", PlayerID: "alice", CreatedAt: day2},
+			{ID: "1-0", PlayerID: "alice"},
+			{ID: "2-0", PlayerID: "bob"},
+			{ID: "3-0", PlayerID: "alice"},
 		},
 		LastID: "3-0",
 	}}
+	consumer := mockedConsumer(store)
 
 	// when
-	n, err := NewDailyActivityConsumer(store).processOnce(context.Background())
+	n, err := consumer.processOnce(context.Background())
 
 	// then
 	require.NoError(t, err)
@@ -31,12 +32,9 @@ func TestConsumerBuildsDailyCountsAndStartsAtLedgerHead(t *testing.T) {
 	require.Equal(t, cursorHead, store.readAfter)
 	require.Equal(t, int64(batchCount), store.readLimit)
 	require.Equal(t, DefaultBlockDuration, store.readBlock)
-	require.Equal(t, []DailyIncrement{
-		{Date: "2026-01-15", PlayerID: "alice", Count: 1},
-		{Date: "2026-01-15", PlayerID: "bob", Count: 1},
-		{Date: "2026-01-16", PlayerID: "alice", Count: 1},
-	}, store.applied)
-	require.Equal(t, dailyTTL, store.appliedTTL)
+	require.Equal(t, store.batch.Events, consumer.applied)
+	require.Equal(t, testConsumerID, store.loadedCursorID)
+	require.Equal(t, testConsumerID, store.savedCursorID)
 	require.Equal(t, "3-0", store.cursor)
 }
 
@@ -45,12 +43,12 @@ func TestConsumerResumesFromPersistedCursor(t *testing.T) {
 		cursor:      "10-0",
 		cursorFound: true,
 		batch: LedgerBatch{
-			Events: []ledger.Event{{ID: "11-0", PlayerID: "alice", CreatedAt: time.Now().UTC()}},
+			Events: []ledger.Event{{ID: "11-0", PlayerID: "alice"}},
 			LastID: "11-0",
 		},
 	}
 
-	_, err := NewDailyActivityConsumer(store).processOnce(context.Background())
+	_, err := mockedConsumer(store).processOnce(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "10-0", store.readAfter)
 	require.Equal(t, "11-0", store.cursor)
@@ -61,28 +59,67 @@ func TestConsumerSkipsRejectedEntriesAndAdvancesCursor(t *testing.T) {
 		Rejected: []RejectedEntry{{ID: "12-0", Err: errors.New("malformed")}},
 		LastID:   "12-0",
 	}}
+	consumer := mockedConsumer(store)
 
-	n, err := NewDailyActivityConsumer(store).processOnce(context.Background())
+	n, err := consumer.processOnce(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
-	require.Empty(t, store.applied)
+	require.Empty(t, consumer.applied)
 	require.Equal(t, "12-0", store.cursor)
 }
 
 func TestConsumerAppliesBeforeSavingCursor(t *testing.T) {
 	store := &fakeStore{
 		batch: LedgerBatch{
-			Events: []ledger.Event{{ID: "13-0", PlayerID: "alice", CreatedAt: time.Now().UTC()}},
+			Events: []ledger.Event{{ID: "13-0", PlayerID: "alice"}},
 			LastID: "13-0",
 		},
 		saveErr: errors.New("save failed"),
 	}
+	consumer := mockedConsumer(store)
 
-	n, err := NewDailyActivityConsumer(store).processOnce(context.Background())
+	n, err := consumer.processOnce(context.Background())
 	require.ErrorContains(t, err, "persist cursor")
 	require.Equal(t, 1, n)
-	require.Len(t, store.applied, 1)
+	require.Len(t, consumer.applied, 1)
 	require.False(t, store.cursorFound)
+}
+
+func TestConsumerKeepsCursorWhenApplyFails(t *testing.T) {
+	store := &fakeStore{batch: LedgerBatch{
+		Events: []ledger.Event{{ID: "14-0", PlayerID: "alice"}},
+		LastID: "14-0",
+	}}
+	consumer := mockedConsumer(store)
+	consumer.applyErr = errors.New("apply failed")
+
+	n, err := consumer.processOnce(context.Background())
+	require.ErrorContains(t, err, "apply batch")
+	require.Zero(t, n)
+	require.Empty(t, store.savedCursorID)
+	require.Empty(t, store.cursor)
+	require.False(t, store.cursorFound)
+}
+
+// Consumer with a stubbed Apply recording every event it received.
+type stubbedConsumer struct {
+	*Consumer
+	applied  []ledger.Event
+	applyErr error // set before processOnce to fail the batch
+}
+
+func mockedConsumer(store ConsumerStore) *stubbedConsumer {
+	stub := &stubbedConsumer{}
+	stub.Consumer = &Consumer{
+		store: store,
+		ID:    testConsumerID,
+		Apply: func(_ context.Context, events []ledger.Event) error {
+			stub.applied = append(stub.applied, events...)
+			return stub.applyErr
+		},
+		BlockDuration: DefaultBlockDuration,
+	}
+	return stub
 }
 
 type fakeStore struct {
@@ -94,15 +131,7 @@ type fakeStore struct {
 	readAfter      string
 	readLimit      int64
 	readBlock      time.Duration
-	applied        []DailyIncrement
-	appliedTTL     time.Duration
-	history        []ledger.Event
 	saveErr        error
-}
-
-func (s *fakeStore) ApplyPlayerHistory(_ context.Context, events []ledger.Event) error {
-	s.history = append(s.history, events...)
-	return nil
 }
 
 func (s *fakeStore) LoadCursor(_ context.Context, consumer string) (string, bool, error) {
@@ -117,14 +146,6 @@ func (s *fakeStore) ReadLedgerBatch(
 	s.readLimit = limit
 	s.readBlock = block
 	return s.batch, nil
-}
-
-func (s *fakeStore) ApplyDailyCounts(
-	_ context.Context, increments []DailyIncrement, ttl time.Duration,
-) error {
-	s.applied = append(s.applied, increments...)
-	s.appliedTTL = ttl
-	return nil
 }
 
 func (s *fakeStore) SaveCursor(_ context.Context, consumer, cursor string) error {

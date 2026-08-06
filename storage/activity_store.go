@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/salandered/apex/consumer"
+	"github.com/salandered/apex/ledger"
 )
 
 type redisActivityStore struct {
@@ -17,13 +17,14 @@ func NewActivityStore(client *redis.Client) *redisActivityStore {
 	return &redisActivityStore{redisLedgerConsumer{client: client}}
 }
 
+// One tick per event, bucketed by the event's UTC day.
 func (s *redisActivityStore) ApplyDailyCounts(
-	ctx context.Context, increments []consumer.DailyIncrement, ttl time.Duration,
+	ctx context.Context, events []ledger.Event, ttl time.Duration,
 ) error {
 	pipe := s.client.Pipeline()
-	for _, increment := range increments {
-		key := activityDailyKey(increment.Date)
-		pipe.ZIncrBy(ctx, key, float64(increment.Count), increment.PlayerID) // increments if no key
+	for _, event := range events {
+		key := activityDailyKey(event.CreatedAt.Format(time.DateOnly))
+		pipe.ZIncrBy(ctx, key, 1, event.PlayerID) // increments if no key
 		pipe.Expire(ctx, key, ttl)
 	}
 	if _, err := pipe.Exec(ctx); err != nil {

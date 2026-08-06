@@ -17,5 +17,10 @@ type PlayerHistoryStore interface {
 // Indexes each event id under its (player, board), so history reads a page, not the stream.
 // The store writes pointers keyed by entry id, so a replayed batch is a no-op.
 func NewPlayerHistoryConsumer(store PlayerHistoryStore) *Consumer {
-	return new(store, PlayerHistoryID, store.ApplyPlayerHistory)
+	return &Consumer{
+		store:         store,
+		Apply:         store.ApplyPlayerHistory,
+		ID:            PlayerHistoryID,
+		BlockDuration: DefaultBlockDuration,
+	}
 }

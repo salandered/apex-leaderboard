@@ -42,6 +42,38 @@ func TestExactInt64(t *testing.T) {
 	}
 }
 
+func TestStreamIDScorePacksSequenceAndRejectsMalformedIDs(t *testing.T) {
+	tests := []struct {
+		entryID string
+		want    float64
+		wantErr bool
+		name    string
+	}{
+		{entryID: "1000-0", want: 1000 * seqScale, name: "first entry of a millisecond"},
+		{entryID: "1000-2", want: 1000*seqScale + 2, name: "sequence fills the low bits"},
+		// packed, so the ZSET cannot tie-break on the member string, where "10" sorts before "2"
+		{entryID: "1000-10", want: 1000*seqScale + 10, name: "two digit sequence outranks one digit"},
+		{entryID: "1001-0", want: 1001 * seqScale, name: "next millisecond outranks any sequence"},
+		{entryID: "1000-5000", want: 1000*seqScale + seqScale - 1, name: "sequence above scale clamps"},
+		{entryID: "1000", wantErr: true, name: "no sequence part"},
+		{entryID: "abc-0", wantErr: true, name: "bad millisecond part"},
+		{entryID: "1000-xyz", wantErr: true, name: "bad sequence part"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			score, err := streamIDScore(t.Context(), tt.entryID)
+
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrInconsistent)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, score)
+		})
+	}
+}
+
 func TestZScoreToInt64RoundsNonIntegralAndRejectsInvalid(t *testing.T) {
 	tests := []struct {
 		name   string
