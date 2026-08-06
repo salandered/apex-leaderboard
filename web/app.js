@@ -17,6 +17,7 @@ const PAGE_SIZE_KEY = "page_size";
 const CURSOR_KEY = "ticker_cursor";
 const EVENTS_KEY = "ticker_events";
 const WRITE_LOGS_KEY = "write_logs";
+const DETAILS_KEY = "details_open";
 const WRITE_LOG_LIMIT = 5;
 
 // Retain a key after a failed request because a network error does not prove that the server
@@ -133,6 +134,26 @@ function removeStored(key) {
 	}
 }
 
+// app.js is deferred, so the document is complete here. Restore native disclosure state before
+// Alpine starts and leave every section's HTML `open` default alone when no preference exists.
+function initCollapsibleSections() {
+	const stored = readStored(DETAILS_KEY, {});
+	const state = stored !== null && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+	const sections = document.querySelectorAll("details[data-collapse-key]");
+	for (const section of sections) {
+		const key = section.dataset.collapseKey;
+		if (typeof state[key] === "boolean") {
+			section.open = state[key];
+		}
+		section.addEventListener("toggle", () => {
+			state[key] = section.open;
+			writeStored(DETAILS_KEY, state);
+		});
+	}
+}
+
+initCollapsibleSections();
+
 document.addEventListener("alpine:init", () => {
 	Alpine.data("leaderboard", () => ({
 		boards: [],
@@ -160,6 +181,10 @@ document.addEventListener("alpine:init", () => {
 		historyError: "",
 		historyRequestId: 0,
 		refreshRequestId: 0,
+		tools: [],
+		toolBusy: "",
+		toolError: "",
+		toolResult: null,
 
 		// The ledger is global, so the ticker deliberately ignores the selected board and
 		// labels each row with the board it landed on.
@@ -234,15 +259,49 @@ document.addEventListener("alpine:init", () => {
 			this.limit = PAGE_SIZES.includes(storedLimit) ? storedLimit : DEFAULT_PAGE_SIZE;
 			const storedLogs = readStored(WRITE_LOGS_KEY, []);
 			this.writeLogs = Array.isArray(storedLogs)
-				? storedLogs.filter(log => typeof log?.message === "string").slice(-WRITE_LOG_LIMIT)
+				? storedLogs
+					.filter(log => typeof log?.message === "string")
+					.sort((a, b) => String(b.id ?? "").localeCompare(String(a.id ?? "")))
+					.slice(0, WRITE_LOG_LIMIT)
 				: [];
-			await this.loadBoards();
+			await Promise.all([this.loadBoards(), this.loadTools()]);
 			await this.restoreTicker();
 			await this.refresh();
 			setInterval(() => {
 				this.refresh();
 				this.pollEvents();
 			}, POLL_MS);
+		},
+
+		async loadTools() {
+			try {
+				const data = await getJSON("/dev/tools");
+				this.tools = data.tools;
+				this.toolError = "";
+			} catch (err) {
+				this.toolError = String(err.message ?? err);
+			}
+		},
+
+		async runTool(name) {
+			if (this.toolBusy) {
+				return;
+			}
+			this.toolBusy = name;
+			this.toolError = "";
+			this.toolResult = null;
+			try {
+				this.toolResult = await sendJSON(`/dev/tools/${encodeURIComponent(name)}`, "POST", {
+					args: ["-base-url", "http://app:8090"],
+				});
+				await this.loadBoards();
+				this.offset = 0;
+				await Promise.all([this.refresh(), this.pollEvents()]);
+			} catch (err) {
+				this.toolError = String(err.message ?? err);
+			} finally {
+				this.toolBusy = "";
+			}
 		},
 
 		async loadBoards() {
@@ -397,7 +456,7 @@ document.addEventListener("alpine:init", () => {
 
 		appendWriteLog(message, level = "success") {
 			const entry = { id: `${Date.now()}-${Math.random()}`, level, message };
-			this.writeLogs = [...this.writeLogs, entry].slice(-WRITE_LOG_LIMIT);
+			this.writeLogs = [entry, ...this.writeLogs].slice(0, WRITE_LOG_LIMIT);
 			writeStored(WRITE_LOGS_KEY, this.writeLogs);
 		},
 

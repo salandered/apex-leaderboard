@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 
@@ -15,6 +16,11 @@ const (
 	bigIncrementPct = 15
 	setPct          = 5
 )
+
+// Mirrors the server's cap on GET .../history?limit. A larger value is rejected with a 400.
+const historyPageLimit = 100
+
+const pollInterval = 100 * time.Millisecond
 
 type expectedEvent struct {
 	eventType string
@@ -53,21 +59,25 @@ func main() {
 		log.Fatalf("score mismatch: got %d, want %d", standing.Score, expectedScore)
 	}
 
-	history, err := apexhttp.FetchHistory(rc, boardID, playerID, len(written))
+	// The API caps a history page and history takes no offset, so only the newest page can be
+	// checked event by event. Everything older is still covered by the score and projection checks.
+	verified := min(len(written), historyPageLimit)
+	history, err := waitForHistory(rc, boardID, playerID, verified, written[len(written)-1], cfg.timeout)
 	if err != nil {
-		log.Fatalf("fetch history: %v", err)
+		log.Fatal(err)
 	}
-	verifyHistory(history, written)
+	verifyHistory(history, written[len(written)-verified:])
 
 	if err := apexhttp.VerifyProjection(rc, boardID); err != nil {
 		log.Fatalf("projection verify: %v", err)
 	}
 
 	fmt.Printf(
-		"OK: %d events written, score=%d rank=%d, history matches, projection clean\n",
+		"OK: %d events written, score=%d rank=%d, newest %d match the history, projection clean\n",
 		len(written),
 		standing.Score,
 		standing.Rank,
+		verified,
 	)
 }
 
@@ -111,6 +121,39 @@ func writeRandomEvents(
 		}
 	}
 	return written, score
+}
+
+// The history view is written by an async consumer, so a page fetched right after the last write
+// can be stale. Polls until the newest written event sits at the head of a full page:
+// the consumer folds in stream order, so by then everything older is indexed too.
+func waitForHistory(
+	rc *resty.Client,
+	boardID, playerID string,
+	want int,
+	newest expectedEvent,
+	timeout time.Duration,
+) (apexhttp.History, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		history, err := apexhttp.FetchHistory(rc, boardID, playerID, want)
+		if err != nil {
+			return apexhttp.History{}, fmt.Errorf("fetch history: %w", err)
+		}
+		if len(history.Events) == want &&
+			history.Events[0].Type == newest.eventType &&
+			history.Events[0].Amount == newest.amount {
+			return history, nil
+		}
+		if time.Now().After(deadline) {
+			return apexhttp.History{}, fmt.Errorf(
+				"timed out after %s waiting for the player history projection: got %d of %d events",
+				timeout,
+				len(history.Events),
+				want,
+			)
+		}
+		time.Sleep(pollInterval)
+	}
 }
 
 // verifyHistory checks the ledger returned by the API against what the script wrote: the events

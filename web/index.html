@@ -26,7 +26,7 @@
 	</script>
 
 	<!-- app.js first: it registers the alpine:init listener that alpine then dispatches -->
-	<script defer src="/app.js?v=20260806-1"></script>
+	<script defer src="/app.js?v=20260806-4"></script>
 	<script defer src="/vendor/alpine-3.15.12.min.js"></script>
 	<style>
 		:root {
@@ -338,15 +338,10 @@
 
 		.ticker {
 			margin-top: 2.5rem;
-			overflow-x: auto;
 		}
 
-		.ticker h2 {
-			font-size: 0.8rem;
-			font-weight: normal;
-			text-transform: uppercase;
-			color: var(--muted);
-			margin: 0 0 0.25rem;
+		.ticker-body {
+			overflow-x: auto;
 		}
 
 		.ticker ul {
@@ -424,12 +419,22 @@
 			border-top: 1px solid var(--line);
 		}
 
-		.content-section > h2 {
+		.content-section > h2,
+		.content-section > .section-summary {
 			font-size: 1rem;
 			font-weight: bold;
 			text-transform: none;
 			color: var(--fg);
 			margin: 0 0 0.75rem;
+		}
+
+		.content-section > .section-summary {
+			cursor: pointer;
+			user-select: none;
+		}
+
+		.content-section:not([open]) > .section-summary {
+			margin-bottom: 0;
 		}
 
 		.content-section .section-detail {
@@ -452,7 +457,8 @@
 			margin: 0;
 		}
 
-		.write-panel h3 {
+		.write-panel h3,
+		.write-panel summary {
 			font-size: 0.8rem;
 			font-weight: normal;
 			text-transform: uppercase;
@@ -460,7 +466,17 @@
 			margin: 0 0 0.65rem;
 		}
 
-		.write-panel section {
+		.write-panel summary {
+			cursor: pointer;
+			user-select: none;
+		}
+
+		.write-panel details:not([open]) summary {
+			margin-bottom: 0;
+		}
+
+		.write-panel section,
+		.write-panel details {
 			border-top: 1px solid var(--line);
 			margin-top: 1rem;
 			padding-top: 1rem;
@@ -549,6 +565,22 @@
 			padding: 0.35rem 0;
 			border-bottom: 1px solid var(--line);
 			overflow-wrap: anywhere;
+		}
+
+		.tool-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+		}
+
+		.tool-output {
+			max-height: 20rem;
+			overflow: auto;
+			padding: 0.75rem;
+			border: 1px solid var(--line);
+			background: var(--control-bg);
+			font-size: 0.8rem;
+			white-space: pre-wrap;
 		}
 
 		@media (max-width: 55rem) {
@@ -684,13 +716,14 @@
 			</ul>
 		</section>
 
-	<section class="ticker content-section">
-		<h2>
+	<details class="ticker content-section" data-collapse-key="live-ledger" open>
+		<summary class="section-summary">
 			Live ledger <span class="section-detail">all boards</span>
-				<span class="error" role="alert" x-show="tickerError" x-text="tickerError"></span>
-			</h2>
+			<span class="error" role="alert" x-show="tickerError" x-text="tickerError"></span>
+		</summary>
+		<div class="ticker-body">
 			<div class="ticker-head">
-			<span>time (UTC)</span>
+				<span>time (UTC)</span>
 				<span>player</span>
 				<span class="op">operation</span>
 				<span class="amount">amount</span>
@@ -713,14 +746,33 @@
 					<li class="meta">waiting for score events...</li>
 				</template>
 			</ul>
-		</section>
+		</div>
+	</details>
+
+	<details class="content-section" data-collapse-key="developer-scripts" open>
+		<summary class="section-summary">Developer scripts</summary>
+		<p class="meta">Runs with default options and changes local Apex data.</p>
+		<div class="tool-actions">
+			<template x-for="tool in tools" :key="tool">
+				<button type="button" @click="runTool(tool)" :disabled="toolBusy !== ''"
+					x-text="toolBusy === tool ? `${tool}...` : tool"></button>
+			</template>
+		</div>
+		<p class="error" role="alert" x-show="toolError" x-text="toolError"></p>
+		<p class="meta" x-show="toolResult">
+			<span x-text="toolResult?.tool"></span>
+			<span x-text="toolResult?.ok ? 'completed' : `failed with exit ${toolResult?.exit_code}`"></span>
+			<span x-text="`in ${toolResult?.duration_ms} ms`"></span>
+		</p>
+		<pre class="tool-output" x-show="toolResult" x-text="toolResult?.output"></pre>
+	</details>
 	</main>
 
 	<aside class="write-panel">
 		<h2>Write operations</h2>
 
-		<section>
-			<h3>create board</h3>
+		<details data-collapse-key="create-board" open>
+			<summary>create board</summary>
 			<form @submit.prevent="createBoard()">
 				<label>
 					id
@@ -742,10 +794,10 @@
 					<button type="button" @click="randomizeBoard()" :disabled="writeBusy">random</button>
 				</div>
 			</form>
-		</section>
+		</details>
 
-		<section>
-			<h3>create player</h3>
+		<details data-collapse-key="create-player" open>
+			<summary>create player</summary>
 			<form @submit.prevent="createPlayer()">
 				<label>
 					name
@@ -756,10 +808,10 @@
 					<button type="button" @click="randomizePlayer()" :disabled="writeBusy">random</button>
 				</div>
 			</form>
-		</section>
+		</details>
 
-		<section>
-			<h3>add score</h3>
+		<details data-collapse-key="add-score" open>
+			<summary>add score</summary>
 			<form @submit.prevent="writeScore()">
 				<label>
 					board
@@ -790,7 +842,7 @@
 				</div>
 				<button :disabled="writeBusy || boards.length === 0">apply score</button>
 			</form>
-		</section>
+		</details>
 
 		<section>
 			<h3>Logs</h3>

@@ -1,4 +1,8 @@
 :8080 {
+	@tools path /dev/tools /dev/tools/*
+	handle @tools {
+		reverse_proxy tools:8091
+	}
 	handle /api/v1/* {
 		reverse_proxy app:{$APP_PORT:8090} # proxies /api/v1/* to app
 	}

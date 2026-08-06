@@ -52,3 +52,36 @@ board; the default creates a run-scoped one.
 ## Config
 
 Run `go run ./<script> --help` for a specific script.
+
+## Tool runner image
+
+The Dockerfile builds every `package main` below this directory. The executable name
+is the command directory name. The `toolrunner` command itself is excluded.
+
+Build from the repository root, using `apiscripts` as the build context:
+
+```bash
+docker build -t apex-tools ./apiscripts
+```
+
+Run the service:
+
+```bash
+docker run --rm -p 127.0.0.1:8091:8091 apex-tools
+```
+
+List the compiled tools:
+
+```bash
+curl http://localhost:8091/dev/tools
+```
+
+Run one tool. Arguments are passed directly to the executable without a shell:
+
+```bash
+curl -X POST http://localhost:8091/dev/tools/apiwalk \
+  -H "Content-Type: application/json" \
+  -d '{"args":["-base-url","http://app:8090","-board","demo-cup"]}'
+```
+
+Only one tool runs at a time. `TOOL_TIMEOUT` controls the default 30-sec execution timeout.

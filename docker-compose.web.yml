@@ -1,6 +1,4 @@
-## Optional Web UI, merged into the main compose file:
-##   docker compose -f docker-compose.yml -f docker-compose.web.yml up -d web
-## Not usable on its own: `app` and its network come from docker-compose.yml.
+## Run: docker compose -f docker-compose.yml -f docker-compose.web.yml up -d web
 
 services:
   web:
@@ -13,5 +11,15 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./web:/srv:ro # bind mount
+    depends_on:
+      - app
+      - tools
+
+  tools:
+    build:
+      context: ./apiscripts
+    environment:
+      PORT: "8091"
+      TOOL_TIMEOUT: "${TOOL_TIMEOUT:-30s}"
     depends_on:
       - app

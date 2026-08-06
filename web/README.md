@@ -60,6 +60,10 @@ paint to avoid a light/dark flash.
 - the global ledger ticker;
 - write forms and their short local log.
 
+Each write form uses a native `<details>` element, so create board, create player and add score can
+be collapsed independently without Alpine state. Live ledger and Developer scripts use the same
+control. Every section starts open on a first visit and remembers its state across page reloads.
+
 All browser requests use relative `/api/v1/...` paths. API error bodies are `text/plain`, so
 `getJSON` and `sendJSON` read error responses as text before throwing. Do not call `res.json()` on
 an error response.
@@ -77,7 +81,9 @@ Keep that check after every `await` added to either path. Capturing `boardId`, `
 mix a response for the old selection with the new selection.
 
 The ledger ticker is single-flight. `pollEvents` returns while a previous poll is running because
-two polls with the same cursor would prepend the same events twice.
+two polls with the same cursor would prepend the same events twice. Live ledger and Developer
+scripts use native `<details>` elements. Collapsing the ledger only hides its rows; polling and
+cursor persistence continue in the background.
 
 ### Retry-safe writes
 
@@ -104,7 +110,8 @@ reads or writes.
 | `page_size`     | Selected leaderboard page size as JSON  |
 | `ticker_cursor` | Last consumed ledger cursor as JSON     |
 | `ticker_events` | Up to 30 displayed ticker rows as JSON  |
-| `write_logs`    | Up to five recent write results as JSON |
+| `write_logs`    | Up to five recent write results, newest first, as JSON |
+| `details_open`  | Open/closed state for the five collapsible sections as JSON |
 
 Ticker rows are checked against the current ledger head during startup. This prevents cached rows
 from a flushed Redis instance appearing as current data.

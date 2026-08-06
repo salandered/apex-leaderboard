@@ -94,7 +94,10 @@ func SeedBoardID(prefix string) string {
 
 var playerNames = []string{
 	"Alice", "Bob", "Carol", "Dave", "Erin", "Frank",
-	"Grace", "Heidi", "Ivan", "Judy", "Mallory", "Steven Even", "Todd Odd",
+	"Grace", "Heidi", "Ivan", "Judy", "Kimberly", "Lulu",
+	"Mallory", "Nicholas", "Olivia", "Pluto", "Queenie",
+	"Rex Complex", "Steven Even", "Todd Odd", "Ursa",
+	"Vortex", "Wilson", "Xyla", "Youhan", "Zera",
 }
 
 // last 5 digits of the start millisecond
