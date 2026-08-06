@@ -16,6 +16,32 @@ const BOARD_KEY = "board_id";
 const PAGE_SIZE_KEY = "page_size";
 const CURSOR_KEY = "ticker_cursor";
 const EVENTS_KEY = "ticker_events";
+const WRITE_LOGS_KEY = "write_logs";
+const WRITE_LOG_LIMIT = 5;
+
+// Retain a key after a failed request because a network error does not prove that the server
+// rejected it. Retrying the same payload in this browser session then remains a no-op.
+const pendingWriteKeys = new Map();
+
+const PLAYER_NAMES = [
+	"Alice", "Bob", "Carol", "Dave", "Erin", "Frank", "Grace", "Heidi", "Ivan", "Judy",
+	"Mallory", "Steven Even", "Todd Odd", "Elwood Shannon"
+];
+const BOARD_FIRST_WORDS = [
+	"weekly", "daily", "boldly", "wildly", "softly", "loosely", "monthly", "nightly", "hourly", "friendly", "lovely", "yearly", "silly"
+];
+const BOARD_SECOND_WORDS = [
+	"board", "backboard", "gourd", "cardboard", "keyboard", "dashboard", "checkerboard", "breadboard",
+	"soundboard", "surfboard", "floorboard", "billboard", "sketchboard", "chipboard", "hardboard", "blockboard"
+];
+
+function randomItem(items) {
+	return items[Math.floor(Math.random() * items.length)];
+}
+
+function capitalize(word) {
+	return word[0].toUpperCase() + word.slice(1);
+}
 
 // The API reports errors as text/plain (http.Error), not JSON, so a failed response body
 // must not be handed to res.json().
@@ -27,10 +53,10 @@ async function getJSON(url) {
 	return res.json();
 }
 
-async function sendJSON(url, method, body) {
-	const options = { method };
+async function sendJSON(url, method, body, headers = {}) {
+	const options = { method, headers: { ...headers } };
 	if (body !== undefined) {
-		options.headers = { "Content-Type": "application/json" };
+		options.headers["Content-Type"] = "application/json";
 		options.body = JSON.stringify(body);
 	}
 	const res = await fetch(url, options);
@@ -42,6 +68,19 @@ async function sendJSON(url, method, body) {
 	}
 	const text = await res.text();
 	return text === "" ? null : JSON.parse(text);
+}
+
+async function sendIdempotentJSON(url, method, body) {
+	const signature = `${method} ${url}\n${JSON.stringify(body)}`;
+	let key = pendingWriteKeys.get(signature);
+	if (key === undefined) {
+		key = crypto.randomUUID();
+		pendingWriteKeys.set(signature, key);
+	}
+
+	const result = await sendJSON(url, method, body, { "Idempotency-Key": key });
+	pendingWriteKeys.delete(signature);
+	return result;
 }
 
 // Standings rows carry player_id only, so a board of N rows costs N extra lookups. 
@@ -73,13 +112,25 @@ function readStored(key, fallback) {
 		const raw = localStorage.getItem(key);
 		return raw === null ? fallback : JSON.parse(raw);
 	} catch {
-		localStorage.removeItem(key);
+		removeStored(key);
 		return fallback;
 	}
 }
 
 function writeStored(key, value) {
-	localStorage.setItem(key, JSON.stringify(value));
+	try {
+		localStorage.setItem(key, JSON.stringify(value));
+	} catch {
+		// Persistence is optional. The page still works when storage is blocked or full.
+	}
+}
+
+function removeStored(key) {
+	try {
+		localStorage.removeItem(key);
+	} catch {
+		// Persistence is optional. The page still works when storage is blocked.
+	}
 }
 
 document.addEventListener("alpine:init", () => {
@@ -93,26 +144,29 @@ document.addEventListener("alpine:init", () => {
 		error: "",
 		pollSeconds: POLL_MS / 1000,
 		writeBusy: false,
-		writeMessage: "",
-		writeError: "",
+		writeLogs: [],
 		newBoard: { id: "", name: "", status: "active" },
 		newPlayerName: "",
 		scoreWrite: { boardId: "", playerId: "", operation: "set", amount: 0 },
-		brandColors: ["", "vibrant-orange", "soft-peach"],
+		brandColors: ["", "vibrant-orange", "vibrant-orange-2", "vibrant-orange-3"],
 		brandColorIndex: 0,
 		boardBusy: false,
 		boardActionError: "",
+		copiedPlayerId: "",
 		historyPlayerId: "",
 		historyPlayerName: "",
 		historyEvents: [],
 		historyLoading: false,
 		historyError: "",
+		historyRequestId: 0,
+		refreshRequestId: 0,
 
 		// The ledger is global, so the ticker deliberately ignores the selected board and
 		// labels each row with the board it landed on.
 		events: [],
 		eventCursor: "",
 		tickerError: "",
+		tickerPolling: false,
 
 		// The attribute is already set by the inline script in <head>; this only mirrors it so
 		// the button icon can react to it.
@@ -129,6 +183,9 @@ document.addEventListener("alpine:init", () => {
 		},
 
 		get rangeLabel() {
+			if (this.boards.length === 0) {
+				return "no boards";
+			}
 			if (this.total === 0) {
 				return "no players";
 			}
@@ -165,12 +222,20 @@ document.addEventListener("alpine:init", () => {
 		toggleTheme() {
 			this.theme = this.theme === "dark" ? "light" : "dark";
 			document.documentElement.dataset.theme = this.theme;
-			localStorage.setItem("theme", this.theme);
+			try {
+				localStorage.setItem("theme", this.theme);
+			} catch {
+				// The visible theme still changes when persistence is unavailable.
+			}
 		},
 
 		async init() {
 			const storedLimit = readStored(PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE);
 			this.limit = PAGE_SIZES.includes(storedLimit) ? storedLimit : DEFAULT_PAGE_SIZE;
+			const storedLogs = readStored(WRITE_LOGS_KEY, []);
+			this.writeLogs = Array.isArray(storedLogs)
+				? storedLogs.filter(log => typeof log?.message === "string").slice(-WRITE_LOG_LIMIT)
+				: [];
 			await this.loadBoards();
 			await this.restoreTicker();
 			await this.refresh();
@@ -248,36 +313,60 @@ document.addEventListener("alpine:init", () => {
 				return;
 			}
 
-			this.historyPlayerId = row.player_id;
+			const requestId = ++this.historyRequestId;
+			const boardId = this.boardId;
+			const playerId = row.player_id;
+			this.historyPlayerId = playerId;
 			this.historyPlayerName = row.player_name;
 			this.historyEvents = [];
 			this.historyLoading = true;
 			this.historyError = "";
 			try {
-				const board = encodeURIComponent(this.boardId);
-				const player = encodeURIComponent(row.player_id);
+				const board = encodeURIComponent(boardId);
+				const player = encodeURIComponent(playerId);
 				const data = await getJSON(`/api/v1/boards/${board}/scores/${player}/history?limit=10`);
-				if (this.historyPlayerId === row.player_id) {
+				if (requestId === this.historyRequestId && this.historyPlayerId === playerId) {
 					this.historyEvents = data.events;
 				}
 			} catch (err) {
-				this.historyError = String(err.message ?? err);
+				if (requestId === this.historyRequestId) {
+					this.historyError = String(err.message ?? err);
+				}
 			} finally {
-				this.historyLoading = false;
+				if (requestId === this.historyRequestId) {
+					this.historyLoading = false;
+				}
 			}
 		},
 
 		clearHistory() {
+			this.historyRequestId++;
 			this.historyPlayerId = "";
 			this.historyPlayerName = "";
 			this.historyEvents = [];
+			this.historyLoading = false;
 			this.historyError = "";
 		},
 
+		async copyPlayerId(playerId) {
+			try {
+				await navigator.clipboard.writeText(playerId);
+				this.copiedPlayerId = playerId;
+				setTimeout(() => {
+					if (this.copiedPlayerId === playerId) {
+						this.copiedPlayerId = "";
+					}
+				}, 1000);
+			} catch (err) {
+				this.error = `copy failed - ${String(err.message ?? err)}`;
+			}
+		},
+
 		async createBoard() {
+			if (this.writeBusy) {
+				return;
+			}
 			this.writeBusy = true;
-			this.writeMessage = "";
-			this.writeError = "";
 			try {
 				const id = this.newBoard.id;
 				await sendJSON(`/api/v1/boards/${encodeURIComponent(id)}`, "PUT", {
@@ -290,36 +379,56 @@ document.addEventListener("alpine:init", () => {
 				writeStored(BOARD_KEY, id);
 				this.offset = 0;
 				await this.refresh();
-				this.writeMessage = `created board ${id}`;
+				this.appendWriteLog(`created board ${id}`);
 				this.newBoard = { id: "", name: "", status: "active" };
 			} catch (err) {
-				this.writeError = String(err.message ?? err);
+				this.appendWriteLog(String(err.message ?? err), "error");
 			} finally {
 				this.writeBusy = false;
 			}
+		},
+
+		randomizeBoard() {
+			const first = randomItem(BOARD_FIRST_WORDS);
+			const second = randomItem(BOARD_SECOND_WORDS);
+			this.newBoard.id = `${first}-${second}`;
+			this.newBoard.name = `${capitalize(first)} ${capitalize(second)}`;
+		},
+
+		appendWriteLog(message, level = "success") {
+			const entry = { id: `${Date.now()}-${Math.random()}`, level, message };
+			this.writeLogs = [...this.writeLogs, entry].slice(-WRITE_LOG_LIMIT);
+			writeStored(WRITE_LOGS_KEY, this.writeLogs);
 		},
 
 		async createPlayer() {
+			if (this.writeBusy) {
+				return;
+			}
 			this.writeBusy = true;
-			this.writeMessage = "";
-			this.writeError = "";
 			try {
 				const name = this.newPlayerName;
-				const data = await sendJSON("/api/v1/players", "POST", { player_name: name });
+				const data = await sendIdempotentJSON("/api/v1/players", "POST", { player_name: name });
 				this.scoreWrite.playerId = data.player_id;
-				this.writeMessage = `created ${name} - ${data.player_id}`;
+				this.appendWriteLog(`created ${name} - ${data.player_id}`);
 				this.newPlayerName = "";
 			} catch (err) {
-				this.writeError = String(err.message ?? err);
+				this.appendWriteLog(String(err.message ?? err), "error");
 			} finally {
 				this.writeBusy = false;
 			}
 		},
 
+		randomizePlayer() {
+			const suffix = Math.random().toString(36).slice(2, 5).padEnd(3, "0").toUpperCase();
+			this.newPlayerName = `${randomItem(PLAYER_NAMES)} ${suffix}`;
+		},
+
 		async writeScore() {
+			if (this.writeBusy) {
+				return;
+			}
 			this.writeBusy = true;
-			this.writeMessage = "";
-			this.writeError = "";
 			try {
 				const board = encodeURIComponent(this.scoreWrite.boardId);
 				const player = encodeURIComponent(this.scoreWrite.playerId);
@@ -329,11 +438,11 @@ document.addEventListener("alpine:init", () => {
 				const body = increment
 					? { amount: this.scoreWrite.amount }
 					: { player_score: this.scoreWrite.amount };
-				await sendJSON(`/api/v1/boards/${board}/scores/${player}${suffix}`, method, body);
-				this.writeMessage = `${this.scoreWrite.operation} score on ${this.scoreWrite.boardId}`;
+				await sendIdempotentJSON(`/api/v1/boards/${board}/scores/${player}${suffix}`, method, body);
+				this.appendWriteLog(`${this.scoreWrite.operation} score on ${this.scoreWrite.boardId}`);
 				await Promise.all([this.refresh(), this.pollEvents()]);
 			} catch (err) {
-				this.writeError = String(err.message ?? err);
+				this.appendWriteLog(String(err.message ?? err), "error");
 			} finally {
 				this.writeBusy = false;
 			}
@@ -367,9 +476,10 @@ document.addEventListener("alpine:init", () => {
 		// closes the gap a reload would otherwise leave; resuming a days-old one would crawl the
 		// backlog a page per tick, so anything staler than TICKER_RESUME_MS starts at the tail.
 		async restoreTicker() {
-			const cursor = readStored(CURSOR_KEY, "");
+			const storedCursor = readStored(CURSOR_KEY, "");
 			const stored = readStored(EVENTS_KEY, []);
 			const storedEvents = Array.isArray(stored) ? stored.slice(0, TICKER_MAX) : [];
+			const cursor = storedCursor || storedEvents[0]?.event_id || "";
 			const millis = Number.parseInt(cursor, 10);
 			const fresh = Number.isFinite(millis) && Date.now() - millis < TICKER_RESUME_MS;
 
@@ -377,21 +487,21 @@ document.addEventListener("alpine:init", () => {
 				if (Number.isFinite(millis) && !(await this.ledgerContinuesFrom(millis))) {
 					this.eventCursor = `${Date.now()}-0`;
 					this.events = [];
-					localStorage.removeItem(CURSOR_KEY);
-					localStorage.removeItem(EVENTS_KEY);
+					removeStored(CURSOR_KEY);
+					removeStored(EVENTS_KEY);
 					return;
 				}
 				this.eventCursor = `${Date.now()}-0`;
 				this.events = storedEvents;
-				localStorage.removeItem(CURSOR_KEY);
+				writeStored(CURSOR_KEY, this.eventCursor);
 				return;
 			}
 
 			if (!(await this.ledgerContinuesFrom(millis))) {
 				this.eventCursor = `${Date.now()}-0`;
 				this.events = [];
-				localStorage.removeItem(CURSOR_KEY);
-				localStorage.removeItem(EVENTS_KEY);
+				removeStored(CURSOR_KEY);
+				removeStored(EVENTS_KEY);
 				return;
 			}
 
@@ -419,6 +529,10 @@ document.addEventListener("alpine:init", () => {
 		},
 
 		async pollEvents() {
+			if (this.tickerPolling) {
+				return;
+			}
+			this.tickerPolling = true;
 			try {
 				const after = encodeURIComponent(this.eventCursor);
 				const data = await getJSON(`/api/v1/events?after=${after}&limit=${EVENT_LIMIT}`);
@@ -444,6 +558,8 @@ document.addEventListener("alpine:init", () => {
 				// Kept apart from `error`: a failing ticker must not blank out the board's own
 				// status line, and vice versa.
 				this.tickerError = String(err.message ?? err);
+			} finally {
+				this.tickerPolling = false;
 			}
 		},
 
@@ -473,36 +589,54 @@ document.addEventListener("alpine:init", () => {
 			return new Date(event.created_at).toISOString().replace("T", " ").slice(0, 23);
 		},
 
-		fetchPage(offset) {
-			const board = encodeURIComponent(this.boardId);
-			return getJSON(`/api/v1/boards/${board}/scores?limit=${this.limit}&offset=${offset}`);
+		fetchPage(boardId, limit, offset) {
+			const board = encodeURIComponent(boardId);
+			return getJSON(`/api/v1/boards/${board}/scores?limit=${limit}&offset=${offset}`);
 		},
 
 		async refresh() {
-			if (!this.boardId) {
+			const requestId = ++this.refreshRequestId;
+			const boardId = this.boardId;
+			const limit = this.limit;
+			let offset = this.offset;
+			if (!boardId) {
+				this.rows = [];
+				this.total = 0;
 				return;
 			}
 			try {
-				let data = await this.fetchPage(this.offset);
+				let data = await this.fetchPage(boardId, limit, offset);
+				if (requestId !== this.refreshRequestId) {
+					return;
+				}
 
 				// A board can shrink under the poll (or under a projection rebuild) and leave
 				// the offset past the end: the API answers an empty page while still reporting
 				// the real total. Snap to the last page that has rows rather than showing an
 				// empty table next to a live prev button.
-				if (data.scores.length === 0 && this.offset > 0 && data.total > 0) {
-					this.offset = (Math.ceil(data.total / this.limit) - 1) * this.limit;
-					data = await this.fetchPage(this.offset);
+				if (data.scores.length === 0 && offset > 0 && data.total > 0) {
+					offset = (Math.ceil(data.total / limit) - 1) * limit;
+					data = await this.fetchPage(boardId, limit, offset);
+					if (requestId !== this.refreshRequestId) {
+						return;
+					}
 				}
 
 				const names = await Promise.all(data.scores.map(r => playerName(r.player_id)));
+				if (requestId !== this.refreshRequestId) {
+					return;
+				}
 
 				// One assignment after every name resolved, so the table never renders a
 				// half filled state
+				this.offset = offset;
 				this.rows = data.scores.map((r, i) => ({ ...r, player_name: names[i] }));
 				this.total = data.total;
 				this.error = "";
 			} catch (err) {
-				this.error = String(err.message ?? err);
+				if (requestId === this.refreshRequestId) {
+					this.error = String(err.message ?? err);
+				}
 			}
 		},
 	}));

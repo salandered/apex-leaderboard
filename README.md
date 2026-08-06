@@ -30,7 +30,7 @@ More details in [docs/architecture.md](docs/architecture.md)
 You will only need [Docker](https://docs.docker.com/get-docker/). Run the app:
 
 ```bash
-docker compose up --build redis app
+docker compose up --build
 ```
 
 Make requests:
@@ -100,9 +100,9 @@ curl http://localhost:8090/api/v1/boards
 **Everything in Docker (app + Redis)**
 
 ```bash
-docker compose up -d --build redis app   # data persisted in a volume
-docker compose logs -f app               # follow the app logs
-docker compose down                      # stop the stack
+docker compose up -d --build   # data persisted in a volume
+docker compose logs -f app     # follow the app logs
+docker compose down            # stop the stack
 ```
 
 The API is on `http://localhost:8090`, Redis on `127.0.0.1:6379`. Both are published on loopback
@@ -118,15 +118,17 @@ go run .
 ### Web UI
 
 Optional, not needed for anything above and does not affect anything.
-A static page for looking at the leaderboards, served by Caddy:
+A static page for reading and changing leaderboards, served by Caddy.
 
 ```bash
-docker compose up -d web   # starts redis and app too
+docker compose -f docker-compose.yml -f docker-compose.web.yml up -d
 ```
 
 Then open `http://localhost:8089`.
 
-Currently works but WIP.
+Development notes and the frontend data flow are in [web/README.md](web/README.md).
+
+ℹ️ Currently works but WIP.
 
 ### Configuration
 

@@ -5,6 +5,7 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>apex leaderboard</title>
+	<link rel="icon" href="/logo-mini.png" type="image/png">
 
 	<!--
 		Deliberately NOT deferred, and deliberately not in app.js: this has to set the attribute
@@ -13,38 +14,46 @@
 	-->
 	<script>
 		(() => {
-			const stored = localStorage.getItem("theme");
+			let stored = null;
+			try {
+				stored = localStorage.getItem("theme");
+			} catch {
+				// Theme persistence is optional. System preference remains a safe fallback.
+			}
 			const dark = stored ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 			document.documentElement.dataset.theme = dark;
 		})();
 	</script>
 
 	<!-- app.js first: it registers the alpine:init listener that alpine then dispatches -->
-	<script defer src="/app.js"></script>
+	<script defer src="/app.js?v=20260806-1"></script>
 	<script defer src="/vendor/alpine-3.15.12.min.js"></script>
 	<style>
 		:root {
-			--bg: #f6efe1; /* sepia */
-			--fg: #3a3229;
-			--muted: #8a7c66;
-			--faint: #a5967d;
-			--line: #e3d7bf;
-			--control-bg: #fbf7ee;
-			--control-border: #d9cbb0;
-			--error: #a4341f;
-			--success: #397847;
+			--bg: #f6efe1;
+			/* sepia */
+			--fg: #302920;
+			--muted: #746650;
+			--faint: #8c7b61;
+			--line: #d8c9ad;
+			--row-line: #e8decb;
+			--control-bg: #fcf8ef;
+			--control-border: #cdbb99;
+			--error: #9b2f1c;
+			--success: #30703f;
 		}
 
 		:root[data-theme="dark"] {
-			--bg: #211d18;
-			--fg: #e6ded0;
-			--muted: #9c8f79;
-			--faint: #7d7161;
-			--line: #3a332a;
-			--control-bg: #2b2620;
-			--control-border: #453d32;
-			--error: #e08b73;
-			--success: #83bd8a;
+			--bg: #1d1a16;
+			--fg: #f0e7d8;
+			--muted: #baa78a;
+			--faint: #95856e;
+			--line: #4a4034;
+			--row-line: #352f28;
+			--control-bg: #302a23;
+			--control-border: #5b4e3e;
+			--error: #ee967d;
+			--success: #8aca91;
 		}
 
 		html {
@@ -57,7 +66,8 @@
 			max-width: 72rem;
 			margin: 2rem auto;
 			padding: 0 1rem;
-			background: var(--bg); /* propagates from body to the whole canvas */
+			background: var(--bg);
+			/* propagates from body to the whole canvas */
 			color: var(--fg);
 			display: grid;
 			grid-template-columns: minmax(0, 1fr) 19rem;
@@ -81,7 +91,7 @@
 			align-items: baseline;
 			gap: 0.75rem;
 			min-height: 1.75rem;
-			margin-top: 0.5rem;
+			margin-top: 0;
 			color: var(--muted);
 			font-size: 0.8rem;
 		}
@@ -109,8 +119,12 @@
 			color: #f47a33;
 		}
 
-		h1[data-color="soft-peach"] {
-			color: #fad8c5;
+		h1[data-color="vibrant-orange-2"] {
+			color: #ff8c4a;
+		}
+
+		h1[data-color="vibrant-orange-3"] {
+			color: #ec600e;
 		}
 
 		select,
@@ -135,6 +149,10 @@
 			cursor: default;
 		}
 
+		select:disabled {
+			color: var(--faint);
+		}
+
 		.toggle {
 			margin-left: auto;
 		}
@@ -143,6 +161,15 @@
 			color: var(--muted);
 			font-size: 0.85rem;
 			margin: 0.75rem 0;
+		}
+
+		.leaderboard-meta {
+			display: flex;
+			gap: 0.75rem;
+		}
+
+		.poll-label {
+			margin-left: auto;
 		}
 
 		.error {
@@ -174,7 +201,7 @@
 		td {
 			text-align: left;
 			padding: 0.4rem 0.6rem;
-			border-bottom: 1px solid var(--line);
+			border-bottom: 1px solid var(--row-line);
 		}
 
 		th {
@@ -193,6 +220,36 @@
 			font-size: 0.8rem;
 		}
 
+		.player-cell,
+		.player-head {
+			display: grid;
+			grid-template-columns: minmax(8rem, 16rem) minmax(0, 1fr);
+			gap: 0.5rem;
+			align-items: baseline;
+		}
+
+		.player-cell>span {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.copy-id {
+			overflow: hidden;
+			padding: 0;
+			border: 0;
+			background: none;
+			line-height: inherit;
+			text-align: left;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			cursor: copy;
+		}
+
+		.copy-id.copied {
+			color: var(--success);
+		}
+
 		.player-row {
 			cursor: pointer;
 		}
@@ -200,6 +257,11 @@
 		.player-row:hover,
 		.player-row.selected {
 			background: var(--control-bg);
+		}
+
+		.player-row:focus-visible {
+			outline: 2px solid var(--control-border);
+			outline-offset: -2px;
 		}
 
 		.pager {
@@ -223,6 +285,7 @@
 			margin-top: 1.5rem;
 			padding-top: 0.75rem;
 			border-top: 1px solid var(--line);
+			overflow-x: auto;
 		}
 
 		.history h2 {
@@ -238,6 +301,7 @@
 
 		.history h2 button {
 			margin-left: auto;
+			font-weight: normal;
 			text-transform: none;
 		}
 
@@ -253,7 +317,7 @@
 			grid-template-columns: 11rem 1fr 6rem;
 			gap: 0.75rem;
 			padding: 0.35rem 0;
-			border-bottom: 1px solid var(--line);
+			border-bottom: 1px solid var(--row-line);
 		}
 
 		.history-head {
@@ -261,7 +325,7 @@
 			grid-template-columns: 11rem 1fr 6rem;
 			gap: 0.75rem;
 			padding: 0.35rem 0;
-			border-bottom: 1px solid var(--line);
+			border-bottom: 1px solid var(--row-line);
 			color: var(--muted);
 			font-size: 0.75rem;
 			font-weight: bold;
@@ -274,6 +338,7 @@
 
 		.ticker {
 			margin-top: 2.5rem;
+			overflow-x: auto;
 		}
 
 		.ticker h2 {
@@ -297,7 +362,7 @@
 			gap: 0.6rem;
 			align-items: baseline;
 			padding: 0.35rem 0;
-			border-bottom: 1px solid var(--line);
+			border-bottom: 1px solid var(--row-line);
 			color: var(--muted);
 			font-size: 0.75rem;
 			font-weight: bold;
@@ -310,7 +375,7 @@
 			gap: 0.6rem;
 			align-items: baseline;
 			padding: 0.35rem 0;
-			border-bottom: 1px solid var(--line);
+			border-bottom: 1px solid var(--row-line);
 			/*
 				x-for keys on event_id, so alpine reuses the existing rows and only builds nodes
 				for genuinely new events - which is what keeps this from replaying on every poll.
@@ -351,6 +416,26 @@
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
+		}
+
+		.content-section {
+			margin-top: 1.75rem;
+			padding-top: 1rem;
+			border-top: 1px solid var(--line);
+		}
+
+		.content-section > h2 {
+			font-size: 1rem;
+			font-weight: bold;
+			text-transform: none;
+			color: var(--fg);
+			margin: 0 0 0.75rem;
+		}
+
+		.content-section .section-detail {
+			font-size: 0.8rem;
+			font-weight: normal;
+			color: var(--muted);
 		}
 
 		.write-panel {
@@ -406,18 +491,64 @@
 			padding: 0.4rem 0.7rem;
 		}
 
-		.write-result {
+		.write-panel .form-actions {
+			display: flex;
+			gap: 0.5rem;
+		}
+
+		.score-operation {
+			display: grid;
+			grid-template-columns: minmax(5rem, 1fr) auto;
+			gap: 0.75rem;
+			align-items: end;
+		}
+
+		.operation-toggle {
+			min-width: 0;
+			margin: 0;
+			padding: 0;
+			border: 0;
+		}
+
+		.operation-toggle legend {
+			margin-bottom: 0.2rem;
+			padding: 0;
+			color: var(--muted);
+			font-size: 0.8rem;
+		}
+
+		.operation-options {
+			display: flex;
+			gap: 0.6rem;
+			min-height: 1.75rem;
+			align-items: center;
+		}
+
+		.write-panel .operation-options label {
+			display: flex;
+			gap: 0.25rem;
+			align-items: center;
+			color: var(--fg);
+		}
+
+		.write-panel .operation-options input {
+			width: auto;
+			margin: 0;
+			accent-color: #f47a33;
+		}
+
+		.write-log-list {
+			list-style: none;
+			margin: 0;
+			padding: 0;
 			font-size: 0.85rem;
 			color: var(--muted);
+		}
+
+		.write-log-list li {
+			padding: 0.35rem 0;
+			border-bottom: 1px solid var(--line);
 			overflow-wrap: anywhere;
-		}
-
-		.write-feedback {
-			min-height: 2.5rem;
-		}
-
-		.write-feedback p {
-			margin: 0.65rem 0 0;
 		}
 
 		@media (max-width: 55rem) {
@@ -439,139 +570,154 @@
 
 <body x-data="leaderboard">
 	<main class="viewer">
-	<header>
-		<h1 :data-color="brandColor" @click="cycleBrandColor()" title="cycle title color">apex leaderboard</h1>
-		<select x-model="boardId" @change="selectBoard()">
-			<template x-for="b in boards" :key="b.board_id">
-				<option :value="b.board_id" x-text="`${b.board_name} - ${b.board_id}`"></option>
-			</template>
-		</select>
-		<button class="toggle" @click="toggleTheme()" x-text="theme === 'dark' ? '☀' : '☾'"
-			:title="theme === 'dark' ? 'switch to light' : 'switch to dark'"></button>
-	</header>
-
-	<div class="board-info" x-show="selectedBoard">
-		<span class="id" x-text="selectedBoard?.board_id"></span>
-		<span class="board-status" :class="selectedBoard?.status" x-text="selectedBoard?.status"></span>
-		<span x-text="boardCreatedLabel"></span>
-		<span class="error" x-show="boardActionError" x-text="boardActionError"></span>
-		<button @click="toggleBoard()" :disabled="boardBusy"
-			x-text="selectedBoard?.status === 'closed' ? 'open board' : 'close board'"></button>
-	</div>
-
-	<p class="meta">
-		<span x-text="rangeLabel"></span>
-		<span x-text="` - auto updates every ${pollSeconds}s`"></span>
-		<span class="error" x-show="error" x-text="error"></span>
-	</p>
-
-	<table>
-		<thead>
-			<tr>
-				<th class="num">#</th>
-				<th>player</th>
-				<th class="num">score</th>
-			</tr>
-		</thead>
-		<tbody>
-			<template x-for="row in rows" :key="row.player_id">
-				<tr class="player-row" :class="{ selected: historyPlayerId === row.player_id }"
-					@click="loadHistory(row)">
-					<td class="num" x-text="row.rank"></td>
-					<td>
-						<span x-text="row.player_name"></span>
-						<span class="id" x-text="row.player_id"></span>
-					</td>
-					<td class="num" x-text="row.score"></td>
-				</tr>
-			</template>
-			<template x-if="rows.length === 0 && !error">
-				<tr>
-					<td colspan="3" class="meta">no scores yet</td>
-				</tr>
-			</template>
-		</tbody>
-	</table>
-
-	<nav class="pager" x-show="total > 0">
-		<button @click="prevPage()" :disabled="!hasPrev">prev</button>
-		<button @click="nextPage()" :disabled="!hasNext">next</button>
-		<span x-text="pageLabel"></span>
-		<label>
-			rows
-			<select x-model.number="limit" @change="setPageSize()">
-				<option value="10">10</option>
-				<option value="25">25</option>
-				<option value="50">50</option>
-				<option value="100">100</option>
+		<header>
+			<h1 :data-color="brandColor" @click="cycleBrandColor()" title="cycle title color">apex leaderboard</h1>
+			<select x-model="boardId" @change="selectBoard()" :disabled="boards.length === 0"
+				aria-label="board">
+				<option value="" disabled>no boards</option>
+				<template x-for="b in boards" :key="b.board_id">
+					<option :value="b.board_id" x-text="`${b.board_name} - ${b.board_id}`"></option>
+				</template>
 			</select>
-		</label>
-	</nav>
+			<button type="button" class="toggle" @click="toggleTheme()" x-text="theme === 'dark' ? '☀' : '☾'"
+				:title="theme === 'dark' ? 'switch to light' : 'switch to dark'"
+				:aria-label="theme === 'dark' ? 'switch to light theme' : 'switch to dark theme'"></button>
+		</header>
 
-	<section class="history" x-show="historyPlayerId">
-		<h2>
-			history - <span x-text="historyPlayerName"></span>
-			<button @click="clearHistory()">close</button>
-		</h2>
-		<p class="meta" x-show="historyLoading">loading...</p>
-		<p class="error" x-show="historyError" x-text="historyError"></p>
-		<div class="history-head" x-show="!historyLoading && !historyError">
-			<span>time (UTC)</span>
-			<span>operation</span>
-			<span>amount</span>
+	<section class="content-section">
+		<h2>Board info</h2>
+		<div class="board-info" x-show="selectedBoard">
+			<span class="id" x-text="selectedBoard?.board_id"></span>
+			<span class="board-status" :class="selectedBoard?.status" x-text="selectedBoard?.status"></span>
+			<span x-text="boardCreatedLabel"></span>
+			<span class="error" role="alert" x-show="boardActionError" x-text="boardActionError"></span>
+			<button type="button" @click="toggleBoard()" :disabled="boardBusy"
+				x-text="selectedBoard?.status === 'closed' ? 'open board' : 'close board'"></button>
 		</div>
-		<ul x-show="!historyLoading && !historyError">
-			<template x-for="e in historyEvents" :key="e.event_id">
-				<li>
-					<span class="ts" x-text="eventTimestamp(e)"></span>
-					<span x-text="e.type"></span>
-					<span class="amount" x-text="eventAmount(e)"></span>
-				</li>
-			</template>
-			<template x-if="historyEvents.length === 0">
-				<li class="meta">no score events</li>
-			</template>
-		</ul>
 	</section>
 
-	<section class="ticker">
-		<h2>
-			live ledger - all boards
-			<span class="error" x-show="tickerError" x-text="tickerError"></span>
-		</h2>
-		<div class="ticker-head">
-			<span class="ts">time (UTC)</span>
-			<span>player</span>
-			<span class="op">operation</span>
-			<span class="amount">amount</span>
-			<span class="on">board</span>
-		</div>
-		<ul>
-			<template x-for="e in events" :key="e.event_id">
-				<li>
-					<span class="ts" x-text="eventTimestamp(e)"></span>
-					<span x-text="e.player_name"></span>
-					<span class="op" x-text="e.type"></span>
-					<span class="amount" x-text="eventAmount(e)"></span>
-					<span class="on">
-						<span x-text="boardLabel(e.board_id)"></span>
-						<span class="id" x-text="e.board_id"></span>
+	<section class="content-section">
+		<h2>Leaderboard</h2>
+		<p class="meta leaderboard-meta">
+			<span x-text="rangeLabel"></span>
+			<span class="error" role="alert" x-show="error" x-text="error"></span>
+			<span class="poll-label" x-text="`auto updates every ${pollSeconds}s`"></span>
+		</p>
+
+		<table>
+			<thead>
+				<tr>
+					<th class="num">#</th>
+				<th>
+					<span class="player-head">
+						<span>player</span>
+						<span>ID</span>
 					</span>
-				</li>
-			</template>
-			<template x-if="events.length === 0">
-				<li class="meta">waiting for score events...</li>
-			</template>
-		</ul>
+				</th>
+					<th class="num">score</th>
+				</tr>
+			</thead>
+			<tbody>
+				<template x-for="row in rows" :key="row.player_id">
+					<tr class="player-row" :class="{ selected: historyPlayerId === row.player_id }"
+						:aria-selected="historyPlayerId === row.player_id" tabindex="0"
+						@click="loadHistory(row)" @keydown.enter.self="loadHistory(row)"
+						@keydown.space.prevent.self="loadHistory(row)">
+						<td class="num" x-text="row.rank"></td>
+						<td class="player-cell">
+							<span x-text="row.player_name"></span>
+							<button class="id copy-id" :class="{ copied: copiedPlayerId === row.player_id }"
+								@click.stop="copyPlayerId(row.player_id)" :title="`copy ${row.player_id}`"
+								:aria-label="`copy player id ${row.player_id}`"
+								x-text="row.player_id"></button>
+						</td>
+						<td class="num" x-text="row.score"></td>
+					</tr>
+				</template>
+				<template x-if="rows.length === 0 && !error">
+					<tr>
+						<td colspan="3" class="meta">no scores yet</td>
+					</tr>
+				</template>
+			</tbody>
+		</table>
+
+		<nav class="pager" aria-label="leaderboard pages" x-show="total > 0">
+			<button type="button" @click="prevPage()" :disabled="!hasPrev">prev</button>
+			<button type="button" @click="nextPage()" :disabled="!hasNext">next</button>
+			<span x-text="pageLabel"></span>
+			<label>
+				rows
+				<select x-model.number="limit" @change="setPageSize()">
+					<option value="10">10</option>
+					<option value="25">25</option>
+					<option value="50">50</option>
+					<option value="100">100</option>
+				</select>
+			</label>
+		</nav>
 	</section>
+
+	<section class="history content-section" x-show="historyPlayerId">
+		<h2>
+			Player history <span class="section-detail" x-text="historyPlayerName"></span>
+			<button type="button" @click="clearHistory()">close</button>
+			</h2>
+			<p class="meta" x-show="historyLoading">loading...</p>
+			<p class="error" role="alert" x-show="historyError" x-text="historyError"></p>
+			<div class="history-head" x-show="!historyLoading && !historyError">
+				<span>time (UTC)</span>
+				<span>operation</span>
+				<span>amount</span>
+			</div>
+			<ul x-show="!historyLoading && !historyError">
+				<template x-for="e in historyEvents" :key="e.event_id">
+					<li>
+						<span class="ts" x-text="eventTimestamp(e)"></span>
+						<span x-text="e.type"></span>
+						<span class="amount" x-text="eventAmount(e)"></span>
+					</li>
+				</template>
+				<template x-if="historyEvents.length === 0">
+					<li class="meta">no score events</li>
+				</template>
+			</ul>
+		</section>
+
+	<section class="ticker content-section">
+		<h2>
+			Live ledger <span class="section-detail">all boards</span>
+				<span class="error" role="alert" x-show="tickerError" x-text="tickerError"></span>
+			</h2>
+			<div class="ticker-head">
+			<span>time (UTC)</span>
+				<span>player</span>
+				<span class="op">operation</span>
+				<span class="amount">amount</span>
+				<span class="on">board</span>
+			</div>
+			<ul>
+				<template x-for="e in events" :key="e.event_id">
+					<li>
+						<span class="ts" x-text="eventTimestamp(e)"></span>
+						<span x-text="e.player_name"></span>
+						<span class="op" x-text="e.type"></span>
+						<span class="amount" x-text="eventAmount(e)"></span>
+						<span class="on">
+							<span x-text="boardLabel(e.board_id)"></span>
+							<span class="id" x-text="e.board_id"></span>
+						</span>
+					</li>
+				</template>
+				<template x-if="events.length === 0">
+					<li class="meta">waiting for score events...</li>
+				</template>
+			</ul>
+		</section>
 	</main>
 
 	<aside class="write-panel">
-		<h2>write</h2>
-		<div class="write-feedback">
-			<p class="write-result" x-show="writeMessage" x-text="writeMessage"></p>
-			<p class="error" x-show="writeError" x-text="writeError"></p>
-		</div>
+		<h2>Write operations</h2>
 
 		<section>
 			<h3>create board</h3>
@@ -591,7 +737,10 @@
 						<option value="closed">closed</option>
 					</select>
 				</label>
-				<button :disabled="writeBusy">create board</button>
+				<div class="form-actions">
+					<button :disabled="writeBusy">create board</button>
+					<button type="button" @click="randomizeBoard()" :disabled="writeBusy">random</button>
+				</div>
 			</form>
 		</section>
 
@@ -600,9 +749,12 @@
 			<form @submit.prevent="createPlayer()">
 				<label>
 					name
-					<input x-model.trim="newPlayerName" required placeholder="alice">
+					<input x-model.trim="newPlayerName" required placeholder="Alice">
 				</label>
-				<button :disabled="writeBusy">create player</button>
+				<div class="form-actions">
+					<button :disabled="writeBusy">create player</button>
+					<button type="button" @click="randomizePlayer()" :disabled="writeBusy">random</button>
+				</div>
 			</form>
 		</section>
 
@@ -611,7 +763,8 @@
 			<form @submit.prevent="writeScore()">
 				<label>
 					board
-					<select x-model="scoreWrite.boardId" required>
+					<select x-model="scoreWrite.boardId" required :disabled="boards.length === 0">
+						<option value="" disabled>no boards</option>
 						<template x-for="b in boards" :key="b.board_id">
 							<option :value="b.board_id" x-text="b.board_name"></option>
 						</template>
@@ -621,20 +774,34 @@
 					player id
 					<input x-model.trim="scoreWrite.playerId" required placeholder="uuid">
 				</label>
-				<label>
-					operation
-					<select x-model="scoreWrite.operation">
-						<option value="set">set</option>
-						<option value="increment">increment</option>
-					</select>
-				</label>
-				<label>
-					amount
-					<input type="number" x-model.number="scoreWrite.amount" min="-10000000000000"
-						max="10000000000000" step="1" required>
-				</label>
-				<button :disabled="writeBusy">apply score</button>
+				<div class="score-operation">
+					<label>
+						amount
+						<input type="number" x-model.number="scoreWrite.amount" min="-10000000000000"
+							max="10000000000000" step="1" required>
+					</label>
+					<fieldset class="operation-toggle">
+						<legend>operation</legend>
+						<div class="operation-options">
+							<label><input type="radio" x-model="scoreWrite.operation" value="set"> set</label>
+							<label><input type="radio" x-model="scoreWrite.operation" value="increment"> increment</label>
+						</div>
+					</fieldset>
+				</div>
+				<button :disabled="writeBusy || boards.length === 0">apply score</button>
 			</form>
+		</section>
+
+		<section>
+			<h3>Logs</h3>
+			<ul class="write-log-list" aria-live="polite">
+				<template x-for="log in writeLogs" :key="log.id">
+					<li :class="{ error: log.level === 'error' }" x-text="log.message"></li>
+				</template>
+				<template x-if="writeLogs.length === 0">
+					<li>no operations yet</li>
+				</template>
+			</ul>
 		</section>
 	</aside>
 </body>
