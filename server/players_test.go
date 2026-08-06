@@ -21,6 +21,19 @@ func (s *APISuite) TestPostPlayer() {
 	s.Require().Equal("/api/v1/players/"+result.PlayerId, resp.Header.Get("Location"))
 }
 
+func (s *APISuite) TestPostPlayerStoresTrimmedName() {
+	resp := s.postJSON("/api/v1/players", handlers.PostPlayerReq{
+		PlayerName: "  Mighty Warrior  ",
+	})
+	s.Require().Equal(http.StatusCreated, resp.StatusCode)
+	s.Require().Equal("Mighty Warrior", s.storage.lastProfile.PlayerName)
+}
+
+func (s *APISuite) TestPostPlayerRejectsInvalidName() {
+	resp := s.postJSON("/api/v1/players", handlers.PostPlayerReq{PlayerName: ""})
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
 func (s *APISuite) TestPostPlayerWithIdempotencyKey() {
 	resp := s.postJSONWithHeaders("/api/v1/players",
 		handlers.PostPlayerReq{PlayerName: "alice"},

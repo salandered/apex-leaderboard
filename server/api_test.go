@@ -38,14 +38,16 @@ func TestAPISuite(t *testing.T) {
 
 type APISuite struct {
 	suite.Suite
-	server *httptest.Server
-	client *http.Client
-	router routers.Router
+	server  *httptest.Server
+	client  *http.Client
+	router  routers.Router
+	storage *mockStorage
 }
 
 func (s *APISuite) SetupSuite() {
 	fmt.Println("SetupSuite")
-	s.server = httptest.NewServer(server.NewMux(getMockedStorage()))
+	s.storage = &mockStorage{}
+	s.server = httptest.NewServer(server.NewMux(s.storage))
 	s.client = s.server.Client()
 
 	loader := openapi3.NewLoader()
@@ -178,12 +180,12 @@ func (s *APISuite) decodeJSON(resp *http.Response, target any) {
 
 // Mocked storage
 
-func getMockedStorage() storage.Storage {
-	return &mockStorage{}
-}
-
 type mockStorage struct {
 	pingErr error
+
+	// what the last write handler passed down, for asserting the stored (normalized) name
+	lastProfile *player.Profile
+	lastBoard   *board.Board
 }
 
 func (ms *mockStorage) Ping(context.Context) error {
@@ -192,6 +194,7 @@ func (ms *mockStorage) Ping(context.Context) error {
 
 func (ms *mockStorage) CreatePlayerProfile(c context.Context, profile *player.Profile, idempotencyKey string) (player.ID, error) {
 	fmt.Printf("creating profile %v to mocked storage", profile)
+	ms.lastProfile = profile
 	if idempotencyKey == MockedConflictIdempotencyKey {
 		return "", storage.ErrIdempotencyConflict
 	}
@@ -212,6 +215,7 @@ func (ms *mockStorage) CreateBoard(
 	board *board.Board,
 ) error {
 	fmt.Printf("creating board %v to mocked storage", board)
+	ms.lastBoard = board
 	return nil
 }
 

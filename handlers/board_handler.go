@@ -42,6 +42,12 @@ func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) 
 		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
+	boardName, err := board.NormalizeName(data.BoardName)
+	if err != nil {
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+		return
+	}
+
 	state := board.BoardActive
 	if data.State != "" {
 		state = board.BoardState(data.State)
@@ -55,7 +61,7 @@ func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) 
 		req.Context(),
 		&board.Board{
 			BoardId:   boardId,
-			BoardName: data.BoardName,
+			BoardName: boardName,
 			State:     state,
 			CreatedAt: apextime.Now(),
 		})

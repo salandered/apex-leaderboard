@@ -40,11 +40,17 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 		return
 	}
 
+	playerName, err := player.NormalizeName(data.PlayerName)
+	if err != nil {
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+		return
+	}
+
 	playerId, err := h.Storage.CreatePlayerProfile(
 		req.Context(),
 		&player.Profile{
 			PlayerId:   player.GenerateID(),
-			PlayerName: data.PlayerName,
+			PlayerName: playerName,
 			CreatedAt:  apextime.Now(),
 		},
 		idempotencyKey)

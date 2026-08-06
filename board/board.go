@@ -2,7 +2,14 @@ package board
 
 import (
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
+)
+
+const (
+	MinBoardNameRunes = 3
+	MaxBoardNameRunes = 32
 )
 
 type ID string
@@ -58,4 +65,23 @@ func (state BoardState) Validate() error {
 	default:
 		return fmt.Errorf("invalid board state %q", state)
 	}
+}
+
+// Any unicode is allowed except control chars; len is 3-32 runes.
+// Note that emoji can be built from several runes.
+// Trims surrounding spaces.
+func NormalizeName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	runes := 0
+	for _, char := range name {
+		if unicode.IsControl(char) {
+			return "", fmt.Errorf("invalid board name %q: control characters are not allowed", name)
+		}
+		runes++
+	}
+	if runes < MinBoardNameRunes || runes > MaxBoardNameRunes {
+		return "", fmt.Errorf("invalid board name %q: length must be in [%d, %d] characters",
+			name, MinBoardNameRunes, MaxBoardNameRunes)
+	}
+	return name, nil
 }

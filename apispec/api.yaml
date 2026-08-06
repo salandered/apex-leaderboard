@@ -529,6 +529,9 @@ components:
       properties:
         player_name:
           type: string
+          description: >-
+            Surrounding whitespace is stripped. 3-32 chars of a-z, A-Z, 0-9, space, '_' or '-',
+            starting with a letter.
 
     CreateBoardRequest:
       type: object
@@ -538,6 +541,9 @@ components:
       properties:
         board_name:
           type: string
+          description: >-
+            Display name. Surrounding whitespace is stripped. 3-32 characters of any unicode
+            except control characters.
         status:
           type: string
           enum: [active, closed]

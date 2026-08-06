@@ -20,6 +20,19 @@ func (s *APISuite) TestPutBoardInvalidId() {
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
+func (s *APISuite) TestPutBoardStoresTrimmedName() {
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
+		BoardName: "  Summer Cup 🌳  ",
+	})
+	s.Require().Equal(http.StatusCreated, resp.StatusCode)
+	s.Require().Equal("Summer Cup 🌳", s.storage.lastBoard.BoardName)
+}
+
+func (s *APISuite) TestPutBoardRejectsInvalidName() {
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{BoardName: ""})
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
 func (s *APISuite) TestPutBoardCreatedClosed() {
 	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
 		BoardName: "Summer Contest",
