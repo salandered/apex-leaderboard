@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -119,10 +120,45 @@ func parsePlayerBoardPathValues(w http.ResponseWriter, req *http.Request) (playe
 	return playerId, boardId, nil
 }
 
-// Response Utils
+// Response/Request Utils
+
+// Currently POST bodies are small (like a player name)
+const maxRequestBodyBytes = 1 << 16 // 64 kb
+
+// Decodes the incoming req.
+// Checks: only one JSON object; bounded; no unknown fields.
+// On failure, writes the response (4xx)
+// The returned error is the handler's signal to stop.
+func readJSON(w http.ResponseWriter, req *http.Request, dst any) error {
+	req.Body = http.MaxBytesReader(w, req.Body, maxRequestBodyBytes)
+	dec := json.NewDecoder(req.Body)
+	dec.DisallowUnknownFields()
+
+	err := dec.Decode(dst)
+	if err != nil {
+		// Consider adding branches for json errors like json.SyntaxError, json.UnmarshalTypeError, etc
+		status := http.StatusBadRequest
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			status = http.StatusRequestEntityTooLarge
+			err = fmt.Errorf("request body too large")
+		}
+		writeErrorToResponse(req.Context(), w, err, status)
+		return err
+	}
+
+	err = dec.Decode(&struct{}{})
+	if !errors.Is(err, io.EOF) {
+		err = fmt.Errorf("body must contain a single JSON object")
+		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+		return err
+	}
+
+	slog.DebugContext(req.Context(), "request decoded", "body", dst)
+	return nil
+}
 
 func writeJSONToResponse(ctx context.Context, w http.ResponseWriter, statusCode int, data any) {
-	createHeaders(w)
+	w.Header().Set("Content-Type", "application/json")
 
 	rawJSON, err := json.Marshal(data)
 	if err != nil {
@@ -144,26 +180,43 @@ func writeJSONToResponse(ctx context.Context, w http.ResponseWriter, statusCode 
 		return
 	}
 	slog.DebugContext(ctx, "response sent",
-		"bytes", len(rawJSON), "payload", truncatePayload(rawJSON),
-	)
+		"bytes", len(rawJSON), "payload", truncatePayload(rawJSON))
 }
 
-func createHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
+type errorResponse struct {
+	Error string `json:"error"`
 }
 
 func writeErrorToResponse(ctx context.Context, w http.ResponseWriter, err error, statusCode int) {
+	msg := err.Error()
 	if statusCode >= http.StatusInternalServerError {
 		slog.ErrorContext(ctx, "request failed", "status", statusCode, "error", err)
-		http.Error(w, "internal server error", statusCode)
+		msg = "internal server error" // client should not see the actual error
+	} else {
+		slog.WarnContext(ctx, "request rejected", "status", statusCode, "error", err)
+	}
+
+	rawJSON, marshalErr := json.Marshal(errorResponse{Error: msg})
+	if marshalErr != nil {
+		// providing requestID (via ctx)
+		slog.ErrorContext(ctx, "failed marshalling error response", "error", marshalErr)
+		// all bad, just return a plain text
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	slog.WarnContext(ctx, "request rejected", "status", statusCode, "error", err)
-	http.Error(w, err.Error(), statusCode)
+
+	w.Header().Set("Content-Type", "application/json")
+	// w.Header().Set("X-Content-Type-Options", "nosniff") // consider adding
+	w.WriteHeader(statusCode)
+
+	if _, writeErr := w.Write(rawJSON); writeErr != nil {
+		slog.ErrorContext(ctx, "failed writing error response", "status", statusCode, "error", writeErr)
+	}
 }
 
 // maps a storage-layer error to an HTTP response
 func writeStorageError(ctx context.Context, w http.ResponseWriter, err error) {
+	// Errorf messages duplicate 'err' content, but we might want to hide some internal info
 	if errors.Is(err, storage.ErrNotFound) {
 		writeErrorToResponse(ctx, w, fmt.Errorf("not found"), http.StatusNotFound)
 		return

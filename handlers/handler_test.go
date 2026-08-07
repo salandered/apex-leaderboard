@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Handlers are being tested in [server_test] package
+
 func TestParseIntQuery(t *testing.T) {
 	tests := []struct {
 		name      string

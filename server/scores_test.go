@@ -281,3 +281,43 @@ func (s *APISuite) TestGetHistoryOnBoardInvalidLimit() {
 	resp := s.get("/api/v1/boards/" + MockedBoardId + "/scores/" + MockedPlayerId + "/history?limit=0")
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
+
+// Decoding errors
+
+func (s *APISuite) TestPutScoreRejectsUnknownField() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		map[string]any{"player_score": 10, "playerScore": 9999},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestIncrementScoreRejectsUnknownField() {
+	resp := s.postJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		map[string]any{"amount": 5, "ammmmount": 9999},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreRejectsTrailingGarbage() {
+	resp := s.putRaw(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		[]byte(`{"player_score":10}{"player_score":20}`),
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreRejectsTrailingBracket() {
+	resp := s.putRaw(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		[]byte(`{"player_score":10}]`),
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreRejectsOversizedBody() {
+	body := []byte(`{"player_score":10,"pad":"` + strings.Repeat("a", 1<<16) + `"}`)
+	resp := s.putRaw("/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId, body)
+	s.Require().Equal(http.StatusRequestEntityTooLarge, resp.StatusCode)
+}

@@ -84,9 +84,11 @@ paths:
         "409":
           description: The Idempotency-Key was reused with a different player name
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -130,9 +132,11 @@ paths:
         "409":
           description: A board with this id already exists
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "500":
           $ref: "#/components/responses/InternalServerError"
     get:
@@ -152,9 +156,9 @@ paths:
         "404":
           description: ID not found
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -172,9 +176,9 @@ paths:
         "404":
           description: ID not found
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -192,9 +196,9 @@ paths:
         "404":
           description: ID not found
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -219,6 +223,8 @@ paths:
           schema:
             type: integer
             minimum: 0
+            # TODO: consider capping with something. We should not return, say, 1 million scores.
+            # If ur score is 1 million + 1, this should be covered by a relative api (planned)
         - name: as_of
           in: query
           required: false
@@ -256,9 +262,9 @@ paths:
         "404":
           description: ID not found
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -339,9 +345,9 @@ paths:
         "404":
           description: ID not found (player not ranked on this board)
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
     put:
@@ -367,15 +373,17 @@ paths:
         "404":
           description: ID not found
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Board is closed, or the Idempotency-Key was reused with a different request
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -403,18 +411,20 @@ paths:
         "404":
           description: ID not found
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: >
             Nothing is applied or appended. Possible reasons: Board is closed; 
             the Idempotency-Key was reused with a different request; the
             resulting score exceeded the allowed range.
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -432,9 +442,9 @@ paths:
         "404":
           description: Board ID not found
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -456,9 +466,9 @@ paths:
         "404":
           description: Board ID not found
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -497,6 +507,17 @@ paths:
 
 components:
   schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: >-
+            What went wrong.
+
     HealthResponse:
       type: object
       additionalProperties: false
@@ -865,13 +886,20 @@ components:
     InternalServerError:
       description: Internal Server Error
       content:
-        text/plain:
+        application/json:
           schema:
-            type: string
+            $ref: "#/components/schemas/ErrorResponse"
 
     BadRequest:
       description: Bad Request
       content:
-        text/plain:
+        application/json:
           schema:
-            type: string
+            $ref: "#/components/schemas/ErrorResponse"
+
+    PayloadTooLarge:
+      description: Request body exceeds the size limit
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/salandered/apex/apextime"
@@ -37,9 +36,7 @@ func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 	var data PutBoardReq
-	err := json.NewDecoder(req.Body).Decode(&data)
-	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+	if err := readJSON(w, req, &data); err != nil {
 		return
 	}
 	boardName, err := board.NormalizeName(data.BoardName)

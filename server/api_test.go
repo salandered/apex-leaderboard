@@ -173,6 +173,18 @@ func (s *APISuite) putJSON(path string, payload any) *http.Response {
 	return resp
 }
 
+// puts a malformed-body
+func (s *APISuite) putRaw(path string, body []byte) *http.Response {
+	req, err := http.NewRequest(http.MethodPut, s.server.URL+path, bytes.NewReader(body))
+	s.Require().NoError(err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.client.Do(req)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { resp.Body.Close() })
+	s.validateAgainstSpec(resp)
+	return resp
+}
+
 func (s *APISuite) decodeJSON(resp *http.Response, target any) {
 	err := json.NewDecoder(resp.Body).Decode(target)
 	s.Require().NoError(err)

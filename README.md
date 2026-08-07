@@ -36,11 +36,14 @@ docker compose up --build
 Make requests:
 
 ```bash
-# Create a player profile; returns the generated id.
-curl -X POST http://localhost:8090/api/v1/players \
+# Create a player profile and keep the generated id for the calls below.
+PLAYER_ID=$(curl -s -X POST http://localhost:8090/api/v1/players \
   -H "Content-Type: application/json" \
-  -d '{"player_name":"alice"}'
-# {"player_id":"7dcbeb46-e1e1-492d-a32a-c593b13428de"}
+  -d '{"player_name":"alice"}' \
+  | sed -E 's/.*"player_id":"([^"]+)".*/\1/')
+
+echo "$PLAYER_ID"
+# 7dcbeb46-e1e1-492d-a32a-c593b13428de
 
 # Create a new board
 curl -X PUT http://localhost:8090/api/v1/boards/main \
@@ -48,12 +51,12 @@ curl -X PUT http://localhost:8090/api/v1/boards/main \
   -d '{"board_name":"Main"}'
 
 # Set a score on a new board
-curl -X PUT http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
+curl -X PUT "http://localhost:8090/api/v1/boards/main/scores/$PLAYER_ID" \
   -H "Content-Type: application/json" \
   -d '{"player_score":36}'
 
 # Retry-safe increment: send an Idempotency-Key. Try to curl this several times with and without the header.
-curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/increment \
+curl -X POST "http://localhost:8090/api/v1/boards/main/scores/$PLAYER_ID/increment" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: r1" \
   -d '{"amount":5}'
@@ -62,7 +65,7 @@ curl -X POST http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-
 curl "http://localhost:8090/api/v1/boards/main/scores"
 
 # See all the score events
-curl http://localhost:8090/api/v1/boards/main/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de/history
+curl "http://localhost:8090/api/v1/boards/main/scores/$PLAYER_ID/history"
 
 # Read the global score event feed, oldest first
 curl "http://localhost:8090/api/v1/events?after=0-0&limit=50"
@@ -77,7 +80,7 @@ curl -X PUT http://localhost:8090/api/v1/boards/summer-contest \
   -d '{"board_name":"Summer Contest","status":"closed"}'
 
 # Try to set a score on a new closed board
-curl -X PUT http://localhost:8090/api/v1/boards/summer-contest/scores/7dcbeb46-e1e1-492d-a32a-c593b13428de \
+curl -X PUT "http://localhost:8090/api/v1/boards/summer-contest/scores/$PLAYER_ID" \
   -H "Content-Type: application/json" \
   -d '{"player_score":12}'
 

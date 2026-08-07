@@ -44,12 +44,21 @@ function capitalize(word) {
 	return word[0].toUpperCase() + word.slice(1);
 }
 
-// The API reports errors as text/plain (http.Error), not JSON, so a failed response body
-// must not be handed to res.json().
+// The API reports errors as {"error": "..."}. Read the body as text first: a proxy or a
+// panic can still produce a non-JSON body with an error status.
+async function errorFrom(res) {
+	const text = (await res.text()).trim();
+	try {
+		return new Error(`${res.status} - ${JSON.parse(text).error}`);
+	} catch {
+		return new Error(`${res.status} - ${text}`);
+	}
+}
+
 async function getJSON(url) {
 	const res = await fetch(url);
 	if (!res.ok) {
-		throw new Error(`${res.status} - ${(await res.text()).trim()}`);
+		throw await errorFrom(res);
 	}
 	return res.json();
 }
@@ -62,7 +71,7 @@ async function sendJSON(url, method, body, headers = {}) {
 	}
 	const res = await fetch(url, options);
 	if (!res.ok) {
-		throw new Error(`${res.status} - ${(await res.text()).trim()}`);
+		throw await errorFrom(res);
 	}
 	if (res.status === 204) {
 		return null;

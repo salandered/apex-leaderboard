@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/salandered/apex/apextime"
@@ -34,9 +33,7 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	var data PostPlayerReq
-	err = json.NewDecoder(req.Body).Decode(&data)
-	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+	if err := readJSON(w, req, &data); err != nil {
 		return
 	}
 

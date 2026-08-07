@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -64,9 +63,7 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 	var data PutScoreReq
-	err = json.NewDecoder(req.Body).Decode(&data)
-	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+	if err := readJSON(w, req, &data); err != nil {
 		return
 	}
 	if err := score.Validate(data.PlayerScore); err != nil {
@@ -100,9 +97,7 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 		return
 	}
 	var data IncrementScoreReq
-	err = json.NewDecoder(req.Body).Decode(&data)
-	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+	if err := readJSON(w, req, &data); err != nil {
 		return
 	}
 	// bounds the delta only: the resulting score is bounded atomically in the write script
