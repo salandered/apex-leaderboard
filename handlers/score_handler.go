@@ -17,12 +17,13 @@ type ScoreHandler struct {
 	Storage storage.ScoreRepo
 }
 
+// Using pointer: without it '{}' would write a 0
 type PutScoreReq struct {
-	PlayerScore int64 `json:"player_score"`
+	PlayerScore *int64 `json:"player_score"`
 }
 
 type IncrementScoreReq struct {
-	Amount int64 `json:"amount"`
+	Amount *int64 `json:"amount"`
 }
 
 type HistoryResp struct {
@@ -66,7 +67,11 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 	if err := readJSON(w, req, &data); err != nil {
 		return
 	}
-	if err := score.Validate(data.PlayerScore); err != nil {
+	if data.PlayerScore == nil {
+		writeErrorToResponse(req.Context(), w, fmt.Errorf("player_score is required"), http.StatusBadRequest)
+		return
+	}
+	if err := score.Validate(*data.PlayerScore); err != nil {
 		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
@@ -74,7 +79,7 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 		req.Context(),
 		playerId,
 		boardId,
-		data.PlayerScore,
+		*data.PlayerScore,
 		requestID(req),
 		idempotencyKey,
 	)
@@ -100,8 +105,12 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 	if err := readJSON(w, req, &data); err != nil {
 		return
 	}
+	if data.Amount == nil {
+		writeErrorToResponse(req.Context(), w, fmt.Errorf("amount is required"), http.StatusBadRequest)
+		return
+	}
 	// bounds the delta only: the resulting score is bounded atomically in the write script
-	if err := score.Validate(data.Amount); err != nil {
+	if err := score.Validate(*data.Amount); err != nil {
 		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
 		return
 	}
@@ -109,7 +118,7 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 		req.Context(),
 		playerId,
 		boardId,
-		data.Amount,
+		*data.Amount,
 		requestID(req),
 		idempotencyKey,
 	)

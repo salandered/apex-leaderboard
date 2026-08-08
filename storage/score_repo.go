@@ -251,10 +251,7 @@ func (rs *redisStorage) ListStandingsAsOf(
 	if offset >= total || limit <= 0 {
 		return []Standing{}, total, nil
 	}
-	end := offset + limit
-	if end > total {
-		end = total
-	}
+	end := min(offset+limit, total)
 	return standings[int(offset):int(end)], total, nil
 }
 

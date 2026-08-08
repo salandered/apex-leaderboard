@@ -260,6 +260,20 @@ Contexts:
 
 ## API notes (raw)
 
+### Strict decoding
+
+Every endpoint that takes a body applies these rules:
+
+| Body                                       | Result                  |
+| ------------------------------------------ | ----------------------- |
+| larger than 64 kb (may be increased later) | `413`                   |
+| a key not in the schema                    | `400`, naming the key   |
+| anything after the first JSON object       | `400`                   |
+| a required field missing or `null`         | `400`, naming the field |
+
+The last rule in particular mean that the `player_score` and `amount` fields are required. \
+`{}` is rejected, not a write of 0. `{"amount": 0}` is a legal no-op increment.
+
 ### Increment endpoint (`POST scores/{id}/increment`) and Idempotency key
 
 Problem: `increment` applies a delta (`+amount`) which is not idempotent.

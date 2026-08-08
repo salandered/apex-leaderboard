@@ -12,7 +12,7 @@ func (s *APISuite) TestPutScore() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
 		handlers.PutScoreReq{
-			PlayerScore: 98,
+			PlayerScore: new(int64(98)),
 		})
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
 }
@@ -21,7 +21,7 @@ func (s *APISuite) TestIncrementScore() {
 	resp := s.postJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
 		handlers.IncrementScoreReq{
-			Amount: 12,
+			Amount: new(int64(12)),
 		})
 
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
@@ -30,7 +30,7 @@ func (s *APISuite) TestIncrementScore() {
 func (s *APISuite) TestIncrementScoreWithIdempotencyKey() {
 	resp := s.postJSONWithHeaders(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
-		handlers.IncrementScoreReq{Amount: 12},
+		handlers.IncrementScoreReq{Amount: new(int64(12))},
 		map[string]string{"Idempotency-Key": "key-abc"},
 	)
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
@@ -39,7 +39,7 @@ func (s *APISuite) TestIncrementScoreWithIdempotencyKey() {
 func (s *APISuite) TestIncrementScoreRejectsOverlongIdempotencyKey() {
 	resp := s.postJSONWithHeaders(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
-		handlers.IncrementScoreReq{Amount: 12},
+		handlers.IncrementScoreReq{Amount: new(int64(12))},
 		map[string]string{"Idempotency-Key": strings.Repeat("k", 129)},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
@@ -82,7 +82,7 @@ func (s *APISuite) TestIncrementScoreRejectsFractionalAmount() {
 func (s *APISuite) TestPutScoreAcceptsScoreAtMax() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{PlayerScore: score.Max},
+		handlers.PutScoreReq{PlayerScore: new(score.Max)},
 	)
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
 }
@@ -90,7 +90,7 @@ func (s *APISuite) TestPutScoreAcceptsScoreAtMax() {
 func (s *APISuite) TestPutScoreRejectsScoreAboveMax() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{PlayerScore: score.Max + 1},
+		handlers.PutScoreReq{PlayerScore: new(score.Max + 1)},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
@@ -98,7 +98,7 @@ func (s *APISuite) TestPutScoreRejectsScoreAboveMax() {
 func (s *APISuite) TestPutScoreRejectsScoreBelowMin() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{PlayerScore: score.Min - 1},
+		handlers.PutScoreReq{PlayerScore: new(score.Min - 1)},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
@@ -106,7 +106,7 @@ func (s *APISuite) TestPutScoreRejectsScoreBelowMin() {
 func (s *APISuite) TestIncrementScoreRejectsAmountAboveMax() {
 	resp := s.postJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
-		handlers.IncrementScoreReq{Amount: score.Max + 1},
+		handlers.IncrementScoreReq{Amount: new(score.Max + 1)},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
@@ -114,7 +114,7 @@ func (s *APISuite) TestIncrementScoreRejectsAmountAboveMax() {
 func (s *APISuite) TestIncrementScoreRejectsAmountBelowMin() {
 	resp := s.postJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
-		handlers.IncrementScoreReq{Amount: score.Min - 1},
+		handlers.IncrementScoreReq{Amount: new(score.Min - 1)},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
@@ -123,7 +123,7 @@ func (s *APISuite) TestPutScoreClosedBoard() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedClosedBoardId+"/scores/"+MockedPlayerId,
 		handlers.PutScoreReq{
-			PlayerScore: 98,
+			PlayerScore: new(int64(98)),
 		})
 	s.Require().Equal(http.StatusConflict, resp.StatusCode)
 }
@@ -132,7 +132,7 @@ func (s *APISuite) TestIncrementScoreClosedBoard() {
 	resp := s.postJSON(
 		"/api/v1/boards/"+MockedClosedBoardId+"/scores/"+MockedPlayerId+"/increment",
 		handlers.IncrementScoreReq{
-			Amount: 12,
+			Amount: new(int64(12)),
 		})
 	s.Require().Equal(http.StatusConflict, resp.StatusCode)
 }
@@ -320,4 +320,46 @@ func (s *APISuite) TestPutScoreRejectsOversizedBody() {
 	body := []byte(`{"player_score":10,"pad":"` + strings.Repeat("a", 1<<16) + `"}`)
 	resp := s.putRaw("/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId, body)
 	s.Require().Equal(http.StatusRequestEntityTooLarge, resp.StatusCode)
+}
+
+// A jsob req field should be present. No filed does not mean zero value.
+
+func (s *APISuite) TestPutScoreRejectsMissingScore() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		map[string]any{},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestIncrementScoreRejectsMissingAmount() {
+	resp := s.postJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		map[string]any{},
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreRejectsNullScore() {
+	resp := s.putRaw(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		[]byte(`{"player_score":null}`),
+	)
+	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (s *APISuite) TestPutScoreAcceptsExplicitZeroScore() {
+	resp := s.putJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
+		handlers.PutScoreReq{PlayerScore: new(int64(0))},
+	)
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
+}
+
+func (s *APISuite) TestIncrementScoreAcceptsExplicitZeroAmount() {
+	resp := s.postJSON(
+		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId+"/increment",
+		handlers.IncrementScoreReq{Amount: new(int64(0))},
+	)
+	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
 }

@@ -6,6 +6,7 @@
 	- [Integration tests](#integration-tests)
 	- [Testify usage](#testify-usage)
 	- [Linters](#linters)
+	- [Misc](#misc)
 
 ## Running tests
 
@@ -128,4 +129,12 @@ golangci-lint linters
 golangci-lint formatters
 # schema is valid
 golangci-lint config verify
+```
+
+### Misc
+
+https://go.dev/blog/gofix
+
+```bash
+go fix ./...
 ```
