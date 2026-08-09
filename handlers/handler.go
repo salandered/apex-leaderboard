@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/requestid"
@@ -98,6 +100,17 @@ func parseIntQuery(req *http.Request, name string, def, min, max int64) (int64, 
 	return v, nil
 }
 
+// want YYYY-MM-DD; returns the UTC start of that day
+func parseDateQuery(req *http.Request, name string) (time.Time, error) {
+	raw := req.URL.Query().Get(name)
+	date, err := apextime.ParseDate(raw)
+	if err != nil {
+		return time.Time{}, fmt.Errorf(
+			"invalid query param, want YYYY-MM-DD; param '%v', value '%v'", name, raw)
+	}
+	return date, nil
+}
+
 func boardIdFromPath(req *http.Request) (board.ID, error) {
 	boardId := board.ID(req.PathValue(boardIDPathValue))
 	if err := boardId.Validate(); err != nil {
@@ -106,18 +119,34 @@ func boardIdFromPath(req *http.Request) (board.ID, error) {
 	return boardId, nil
 }
 
-func parsePlayerBoardPathValues(w http.ResponseWriter, req *http.Request) (player.ID, board.ID, error) {
+func playerIdFromPath(req *http.Request) (player.ID, error) {
 	playerId := player.ID(req.PathValue(playerIDPathValue))
 	if err := playerId.Validate(); err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
-		return "", "", err
+		return "", err
 	}
-	boardId, err := boardIdFromPath(req)
-	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
-		return "", "", err
-	}
-	return playerId, boardId, nil
+	return playerId, nil
+}
+
+// Response metadata, one type per paging style.
+// TODO: consitent paging style
+
+type offsetMeta struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+	Total  int64 `json:"total"`
+}
+
+type cursorMeta struct {
+	Limit     int64  `json:"limit"`
+	NextAfter string `json:"next_after"`
+}
+
+type limitMeta struct {
+	Limit int64 `json:"limit"`
+}
+
+type totalMeta struct {
+	Total int64 `json:"total"`
 }
 
 // Response/Request Utils
@@ -127,30 +156,18 @@ const maxRequestBodyBytes = 1 << 16 // 64 kb
 
 // Decodes the incoming req.
 // Checks: only one JSON object; bounded; no unknown fields.
-// On failure, writes the response (4xx)
-// The returned error is the handler's signal to stop.
 func readJSON(w http.ResponseWriter, req *http.Request, dst any) error {
 	req.Body = http.MaxBytesReader(w, req.Body, maxRequestBodyBytes)
 	dec := json.NewDecoder(req.Body)
 	dec.DisallowUnknownFields()
 
-	err := dec.Decode(dst)
-	if err != nil {
-		// Consider adding branches for json errors like json.SyntaxError, json.UnmarshalTypeError, etc
-		status := http.StatusBadRequest
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			status = http.StatusRequestEntityTooLarge
-			err = fmt.Errorf("request body too large")
-		}
-		writeErrorToResponse(req.Context(), w, err, status)
+	// Consider adding branches for json errors like json.SyntaxError, json.UnmarshalTypeError, etc
+	if err := dec.Decode(dst); err != nil {
 		return err
 	}
 
-	err = dec.Decode(&struct{}{})
-	if !errors.Is(err, io.EOF) {
-		err = fmt.Errorf("body must contain a single JSON object")
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
-		return err
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return fmt.Errorf("body must contain a single JSON object")
 	}
 
 	slog.DebugContext(req.Context(), "request decoded", "body", dst)
@@ -212,6 +229,15 @@ func writeErrorToResponse(ctx context.Context, w http.ResponseWriter, err error,
 	if _, writeErr := w.Write(rawJSON); writeErr != nil {
 		slog.ErrorContext(ctx, "failed writing error response", "status", statusCode, "error", writeErr)
 	}
+}
+
+func writeRequestError(ctx context.Context, w http.ResponseWriter, err error) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		writeErrorToResponse(
+			ctx, w, fmt.Errorf("request body too large"), http.StatusRequestEntityTooLarge)
+		return
+	}
+	writeErrorToResponse(ctx, w, err, http.StatusBadRequest)
 }
 
 // maps a storage-layer error to an HTTP response

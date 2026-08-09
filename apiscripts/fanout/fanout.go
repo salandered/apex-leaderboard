@@ -67,7 +67,7 @@ func main() {
 
 // printRankings prints the top rows of the leaderboard so a run shows the actual order,
 // not just a pass/fail line.
-func printRankings(rows []playerStanding, limit int) {
+func printRankings(rows []apexhttp.Standing, limit int) {
 	shown := min(limit, len(rows))
 	fmt.Printf("rankings (top %d of %d):\n", shown, len(rows))
 	for _, r := range rows[:shown] {
@@ -105,7 +105,7 @@ func runFanoutSets(rc *resty.Client, boardID string, players []player, chunkSize
 	return errs
 }
 
-func verifyRanking(rc *resty.Client, boardID string, players []player, rows []playerStanding, total int) {
+func verifyRanking(rc *resty.Client, boardID string, players []player, rows []apexhttp.Standing, total int) {
 	if total != len(players) {
 		log.Fatalf("total mismatch: got %d, want %d", total, len(players))
 	}

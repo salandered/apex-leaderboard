@@ -44,7 +44,7 @@ func main() {
 
 	w.step("POST create player (id is server-generated)")
 	created := w.callWithKey("POST", "/api/v1/players", map[string]any{"player_name": apexhttp.PlayerName(0)}, key("player"))
-	playerID := jsonField(created, "player_id")
+	playerID := jsonField(created, "player", "player_id")
 
 	playerPath := "/api/v1/players/" + playerID
 	standingPath := scorePath + "/" + playerID
@@ -198,14 +198,22 @@ func statusColor(code int) string {
 	}
 }
 
-func jsonField(resp *resty.Response, key string) string {
+// jsonField reads a string down a path of object keys, e.g. ("player", "player_id").
+func jsonField(resp *resty.Response, keys ...string) string {
 	if resp == nil {
 		return ""
 	}
-	var m map[string]any
-	if err := json.Unmarshal(resp.Body(), &m); err != nil {
+	var node any
+	if err := json.Unmarshal(resp.Body(), &node); err != nil {
 		return ""
 	}
-	s, _ := m[key].(string)
+	for _, key := range keys {
+		m, ok := node.(map[string]any)
+		if !ok {
+			return ""
+		}
+		node = m[key]
+	}
+	s, _ := node.(string)
 	return s
 }

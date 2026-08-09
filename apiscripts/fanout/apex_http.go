@@ -1,25 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"net/http"
 
 	"github.com/go-resty/resty/v2"
 
 	"github.com/salandered/apex/loadtest/apexhttp"
 )
-
-type playerStanding struct {
-	PlayerID string `json:"player_id"`
-	Score    int64  `json:"score"`
-	Rank     int64  `json:"rank"`
-}
-
-type listScoresResp struct {
-	Scores []playerStanding `json:"scores"`
-	Total  int              `json:"total"`
-}
 
 func createBoard(rc *resty.Client) string {
 	boardID := apexhttp.SeedBoardID("fanout")
@@ -42,20 +29,18 @@ func createPlayers(rc *resty.Client, n int) []player {
 	return players
 }
 
-// fetchAllRows pages through the whole leaderboard (limit caps at 100) and returns
+// fetchAllRows pages through the whole leaderboard and returns
 // every row plus the reported total.
-func fetchAllRows(rc *resty.Client, boardID string) ([]playerStanding, int) {
+func fetchAllRows(rc *resty.Client, boardID string) ([]apexhttp.Standing, int) {
 	const pageSize = 100
-	var rows []playerStanding
+	var rows []apexhttp.Standing
 	total := 0
 	for offset := 0; ; offset += pageSize {
-		page, err := apexhttp.DoJSON[listScoresResp](rc, resty.MethodGet, fmt.Sprintf(
-			"/api/v1/boards/%s/scores?limit=%d&offset=%d", boardID, pageSize, offset,
-		), nil, http.StatusOK)
+		page, err := apexhttp.FetchScores(rc, boardID, pageSize, offset)
 		if err != nil {
 			log.Fatalf("list scores: %v", err)
 		}
-		total = page.Total
+		total = int(page.Metadata.Total)
 		rows = append(rows, page.Scores...)
 		if len(page.Scores) == 0 || len(rows) >= total {
 			break
@@ -65,11 +50,11 @@ func fetchAllRows(rc *resty.Client, boardID string) ([]playerStanding, int) {
 }
 
 func fetchStanding(rc *resty.Client, boardID, playerID string) apexhttp.Standing {
-	standing, err := apexhttp.FetchStanding(rc, boardID, playerID)
+	resp, err := apexhttp.FetchStanding(rc, boardID, playerID)
 	if err != nil {
 		log.Fatalf("standing %s: %v", playerID, err)
 	}
-	return standing
+	return resp.Standing
 }
 
 func verifyProjection(rc *resty.Client, boardID string) {

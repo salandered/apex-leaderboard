@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/salandered/apex/handlers"
-	"github.com/salandered/apex/player"
 )
 
 func (s *APISuite) TestPostPlayer() {
@@ -16,9 +15,10 @@ func (s *APISuite) TestPostPlayer() {
 
 	var result handlers.PostPlayerResp
 	s.decodeJSON(resp, &result)
-	s.Require().NotEmpty(result.PlayerId)
-	s.Require().NoError(player.ID(result.PlayerId).Validate())
-	s.Require().Equal("/api/v1/players/"+result.PlayerId, resp.Header.Get("Location"))
+	s.Require().NotEmpty(result.Player.PlayerId)
+	s.Require().NoError(result.Player.PlayerId.Validate())
+	s.Require().Equal("alice", result.Player.PlayerName)
+	s.Require().Equal("/api/v1/players/"+string(result.Player.PlayerId), resp.Header.Get("Location"))
 }
 
 func (s *APISuite) TestPostPlayerStoresTrimmedName() {
@@ -64,7 +64,7 @@ func (s *APISuite) TestGetScore() {
 
 	var result handlers.GetPlayerResp
 	s.decodeJSON(resp, &result)
-	s.Require().Equal(MockedPlayerId, string(result.PlayerId))
+	s.Require().Equal(MockedPlayerId, string(result.Player.PlayerId))
 }
 
 func (s *APISuite) TestGetScoreInvalidId() {

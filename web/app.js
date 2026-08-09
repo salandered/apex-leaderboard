@@ -100,7 +100,7 @@ const nameCache = new Map();
 
 async function fetchPlayerName(playerId) {
 	const data = await getJSON(`/api/v1/players/${encodeURIComponent(playerId)}`);
-	return data.player_name;
+	return data.player.player_name;
 }
 
 function playerName(playerId) {
@@ -477,8 +477,8 @@ document.addEventListener("alpine:init", () => {
 			try {
 				const name = this.newPlayerName;
 				const data = await sendIdempotentJSON("/api/v1/players", "POST", { player_name: name });
-				this.scoreWrite.playerId = data.player_id;
-				this.appendWriteLog(`created ${name} - ${data.player_id}`);
+				this.scoreWrite.playerId = data.player.player_id;
+				this.appendWriteLog(`created ${name} - ${data.player.player_id}`);
 				this.newPlayerName = "";
 			} catch (err) {
 				this.appendWriteLog(String(err.message ?? err), "error");
@@ -618,7 +618,7 @@ document.addEventListener("alpine:init", () => {
 
 				// A burst larger than EVENT_LIMIT is not lost: the cursor advances one page per
 				// tick until the feed catches up.
-				this.eventCursor = data.next_after;
+				this.eventCursor = data.metadata.next_after;
 				this.events = [...fresh, ...this.events].slice(0, TICKER_MAX);
 				writeStored(CURSOR_KEY, this.eventCursor);
 				writeStored(EVENTS_KEY, this.events);
@@ -682,8 +682,8 @@ document.addEventListener("alpine:init", () => {
 				// the offset past the end: the API answers an empty page while still reporting
 				// the real total. Snap to the last page that has rows rather than showing an
 				// empty table next to a live prev button.
-				if (data.scores.length === 0 && offset > 0 && data.total > 0) {
-					offset = (Math.ceil(data.total / limit) - 1) * limit;
+				if (data.scores.length === 0 && offset > 0 && data.metadata.total > 0) {
+					offset = (Math.ceil(data.metadata.total / limit) - 1) * limit;
 					data = await this.fetchPage(boardId, limit, offset);
 					if (requestId !== this.refreshRequestId) {
 						return;
@@ -699,7 +699,7 @@ document.addEventListener("alpine:init", () => {
 				// half filled state
 				this.offset = offset;
 				this.rows = data.scores.map((r, i) => ({ ...r, player_name: names[i] }));
-				this.total = data.total;
+				this.total = data.metadata.total;
 				this.error = "";
 			} catch (err) {
 				if (requestId === this.refreshRequestId) {

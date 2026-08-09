@@ -17,29 +17,34 @@ type PostPlayerReq struct {
 	PlayerName string `json:"player_name"`
 }
 
+type PlayerResp struct {
+	PlayerId   player.ID `json:"player_id"`
+	PlayerName string    `json:"player_name"`
+}
+
 type PostPlayerResp struct {
-	PlayerId string `json:"player_id"`
+	Player PlayerResp `json:"player"`
 }
 
 type GetPlayerResp struct {
-	PlayerId   player.ID `json:"player_id"`
-	PlayerName string    `json:"player_name"`
+	Player PlayerResp `json:"player"`
 }
 
 func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request) {
 	idempotencyKey, err := readIdempotencyKey(req)
 	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+		writeRequestError(req.Context(), w, err)
 		return
 	}
 	var data PostPlayerReq
 	if err := readJSON(w, req, &data); err != nil {
+		writeRequestError(req.Context(), w, err)
 		return
 	}
 
 	playerName, err := player.NormalizeName(data.PlayerName)
 	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+		writeRequestError(req.Context(), w, err)
 		return
 	}
 
@@ -57,13 +62,15 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 	}
 
 	w.Header().Set("Location", "/api/v1/players/"+string(playerId))
-	writeJSONToResponse(req.Context(), w, http.StatusCreated, PostPlayerResp{PlayerId: string(playerId)})
+	writeJSONToResponse(req.Context(), w, http.StatusCreated, PostPlayerResp{
+		Player: PlayerResp{PlayerId: playerId, PlayerName: playerName},
+	})
 }
 
 func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request) {
-	playerId := player.ID(req.PathValue(playerIDPathValue))
-	if err := playerId.Validate(); err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+	playerId, err := playerIdFromPath(req)
+	if err != nil {
+		writeRequestError(req.Context(), w, err)
 		return
 	}
 
@@ -74,10 +81,10 @@ func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	response := GetPlayerResp{
+	response := GetPlayerResp{Player: PlayerResp{
 		PlayerId:   profile.PlayerId,
 		PlayerName: profile.PlayerName,
-	}
+	}}
 
 	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
 }

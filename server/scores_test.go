@@ -152,7 +152,7 @@ func (s *APISuite) TestListScoresOnBoardAsOf() {
 
 	var result handlers.ListScoresResp
 	s.decodeJSON(resp, &result)
-	s.Require().Equal(int64(1), result.Total)
+	s.Require().Equal(int64(1), result.Metadata.Total)
 	s.Require().Equal(int64(12), result.Scores[0].Score)
 }
 
@@ -178,7 +178,7 @@ func (s *APISuite) TestListScoresUnknownBoardIsEmpty() {
 	var result handlers.ListScoresResp
 	s.decodeJSON(resp, &result)
 	s.Require().Empty(result.Scores)
-	s.Require().Zero(result.Total)
+	s.Require().Zero(result.Metadata.Total)
 }
 
 func (s *APISuite) TestListScoresAsOfUnknownBoardIsEmpty() {
@@ -188,7 +188,7 @@ func (s *APISuite) TestListScoresAsOfUnknownBoardIsEmpty() {
 	var result handlers.ListScoresResp
 	s.decodeJSON(resp, &result)
 	s.Require().Empty(result.Scores)
-	s.Require().Zero(result.Total)
+	s.Require().Zero(result.Metadata.Total)
 }
 
 func (s *APISuite) TestGetStandingOnBoard() {
@@ -197,8 +197,8 @@ func (s *APISuite) TestGetStandingOnBoard() {
 
 	var result handlers.RankResp
 	s.decodeJSON(resp, &result)
-	s.Require().Equal(MockedPlayerId, string(result.PlayerId))
-	s.Require().Equal(int64(3), result.Rank)
+	s.Require().Equal(MockedPlayerId, result.Standing.PlayerId)
+	s.Require().Equal(int64(3), result.Standing.Rank)
 }
 
 func (s *APISuite) TestGetHistoryOnBoard() {
@@ -216,9 +216,9 @@ func (s *APISuite) TestGetStandingOnBoardDetails() {
 
 	var result handlers.RankResp
 	s.decodeJSON(resp, &result)
-	s.Require().Equal(MockedPlayerId, string(result.PlayerId))
-	s.Require().Equal(int64(3), result.Rank)
-	s.Require().Equal(int64(10), result.Total)
+	s.Require().Equal(MockedPlayerId, result.Standing.PlayerId)
+	s.Require().Equal(int64(3), result.Standing.Rank)
+	s.Require().Equal(int64(10), result.Metadata.Total)
 }
 
 func (s *APISuite) TestGetStandingOnBoardInvalidPlayerId() {
@@ -239,7 +239,7 @@ func (s *APISuite) TestListScoresOnBoardDetails() {
 	s.Require().Equal(int64(2), result.Scores[1].Rank)
 	s.Require().Equal(int64(30), result.Scores[1].Score)
 
-	s.Require().Equal(int64(2), result.Total)
+	s.Require().Equal(int64(2), result.Metadata.Total)
 }
 
 func (s *APISuite) TestListScoresOnBoardInvalidOffset() {

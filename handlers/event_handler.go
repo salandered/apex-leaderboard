@@ -33,24 +33,24 @@ type ScoreEvent struct {
 }
 
 type ListEventsResp struct {
-	Events    []ScoreEvent `json:"events"`
-	NextAfter string       `json:"next_after"`
+	Events   []ScoreEvent `json:"events"`
+	Metadata cursorMeta   `json:"metadata"`
 }
 
 func (h *EventHandler) HandleListEvents(w http.ResponseWriter, req *http.Request) {
 	after := req.URL.Query().Get(afterQuery)
 	if after == "" {
-		writeErrorToResponse(req.Context(), w, fmt.Errorf("%s is required", afterQuery), http.StatusBadRequest)
+		writeRequestError(req.Context(), w, fmt.Errorf("%s is required", afterQuery))
 		return
 	}
 	if err := validateEventID(after); err != nil {
-		writeErrorToResponse(req.Context(), w, fmt.Errorf("invalid %s: %w", afterQuery, err), http.StatusBadRequest)
+		writeRequestError(req.Context(), w, fmt.Errorf("invalid %s: %w", afterQuery, err))
 		return
 	}
 
 	limit, err := parseIntQuery(req, limitQuery, defaultEventLimit, 1, maxEventLimit)
 	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+		writeRequestError(req.Context(), w, err)
 		return
 	}
 
@@ -61,14 +61,14 @@ func (h *EventHandler) HandleListEvents(w http.ResponseWriter, req *http.Request
 	}
 
 	response := ListEventsResp{
-		Events:    make([]ScoreEvent, 0, len(events)),
-		NextAfter: after,
+		Events:   make([]ScoreEvent, 0, len(events)),
+		Metadata: cursorMeta{Limit: limit, NextAfter: after},
 	}
 	for _, event := range events {
 		response.Events = append(response.Events, scoreEventFromLedger(event))
 	}
 	if len(events) > 0 {
-		response.NextAfter = events[len(events)-1].ID
+		response.Metadata.NextAfter = events[len(events)-1].ID
 	}
 
 	writeJSONToResponse(req.Context(), w, http.StatusOK, response)

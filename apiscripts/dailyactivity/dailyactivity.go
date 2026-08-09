@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -23,16 +22,6 @@ type activityPlayer struct {
 	name          string
 	id            string
 	expectedCount int64
-}
-
-type activityEntry struct {
-	PlayerID string `json:"player_id"`
-	Count    int64  `json:"count"`
-}
-
-type listDailyActivityResp struct {
-	Date    string          `json:"date"`
-	Entries []activityEntry `json:"entries"`
 }
 
 func main() {
@@ -111,36 +100,31 @@ func writeActivity(rc *resty.Client, boardID string, player activityPlayer) erro
 	return nil
 }
 
-func fetchDailyActivity(rc *resty.Client, date string) (listDailyActivityResp, error) {
-	path := fmt.Sprintf("/api/v1/activity/daily?date=%s&limit=%d", date, activityLimit)
-	return apexhttp.DoJSON[listDailyActivityResp](rc, resty.MethodGet, path, nil, http.StatusOK)
-}
-
 func waitForActivity(
 	rc *resty.Client,
 	date string,
 	players []activityPlayer,
 	timeout time.Duration,
-) (listDailyActivityResp, error) {
+) (apexhttp.ListDailyActivityResp, error) {
 	deadline := time.Now().Add(timeout)
 	for {
-		activity, err := fetchDailyActivity(rc, date)
+		activity, err := apexhttp.FetchDailyActivity(rc, date, activityLimit)
 		if err != nil {
-			return listDailyActivityResp{}, fmt.Errorf("list daily activity: %w", err)
+			return apexhttp.ListDailyActivityResp{}, fmt.Errorf("list daily activity: %w", err)
 		}
 		if activity.Date != date {
-			return listDailyActivityResp{}, fmt.Errorf("response date mismatch: got %q, want %q", activity.Date, date)
+			return apexhttp.ListDailyActivityResp{}, fmt.Errorf("response date mismatch: got %q, want %q", activity.Date, date)
 		}
 
 		ready, err := hasExpectedCounts(activity.Entries, players)
 		if err != nil {
-			return listDailyActivityResp{}, err
+			return apexhttp.ListDailyActivityResp{}, err
 		}
 		if ready {
 			return activity, nil
 		}
 		if time.Now().After(deadline) {
-			return listDailyActivityResp{}, fmt.Errorf(
+			return apexhttp.ListDailyActivityResp{}, fmt.Errorf(
 				"timed out after %s waiting for today's activity projection; last fixture counts: %s",
 				timeout,
 				formatFixtureCounts(activity.Entries, players),
@@ -150,7 +134,7 @@ func waitForActivity(
 	}
 }
 
-func hasExpectedCounts(entries []activityEntry, players []activityPlayer) (bool, error) {
+func hasExpectedCounts(entries []apexhttp.ActivityEntry, players []activityPlayer) (bool, error) {
 	counts := make(map[string]int64, len(entries))
 	for _, entry := range entries {
 		counts[entry.PlayerID] = entry.Count
@@ -173,7 +157,7 @@ func hasExpectedCounts(entries []activityEntry, players []activityPlayer) (bool,
 	return true, nil
 }
 
-func verifyFixtureOrder(activity listDailyActivityResp, players []activityPlayer) {
+func verifyFixtureOrder(activity apexhttp.ListDailyActivityResp, players []activityPlayer) {
 	positions := entryPositions(activity.Entries)
 	for i := 1; i < len(players); i++ {
 		previous := players[i-1]
@@ -190,7 +174,7 @@ func verifyFixtureOrder(activity listDailyActivityResp, players []activityPlayer
 	}
 }
 
-func entryPositions(entries []activityEntry) map[string]int {
+func entryPositions(entries []apexhttp.ActivityEntry) map[string]int {
 	positions := make(map[string]int, len(entries))
 	for i, entry := range entries {
 		positions[entry.PlayerID] = i
@@ -198,7 +182,7 @@ func entryPositions(entries []activityEntry) map[string]int {
 	return positions
 }
 
-func formatFixtureCounts(entries []activityEntry, players []activityPlayer) string {
+func formatFixtureCounts(entries []apexhttp.ActivityEntry, players []activityPlayer) string {
 	counts := make(map[string]int64, len(entries))
 	for _, entry := range entries {
 		counts[entry.PlayerID] = entry.Count

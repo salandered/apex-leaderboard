@@ -1,6 +1,6 @@
-// Package apexhttp holds the resty client and the apex API calls shared by the
-// load/verification scripts (fixtures, scores, standings, history). Per-script
-// scenario logic stays in each script.
+// Package apexhttp makes requests to the apex API calls using resty client
+// and stores some commmon utils.
+// Used by load/verification scripts.
 package apexhttp
 
 import (
@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,10 +43,8 @@ func DoJSON[T any](rc *resty.Client, method, path string, body any, expectedStat
 		return result, err
 	}
 
-	for _, status := range expectedStatuses {
-		if resp.StatusCode() == status {
-			return result, nil
-		}
+	if slices.Contains(expectedStatuses, resp.StatusCode()) {
+		return result, nil
 	}
 	return result, fmt.Errorf("unexpected status %s: %s", resp.Status(), strings.TrimSpace(string(resp.Body())))
 }
@@ -55,11 +54,12 @@ type Standing struct {
 	PlayerID string `json:"player_id"`
 	Rank     int64  `json:"rank"`
 	Score    int64  `json:"score"`
-	Total    int64  `json:"total"`
 }
 
 type createPlayerResp struct {
-	PlayerID string `json:"player_id"`
+	Player struct {
+		PlayerID string `json:"player_id"`
+	} `json:"player"`
 }
 
 type ScoreEvent struct {
@@ -126,10 +126,10 @@ func CreatePlayer(rc *resty.Client, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if player.PlayerID == "" {
+	if player.Player.PlayerID == "" {
 		return "", fmt.Errorf("create player returned an empty player_id")
 	}
-	return player.PlayerID, nil
+	return player.Player.PlayerID, nil
 }
 
 // CreateBoard creates a board with the given id and display name.
@@ -164,9 +164,33 @@ func IncrementScore(rc *resty.Client, boardID, playerID string, amount int64) er
 	return err
 }
 
+// ListScoresResp is one page of a board's leaderboard.
+type ListScoresResp struct {
+	Scores   []Standing `json:"scores"`
+	Metadata struct {
+		Limit  int64 `json:"limit"`
+		Offset int64 `json:"offset"`
+		Total  int64 `json:"total"`
+	} `json:"metadata"`
+}
+
+// FetchScores reads one page of a board's leaderboard (highest score first).
+func FetchScores(rc *resty.Client, boardID string, limit, offset int) (ListScoresResp, error) {
+	path := fmt.Sprintf("/api/v1/boards/%s/scores?limit=%d&offset=%d", boardID, limit, offset)
+	return DoJSON[ListScoresResp](rc, resty.MethodGet, path, nil, http.StatusOK)
+}
+
+// StandingResp is a placement plus the board's player count (the denominator for rank).
+type StandingResp struct {
+	Standing Standing `json:"standing"`
+	Metadata struct {
+		Total int64 `json:"total"`
+	} `json:"metadata"`
+}
+
 // FetchStanding reads a single player's standing on a board.
-func FetchStanding(rc *resty.Client, boardID, playerID string) (Standing, error) {
-	return DoJSON[Standing](rc, resty.MethodGet, ScorePath(boardID, playerID), nil, http.StatusOK)
+func FetchStanding(rc *resty.Client, boardID, playerID string) (StandingResp, error) {
+	return DoJSON[StandingResp](rc, resty.MethodGet, ScorePath(boardID, playerID), nil, http.StatusOK)
 }
 
 // FetchHistory reads a player's score events on a board (newest first).
@@ -177,6 +201,26 @@ func FetchHistory(rc *resty.Client, boardID, playerID string, limit int) (Histor
 		path += fmt.Sprintf("?limit=%d", limit)
 	}
 	return DoJSON[History](rc, resty.MethodGet, path, nil, http.StatusOK)
+}
+
+type ActivityEntry struct {
+	PlayerID string `json:"player_id"`
+	Count    int64  `json:"count"`
+}
+
+// ListDailyActivityResp is one day's most active players.
+type ListDailyActivityResp struct {
+	Date     string          `json:"date"`
+	Entries  []ActivityEntry `json:"entries"`
+	Metadata struct {
+		Limit int64 `json:"limit"`
+	} `json:"metadata"`
+}
+
+// FetchDailyActivity reads a day's activity counts (most active first).
+func FetchDailyActivity(rc *resty.Client, date string, limit int) (ListDailyActivityResp, error) {
+	path := fmt.Sprintf("/api/v1/activity/daily?date=%s&limit=%d", date, limit)
+	return DoJSON[ListDailyActivityResp](rc, resty.MethodGet, path, nil, http.StatusOK)
 }
 
 // VerifyProjection fails the caller when the board's projection has drifted from its ledger.

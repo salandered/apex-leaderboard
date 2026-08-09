@@ -53,12 +53,12 @@ func (s *APISuite) TestGetBoard() {
 	resp := s.get("/api/v1/boards/" + MockedBoardId)
 	s.Require().Equal(http.StatusOK, resp.StatusCode)
 
-	var result handlers.BoardResp
+	var result handlers.GetBoardResp
 	s.decodeJSON(resp, &result)
-	s.Require().Equal(MockedBoardId, result.BoardId)
-	s.Require().NotEmpty(result.BoardName)
-	s.Require().Equal("active", result.State)
-	s.Require().NotEmpty(result.CreatedAt)
+	s.Require().Equal(MockedBoardId, result.Board.BoardId)
+	s.Require().NotEmpty(result.Board.BoardName)
+	s.Require().Equal("active", result.Board.State)
+	s.Require().NotEmpty(result.Board.CreatedAt)
 }
 
 func (s *APISuite) TestListBoards() {

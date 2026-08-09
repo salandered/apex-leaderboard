@@ -89,15 +89,15 @@ func printLoadTestSummary(result loadTestResult, requestCount int) {
 	apexhttp.PrintErrors(result.Errors, errorsShown)
 }
 
-func verifyFinalScore(standing apexhttp.Standing, requestCount int, amount int64) {
+func verifyFinalScore(resp apexhttp.StandingResp, requestCount int, amount int64) {
 	expected := int64(requestCount) * amount
 	fmt.Printf(
 		"standing: score=%d expected=%d rank=%d total=%d\n",
-		standing.Score, expected, standing.Rank, standing.Total,
+		resp.Standing.Score, expected, resp.Standing.Rank, resp.Metadata.Total,
 	)
 	// integer scores, so the comparison is exact (this used to need a relative tolerance)
-	if standing.Score != expected {
-		log.Fatalf("score mismatch: got %d, want %d", standing.Score, expected)
+	if resp.Standing.Score != expected {
+		log.Fatalf("score mismatch: got %d, want %d", resp.Standing.Score, expected)
 	}
 }
 

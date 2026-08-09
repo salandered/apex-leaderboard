@@ -51,10 +51,11 @@ func main() {
 
 	written, expectedScore := writeRandomEvents(rc, boardID, playerID, cfg.eventCount, cfg.progressEvery, rng)
 
-	standing, err := apexhttp.FetchStanding(rc, boardID, playerID)
+	resp, err := apexhttp.FetchStanding(rc, boardID, playerID)
 	if err != nil {
 		log.Fatalf("fetch standing: %v", err)
 	}
+	standing := resp.Standing
 	if standing.Score != expectedScore {
 		log.Fatalf("score mismatch: got %d, want %d", standing.Score, expectedScore)
 	}

@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/salandered/apex/storage"
 )
@@ -25,24 +24,25 @@ type activityEntry struct {
 }
 
 type ListDailyActivityResp struct {
-	Date    string          `json:"date"`
-	Entries []activityEntry `json:"entries"`
+	Date     string          `json:"date"`
+	Entries  []activityEntry `json:"entries"`
+	Metadata limitMeta       `json:"metadata"`
 }
 
 func (h *ViewHandler) HandleListDailyActivity(w http.ResponseWriter, req *http.Request) {
 	date := req.URL.Query().Get(dateQuery)
 	if date == "" {
-		writeErrorToResponse(req.Context(), w, fmt.Errorf("%s is required", dateQuery), http.StatusBadRequest)
+		writeRequestError(req.Context(), w, fmt.Errorf("%s is required", dateQuery))
 		return
 	}
-	if _, err := time.Parse(time.DateOnly, date); err != nil {
-		writeErrorToResponse(req.Context(), w, fmt.Errorf("invalid %s, want YYYY-MM-DD: %w", dateQuery, err), http.StatusBadRequest)
+	if _, err := parseDateQuery(req, dateQuery); err != nil {
+		writeRequestError(req.Context(), w, err)
 		return
 	}
 
 	limit, err := parseIntQuery(req, limitQuery, defaultActivityLimit, 1, maxActivityLimit)
 	if err != nil {
-		writeErrorToResponse(req.Context(), w, err, http.StatusBadRequest)
+		writeRequestError(req.Context(), w, err)
 		return
 	}
 
@@ -53,8 +53,9 @@ func (h *ViewHandler) HandleListDailyActivity(w http.ResponseWriter, req *http.R
 	}
 
 	response := ListDailyActivityResp{
-		Date:    date,
-		Entries: make([]activityEntry, 0, len(entries)),
+		Date:     date,
+		Entries:  make([]activityEntry, 0, len(entries)),
+		Metadata: limitMeta{Limit: limit},
 	}
 	for _, e := range entries {
 		response.Entries = append(response.Entries, activityEntry{PlayerId: e.PlayerID, Count: e.Count})

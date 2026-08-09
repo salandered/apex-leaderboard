@@ -13,7 +13,7 @@ func (s *APISuite) TestListEvents() {
 	var result handlers.ListEventsResp
 	s.decodeJSON(resp, &result)
 	s.Require().Len(result.Events, 2)
-	s.Require().Equal("2-0", result.NextAfter)
+	s.Require().Equal("2-0", result.Metadata.NextAfter)
 	s.Require().Equal(handlers.ScoreEvent{
 		EventId:   "1-0",
 		Type:      "increment",
@@ -32,7 +32,7 @@ func (s *APISuite) TestListEventsEmptyRetainsCursor() {
 	var result handlers.ListEventsResp
 	s.decodeJSON(resp, &result)
 	s.Require().Empty(result.Events)
-	s.Require().Equal("999-0", result.NextAfter)
+	s.Require().Equal("999-0", result.Metadata.NextAfter)
 }
 
 func (s *APISuite) TestListEventsDefaultLimit() {
@@ -42,7 +42,7 @@ func (s *APISuite) TestListEventsDefaultLimit() {
 	var result handlers.ListEventsResp
 	s.decodeJSON(resp, &result)
 	s.Require().Len(result.Events, 50)
-	s.Require().Equal("50-0", result.NextAfter)
+	s.Require().Equal("50-0", result.Metadata.NextAfter)
 }
 
 func (s *APISuite) TestListEventsMaximumLimit() {
@@ -52,7 +52,7 @@ func (s *APISuite) TestListEventsMaximumLimit() {
 	var result handlers.ListEventsResp
 	s.decodeJSON(resp, &result)
 	s.Require().Len(result.Events, 100)
-	s.Require().Equal("100-0", result.NextAfter)
+	s.Require().Equal("100-0", result.Metadata.NextAfter)
 }
 
 func (s *APISuite) TestListEventsMissingCursor() {

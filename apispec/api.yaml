@@ -1,4 +1,4 @@
-openapi: 3.0.4 # TODO: bug with VSCode extension not supporting 3.1.x
+openapi: 3.0.4 # TODO: Update to 3.1.x
 info:
   title: Leaderboard Apex Service API
   version: 1.0.0
@@ -78,7 +78,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GeneratedIdResponse"
+                $ref: "#/components/schemas/CreatePlayerResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "409":
@@ -150,7 +150,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BoardResponse"
+                $ref: "#/components/schemas/GetBoardResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -256,7 +256,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PlayerDataResponse"
+                $ref: "#/components/schemas/GetPlayerResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -571,7 +571,7 @@ components:
           default: active
           description: A closed board rejects score writes
 
-    BoardResponse:
+    Board:
       type: object
       additionalProperties: false
       required:
@@ -594,6 +594,15 @@ components:
           type: string
           format: date-time
 
+    GetBoardResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - board
+      properties:
+        board:
+          $ref: "#/components/schemas/Board"
+
     ListBoardsResponse:
       type: object
       additionalProperties: false
@@ -604,7 +613,7 @@ components:
           type: array
           description: All boards, in creation order
           items:
-            $ref: "#/components/schemas/BoardResponse"
+            $ref: "#/components/schemas/Board"
 
     IncrementScoreRequest:
       type: object
@@ -637,7 +646,7 @@ components:
             Absolute score. Integer number within +-1e13 (ten trillion):
             other values will be rejected. Note that unix second and millisecond timestamps fit.
 
-    PlayerDataResponse:
+    Player:
       type: object
       additionalProperties: false
       required:
@@ -649,15 +658,23 @@ components:
         player_name:
           type: string
 
-    GeneratedIdResponse:
+    GetPlayerResponse:
       type: object
       additionalProperties: false
       required:
-        - player_id
+        - player
       properties:
-        player_id:
-          type: string
-          description: The generated unique ID for a player entry
+        player:
+          $ref: "#/components/schemas/Player"
+
+    CreatePlayerResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - player
+      properties:
+        player:
+          $ref: "#/components/schemas/Player"
 
     ScoreEvent:
       type: object
@@ -702,6 +719,7 @@ components:
       required:
         - player_id
         - events
+        - metadata
       properties:
         player_id:
           type: string
@@ -709,21 +727,69 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ScoreEvent"
+        metadata:
+          $ref: "#/components/schemas/LimitMetadata"
 
     ListEventsResponse:
       type: object
       additionalProperties: false
       required:
         - events
-        - next_after
+        - metadata
       properties:
         events:
           type: array
           items:
             $ref: "#/components/schemas/ScoreEvent"
+        metadata:
+          $ref: "#/components/schemas/CursorMetadata"
+
+    OffsetMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - limit
+        - offset
+        - total
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+
+    CursorMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - limit
+        - next_after
+      properties:
+        limit:
+          type: integer
         next_after:
           type: string
           description: Cursor to pass as after on the next request
+
+    LimitMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - limit
+      properties:
+        limit:
+          type: integer
+
+    TotalMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - total
+      properties:
+        total:
+          type: integer
+          description: Total ranked players on the board
 
     ScoreEntry:
       type: object
@@ -748,45 +814,27 @@ components:
       type: object
       additionalProperties: false
       required:
-        - player_id
-        - rank
-        - score
-        - total
+        - standing
+        - metadata
       properties:
-        player_id:
-          type: string
-        rank:
-          type: integer
-          description: 1-based position on the leaderboard (rank 1 = highest score)
-        score:
-          type: integer
-          format: int64
-          minimum: -10000000000000
-          maximum: 10000000000000
-        total:
-          type: integer
-          description: Total ranked players (the denominator for rank)
+        standing:
+          $ref: "#/components/schemas/ScoreEntry"
+        metadata:
+          $ref: "#/components/schemas/TotalMetadata"
 
     ListScoresResponse:
       type: object
       additionalProperties: false
       required:
         - scores
-        - limit
-        - offset
-        - total
+        - metadata
       properties:
         scores:
           type: array
           items:
             $ref: "#/components/schemas/ScoreEntry"
-        limit:
-          type: integer
-        offset:
-          type: integer
-        total:
-          type: integer
-          description: Total ranked players on the board
+        metadata:
+          $ref: "#/components/schemas/OffsetMetadata"
 
     ActivityEntry:
       type: object
@@ -807,6 +855,7 @@ components:
       required:
         - date
         - entries
+        - metadata
       properties:
         date:
           type: string
@@ -816,6 +865,8 @@ components:
           description: Most active players first
           items:
             $ref: "#/components/schemas/ActivityEntry"
+        metadata:
+          $ref: "#/components/schemas/LimitMetadata"
 
     ProjectionMismatch:
       type: object
