@@ -64,7 +64,11 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 		_, err := c.processOnce(ctx)
 		if err != nil {
+			// On cancelled context processOnce returns error.
+			// Instead of treating it as an error we will log it.
 			if ctx.Err() != nil {
+				slog.DebugContext(ctx, "consumer: stopping on cancelled context",
+					"consumer", id, "error", err)
 				return nil
 			}
 			slog.ErrorContext(ctx, "consumer: batch failed, retrying",

@@ -179,7 +179,7 @@ func writeJSONToResponse(ctx context.Context, w http.ResponseWriter, statusCode 
 
 	rawJSON, err := json.Marshal(data)
 	if err != nil {
-		writeErrorToResponse(
+		WriteErrorToResponse(
 			ctx,
 			w,
 			fmt.Errorf("marshalling response body: %w", err),
@@ -204,7 +204,7 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-func writeErrorToResponse(ctx context.Context, w http.ResponseWriter, err error, statusCode int) {
+func WriteErrorToResponse(ctx context.Context, w http.ResponseWriter, err error, statusCode int) {
 	msg := err.Error()
 	if statusCode >= http.StatusInternalServerError {
 		slog.ErrorContext(ctx, "request failed", "status", statusCode, "error", err)
@@ -233,42 +233,42 @@ func writeErrorToResponse(ctx context.Context, w http.ResponseWriter, err error,
 
 func writeRequestError(ctx context.Context, w http.ResponseWriter, err error) {
 	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		writeErrorToResponse(
+		WriteErrorToResponse(
 			ctx, w, fmt.Errorf("request body too large"), http.StatusRequestEntityTooLarge)
 		return
 	}
-	writeErrorToResponse(ctx, w, err, http.StatusBadRequest)
+	WriteErrorToResponse(ctx, w, err, http.StatusBadRequest)
 }
 
 // maps a storage-layer error to an HTTP response
 func writeStorageError(ctx context.Context, w http.ResponseWriter, err error) {
 	// Errorf messages duplicate 'err' content, but we might want to hide some internal info
 	if errors.Is(err, storage.ErrNotFound) {
-		writeErrorToResponse(ctx, w, fmt.Errorf("not found"), http.StatusNotFound)
+		WriteErrorToResponse(ctx, w, fmt.Errorf("not found"), http.StatusNotFound)
 		return
 	}
 	if errors.Is(err, storage.ErrBoardNotFound) {
-		writeErrorToResponse(ctx, w, fmt.Errorf("board not found"), http.StatusNotFound)
+		WriteErrorToResponse(ctx, w, fmt.Errorf("board not found"), http.StatusNotFound)
 		return
 	}
 	if errors.Is(err, storage.ErrBoardExists) {
-		writeErrorToResponse(ctx, w, fmt.Errorf("board already exists"), http.StatusConflict)
+		WriteErrorToResponse(ctx, w, fmt.Errorf("board already exists"), http.StatusConflict)
 		return
 	}
 	if errors.Is(err, storage.ErrBoardClosed) {
-		writeErrorToResponse(ctx, w, fmt.Errorf("board closed"), http.StatusConflict)
+		WriteErrorToResponse(ctx, w, fmt.Errorf("board closed"), http.StatusConflict)
 		return
 	}
 	if errors.Is(err, storage.ErrIdempotencyConflict) {
-		writeErrorToResponse(ctx, w, fmt.Errorf("idempotency key reused with a different request"), http.StatusConflict)
+		WriteErrorToResponse(ctx, w, fmt.Errorf("idempotency key reused with a different request"), http.StatusConflict)
 		return
 	}
 	if errors.Is(err, storage.ErrScoreOutOfRange) {
-		writeErrorToResponse(ctx, w, fmt.Errorf(
+		WriteErrorToResponse(ctx, w, fmt.Errorf(
 			"resulting score must be in [-1e13, 1e13]"), http.StatusConflict)
 		return
 	}
-	writeErrorToResponse(ctx, w, err, http.StatusInternalServerError)
+	WriteErrorToResponse(ctx, w, err, http.StatusInternalServerError)
 }
 
 const maxLoggedPayload = 512

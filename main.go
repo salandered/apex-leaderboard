@@ -133,7 +133,6 @@ func main() {
 	}
 }
 
-// Returns the resolved config too: it tells whether stdout is human readable.
 func setupLogging() (logging.Config, io.Closer, error) {
 	cfg, err := logging.ConfigFromEnv()
 	if err != nil {
@@ -155,10 +154,25 @@ func startServer(ctx context.Context, store storage.Storage) error {
 	if err != nil {
 		return err
 	}
-	return server.Start(ctx, server.NewMux(store),
+	opts := []server.Option{
 		server.WithPort(port),
 		server.WithShutdownTimeout(shutdownTimeout),
-	)
+	}
+
+	// RATE_LIMIT_RPS not set or zero means off
+	rps, err := floatFromEnv("RATE_LIMIT_RPS", 0)
+	if err != nil {
+		return err
+	}
+	if rps > 0 {
+		burst, err := intFromEnv("RATE_LIMIT_BURST", server.DefaultRateLimitBurst)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, server.WithRateLimit(rps, burst))
+	}
+
+	return server.Start(ctx, server.NewMux(store), opts...)
 }
 
 func maxStopDelay(consumers []*consumer.Consumer) time.Duration {
@@ -177,6 +191,8 @@ func waitFor(done <-chan struct{}, name string, timeout time.Duration) {
 	}
 }
 
+// from Env utils
+
 func intFromEnv(name string, def int) (int, error) {
 	v := os.Getenv(name)
 	if v == "" {
@@ -187,6 +203,18 @@ func intFromEnv(name string, def int) (int, error) {
 		return 0, fmt.Errorf("%w: %s=%q: %w", ErrConfig, name, v, err)
 	}
 	return n, nil
+}
+
+func floatFromEnv(name string, def float64) (float64, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return def, nil
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %s=%q: %w", ErrConfig, name, v, err)
+	}
+	return f, nil
 }
 
 func durationFromEnv(name string, def time.Duration) (time.Duration, error) {

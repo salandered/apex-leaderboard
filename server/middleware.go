@@ -19,11 +19,12 @@ type statusRecorder struct {
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
-	if r.wroteHeader {
-		return
+	// only the first write matters. net/http WriteHeader will return on a second write:
+	// https://github.com/golang/go/blob/master/src/net/http/server.go#L1208
+	if !r.wroteHeader {
+		r.status = code
+		r.wroteHeader = true
 	}
-	r.status = code
-	r.wroteHeader = true
 	r.ResponseWriter.WriteHeader(code)
 }
 

@@ -144,10 +144,12 @@ All envs are optional, but a set and invalid one will abort the start up.
 | `UI_PORT`          | `1`..`65535`                                                     | `8089`                                                         | Compose only: host port for the `web` service (UI + API proxy).                                                   |
 | `REDIS_URL`        | Redis connection URL                                             | `redis://localhost:6379/0`<br> compose: `redis://redis:6379/0` | Storage url.                                                                                                      |
 | `SHUTDOWN_TIMEOUT` | Go duration, e.g. `30s`                                          | `10s`                                                          | Max time to gracefully stop in-flight requests on shutdown. Keep below the deployment's termination grace period. |
+| `RATE_LIMIT_RPS`   | positive number, e.g. `20`                                       | *(empty -> off)*                                               | Requests per second allowed per client. Rate limiting is off if not set or `0`.                                   |
+| `RATE_LIMIT_BURST` | `1`..n                                                           | `20`                                                           | How many requests a client may sent before the limiting starts. Ignored if `RATE_LIMIT_RPS` is unset.             |
 | `LOG_LEVEL`        | `debug` `info` `warn` `error`                                    | `info`                                                         | Minimum log level being printed.                                                                                  |
-| `LOG_FORMAT`       | `text` `json`                                                    | `text`                                                         | `text` is a human readable format (colorized if using stdout), `json` is for machines.                            |
+| `LOG_FORMAT`       | `text` `json`                                                    | `text`                                                         | `text` is a human readable format (colorized if using stdout); `json` is for machines.                            |
 | `LOG_FILE`         | file path                                                        | *(empty → stdout)*                                             | If set, logs go to this file only.                                                                                |
-| `LOG_TIME`         | `sec` `milli` `nano` `dt-sec` `dt-milli` `rfc3339` `rfc3339nano` | `dt-milli`                                                     | timestamp layout; `dt-` means the date is printed. Does not affect `LOG_FORMAT = json` (always RFC3339Nano).      |
+| `LOG_TIME`         | `sec` `milli` `nano` `dt-sec` `dt-milli` `rfc3339` `rfc3339nano` | `dt-milli`                                                     | timestamp layout; `dt-` means the date is printed. Ignored if `LOG_FORMAT` is `json` (always RFC3339Nano).        |
 
 For example,
 
@@ -159,6 +161,11 @@ will be logging messages like `2026-08-03 05:23:40.123 INFO starting server addr
 
 Note: `LOG_LEVEL=debug` is a diagnostic mode, not a production setting.
 In particular, it will log every Redis command with its arguments, duration and the result.
+
+`RATE_LIMIT_RPS=20 RATE_LIMIT_BURST=40` gives every client 20 requests per
+second, with bursts up to 40.
+
+Note: Api scripts and UI currently require the rate limiting to be off.
 
 Envs can be overriden for `docker compose` runs by exporting them in the
 shell or via an `.env` file. See `/.env.template`.

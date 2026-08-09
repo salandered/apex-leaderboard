@@ -2,7 +2,10 @@ openapi: 3.0.4 # TODO: Update to 3.1.x
 info:
   title: Leaderboard Apex Service API
   version: 1.0.0
-  description: An API for storing and retrieving player scores.
+  description: >-
+    An API for storing and retrieving player scores.
+    When rate limiting is enabled, all /api/v1 endpoints
+    may answer 429 with an ErrorResponse body and a Retry-After header.
 tags:
   - name: System
     description: Operational

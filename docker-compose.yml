@@ -14,6 +14,8 @@ services:
       LOG_FORMAT: "${LOG_FORMAT:-text}"
       LOG_FILE: "${LOG_FILE:-}"
       LOG_TIME: "${LOG_TIME:-dt-milli}"
+      RATE_LIMIT_RPS: "${RATE_LIMIT_RPS:-}" # empty -> rate limiting off
+      RATE_LIMIT_BURST: "${RATE_LIMIT_BURST:-20}"
     depends_on:
       - redis
 
