@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
 )
@@ -42,20 +41,13 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	playerName, err := player.NormalizeName(data.PlayerName)
+	profile, err := player.NewProfile(data.PlayerName)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
 	}
 
-	playerId, err := h.Storage.CreatePlayerProfile(
-		req.Context(),
-		&player.Profile{
-			PlayerId:   player.GenerateID(),
-			PlayerName: playerName,
-			CreatedAt:  apextime.Now(),
-		},
-		idempotencyKey)
+	playerId, err := h.Storage.CreatePlayerProfile(req.Context(), profile, idempotencyKey)
 	if err != nil {
 		writeStorageError(req.Context(), w, err)
 		return
@@ -63,7 +55,7 @@ func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Reques
 
 	w.Header().Set("Location", "/api/v1/players/"+string(playerId))
 	writeJSONToResponse(req.Context(), w, http.StatusCreated, PostPlayerResp{
-		Player: PlayerResp{PlayerId: playerId, PlayerName: playerName},
+		Player: PlayerResp{PlayerId: playerId, PlayerName: profile.PlayerName},
 	})
 }
 
