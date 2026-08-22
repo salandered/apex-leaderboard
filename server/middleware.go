@@ -18,9 +18,14 @@ type statusRecorder struct {
 	wroteHeader bool
 }
 
+/*
+Known limitation: no 1xx checks, they would be recorded as if they were final.
+net/http does not commit the response on 1xx (except 101), so the real status
+that follows is lost, and recoveryMiddleware sees a header that was not written.
+See 'response.WriteHeader' in GOROOT/src/net/http/server.go
+*/
 func (r *statusRecorder) WriteHeader(code int) {
-	// only the first write matters. net/http WriteHeader will return on a second write:
-	// https://github.com/golang/go/blob/master/src/net/http/server.go#L1208
+	// only the first write matters, net/http WriteHeader returns on a second one
 	if !r.wroteHeader {
 		r.status = code
 		r.wroteHeader = true
@@ -35,6 +40,12 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 	n, err := r.ResponseWriter.Write(b)
 	r.bytes += n
 	return n, err
+}
+
+// [http.ResponseController] walks the wrappers using 'Unwrap' to reach the real writer
+// (e.g for Flush or SetWriteDeadline). Embedding does not promote those.
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
 }
 
 // Creates server-generated correlation id.
@@ -68,7 +79,7 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 			)
 			// don't write header if the handler already started doing it
 			rec, ok := w.(*statusRecorder)
-			if !ok || !rec.wroteHeader { // !ok should not happen
+			if !ok || !rec.wroteHeader { // !ok should not happen, may be add log or panic
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}()

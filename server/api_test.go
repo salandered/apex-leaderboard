@@ -93,7 +93,7 @@ func (s *APISuite) validateAgainstSpec(resp *http.Response) {
 	body, err := io.ReadAll(resp.Body)
 	s.Require().NoError(err)
 	resp.Body.Close()
-	resp.Body = io.NopCloser(bytes.NewReader(body)) // put body back for main tests
+	resp.Body = io.NopCloser(bytes.NewReader(body)) // put the body back for the test itself
 
 	in := &openapi3filter.ResponseValidationInput{
 		RequestValidationInput: &openapi3filter.RequestValidationInput{
@@ -109,7 +109,7 @@ func (s *APISuite) validateAgainstSpec(resp *http.Response) {
 
 	err = openapi3filter.ValidateResponse(context.Background(), in)
 	s.Require().NoError(err,
-		"%s %s: Open API validation failed: response does not satisfy api.yaml",
+		"%s %s: response does not satisfy api.yaml",
 		resp.Request.Method,
 		resp.Request.URL.Path,
 	)

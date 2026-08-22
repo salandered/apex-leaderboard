@@ -22,16 +22,16 @@ func NewMux(s storage.Storage) *http.ServeMux {
 	mux.HandleFunc("GET /livez", health.HandleLive)
 	mux.HandleFunc("GET /readyz", health.HandleReady)
 	// players
-	mux.HandleFunc("POST /api/v1/players", players.HandlePostPlayer)
+	mux.HandleFunc("POST /api/v1/players", players.HandleCreatePlayer)
 	mux.HandleFunc("GET /api/v1/players/{player_id}", players.HandleGetPlayer)
 	// boards
-	mux.HandleFunc("PUT /api/v1/boards/{board_id}", boards.HandlePutBoard)
+	mux.HandleFunc("PUT /api/v1/boards/{board_id}", boards.HandleCreateBoard)
 	mux.HandleFunc("GET /api/v1/boards", boards.HandleListBoards)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}", boards.HandleGetBoard)
 	mux.HandleFunc("POST /api/v1/boards/{board_id}/close", boards.HandleCloseBoard)
 	mux.HandleFunc("POST /api/v1/boards/{board_id}/open", boards.HandleOpenBoard)
 	// scores, board-scoped
-	mux.HandleFunc("PUT /api/v1/boards/{board_id}/scores/{player_id}", scores.HandlePutScore)
+	mux.HandleFunc("PUT /api/v1/boards/{board_id}/scores/{player_id}", scores.HandleSetScore)
 	mux.HandleFunc("POST /api/v1/boards/{board_id}/scores/{player_id}/increment", scores.HandleIncrementScore)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores", scores.HandleListScores)
 	mux.HandleFunc("GET /api/v1/boards/{board_id}/scores/{player_id}", scores.HandleGetRank)

@@ -8,6 +8,7 @@
 	- [Configuration](#configuration)
 	- [API Walk](#api-walk)
 	- [Run Tests](#run-tests)
+	- [Lint](#lint)
 	- [Compile](#compile)
 - [Misc](#misc)
 
@@ -118,6 +119,8 @@ docker compose up -d redis # or: docker run -p 6379:6379 redis:8.8.0-alpine
 go run .
 ```
 
+See also makefile.
+
 ### Web UI
 
 Optional, not needed for anything above and does not affect anything.
@@ -192,6 +195,17 @@ go test -tags=integration ./...  # unit + integration tests with db (uses Docker
 
 go test -tags=integration -run TestStorageSuite ./storage/  # integration tests only
 ```
+
+See also makefile.
+
+### Lint
+
+```bash
+golangci-lint run ./...                     
+cd apiscripts && golangci-lint run ./...    # apiscripts module
+```
+
+See also makefile.
 
 See [docs/tests.md](docs/tests.md) for details.
 

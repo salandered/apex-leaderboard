@@ -167,7 +167,7 @@ func readJSON(w http.ResponseWriter, req *http.Request, dst any) error {
 	}
 
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return fmt.Errorf("body must contain a single JSON object")
+		return errors.New("body must contain a single JSON object")
 	}
 
 	slog.DebugContext(req.Context(), "request decoded", "body", dst)
@@ -175,8 +175,6 @@ func readJSON(w http.ResponseWriter, req *http.Request, dst any) error {
 }
 
 func writeJSONToResponse(ctx context.Context, w http.ResponseWriter, statusCode int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-
 	rawJSON, err := json.Marshal(data)
 	if err != nil {
 		WriteErrorToResponse(
@@ -188,6 +186,7 @@ func writeJSONToResponse(ctx context.Context, w http.ResponseWriter, statusCode 
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode) // before Write
 
 	_, err = w.Write(rawJSON)
@@ -208,7 +207,7 @@ func WriteErrorToResponse(ctx context.Context, w http.ResponseWriter, err error,
 	msg := err.Error()
 	if statusCode >= http.StatusInternalServerError {
 		slog.ErrorContext(ctx, "request failed", "status", statusCode, "error", err)
-		msg = "internal server error" // client should not see the actual error
+		msg = "internal server error" // the client should not see the actual error
 	} else {
 		slog.WarnContext(ctx, "request rejected", "status", statusCode, "error", err)
 	}
@@ -234,7 +233,7 @@ func WriteErrorToResponse(ctx context.Context, w http.ResponseWriter, err error,
 func writeRequestError(ctx context.Context, w http.ResponseWriter, err error) {
 	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		WriteErrorToResponse(
-			ctx, w, fmt.Errorf("request body too large"), http.StatusRequestEntityTooLarge)
+			ctx, w, errors.New("request body too large"), http.StatusRequestEntityTooLarge)
 		return
 	}
 	WriteErrorToResponse(ctx, w, err, http.StatusBadRequest)
@@ -242,33 +241,25 @@ func writeRequestError(ctx context.Context, w http.ResponseWriter, err error) {
 
 // maps a storage-layer error to an HTTP response
 func writeStorageError(ctx context.Context, w http.ResponseWriter, err error) {
-	// Errorf messages duplicate 'err' content, but we might want to hide some internal info
-	if errors.Is(err, storage.ErrNotFound) {
-		WriteErrorToResponse(ctx, w, fmt.Errorf("not found"), http.StatusNotFound)
-		return
-	}
-	if errors.Is(err, storage.ErrBoardNotFound) {
-		WriteErrorToResponse(ctx, w, fmt.Errorf("board not found"), http.StatusNotFound)
-		return
-	}
-	if errors.Is(err, storage.ErrBoardExists) {
-		WriteErrorToResponse(ctx, w, fmt.Errorf("board already exists"), http.StatusConflict)
-		return
-	}
-	if errors.Is(err, storage.ErrBoardClosed) {
-		WriteErrorToResponse(ctx, w, fmt.Errorf("board closed"), http.StatusConflict)
-		return
-	}
-	if errors.Is(err, storage.ErrIdempotencyConflict) {
-		WriteErrorToResponse(ctx, w, fmt.Errorf("idempotency key reused with a different request"), http.StatusConflict)
-		return
-	}
-	if errors.Is(err, storage.ErrScoreOutOfRange) {
-		WriteErrorToResponse(ctx, w, fmt.Errorf(
+	// client messages duplicate 'err' content, but we might want to hide some internal info
+	switch {
+	case errors.Is(err, storage.ErrNotFound):
+		WriteErrorToResponse(ctx, w, errors.New("not found"), http.StatusNotFound)
+	case errors.Is(err, storage.ErrBoardNotFound):
+		WriteErrorToResponse(ctx, w, errors.New("board not found"), http.StatusNotFound)
+	case errors.Is(err, storage.ErrBoardExists):
+		WriteErrorToResponse(ctx, w, errors.New("board already exists"), http.StatusConflict)
+	case errors.Is(err, storage.ErrBoardClosed):
+		WriteErrorToResponse(ctx, w, errors.New("board closed"), http.StatusConflict)
+	case errors.Is(err, storage.ErrIdempotencyConflict):
+		WriteErrorToResponse(ctx, w, errors.New(
+			"idempotency key reused with a different request"), http.StatusConflict)
+	case errors.Is(err, storage.ErrScoreOutOfRange):
+		WriteErrorToResponse(ctx, w, errors.New(
 			"resulting score must be in [-1e13, 1e13]"), http.StatusConflict)
-		return
+	default:
+		WriteErrorToResponse(ctx, w, err, http.StatusInternalServerError)
 	}
-	WriteErrorToResponse(ctx, w, err, http.StatusInternalServerError)
 }
 
 const maxLoggedPayload = 512

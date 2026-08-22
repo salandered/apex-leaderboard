@@ -11,7 +11,7 @@ import (
 func (s *APISuite) TestPutScore() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{
+		handlers.SetScoreReq{
 			PlayerScore: new(int64(98)),
 		})
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
@@ -82,7 +82,7 @@ func (s *APISuite) TestIncrementScoreRejectsFractionalAmount() {
 func (s *APISuite) TestPutScoreAcceptsScoreAtMax() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{PlayerScore: new(score.Max)},
+		handlers.SetScoreReq{PlayerScore: new(score.Max)},
 	)
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
 }
@@ -90,7 +90,7 @@ func (s *APISuite) TestPutScoreAcceptsScoreAtMax() {
 func (s *APISuite) TestPutScoreRejectsScoreAboveMax() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{PlayerScore: new(score.Max + 1)},
+		handlers.SetScoreReq{PlayerScore: new(score.Max + 1)},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
@@ -98,7 +98,7 @@ func (s *APISuite) TestPutScoreRejectsScoreAboveMax() {
 func (s *APISuite) TestPutScoreRejectsScoreBelowMin() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{PlayerScore: new(score.Min - 1)},
+		handlers.SetScoreReq{PlayerScore: new(score.Min - 1)},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
@@ -122,7 +122,7 @@ func (s *APISuite) TestIncrementScoreRejectsAmountBelowMin() {
 func (s *APISuite) TestPutScoreClosedBoard() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedClosedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{
+		handlers.SetScoreReq{
 			PlayerScore: new(int64(98)),
 		})
 	s.Require().Equal(http.StatusConflict, resp.StatusCode)
@@ -351,7 +351,7 @@ func (s *APISuite) TestPutScoreRejectsNullScore() {
 func (s *APISuite) TestPutScoreAcceptsExplicitZeroScore() {
 	resp := s.putJSON(
 		"/api/v1/boards/"+MockedBoardId+"/scores/"+MockedPlayerId,
-		handlers.PutScoreReq{PlayerScore: new(int64(0))},
+		handlers.SetScoreReq{PlayerScore: new(int64(0))},
 	)
 	s.Require().Equal(http.StatusNoContent, resp.StatusCode)
 }

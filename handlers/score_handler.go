@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -18,7 +19,7 @@ type ScoreHandler struct {
 }
 
 // Using pointer: without it '{}' would write a 0
-type PutScoreReq struct {
+type SetScoreReq struct {
 	PlayerScore *int64 `json:"player_score"`
 }
 
@@ -49,7 +50,7 @@ type RankResp struct {
 	Metadata totalMeta  `json:"metadata"`
 }
 
-func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) {
+func (h *ScoreHandler) HandleSetScore(w http.ResponseWriter, req *http.Request) {
 	boardId, err := boardIdFromPath(req)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
@@ -65,13 +66,13 @@ func (h *ScoreHandler) HandlePutScore(w http.ResponseWriter, req *http.Request) 
 		writeRequestError(req.Context(), w, err)
 		return
 	}
-	var data PutScoreReq
+	var data SetScoreReq
 	if err := readJSON(w, req, &data); err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
 	}
 	if data.PlayerScore == nil {
-		writeRequestError(req.Context(), w, fmt.Errorf("player_score is required"))
+		writeRequestError(req.Context(), w, errors.New("player_score is required"))
 		return
 	}
 	if err := score.Validate(*data.PlayerScore); err != nil {
@@ -116,7 +117,7 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 		return
 	}
 	if data.Amount == nil {
-		writeRequestError(req.Context(), w, fmt.Errorf("amount is required"))
+		writeRequestError(req.Context(), w, errors.New("amount is required"))
 		return
 	}
 	// bounds the delta only: the resulting score is bounded atomically in the write script

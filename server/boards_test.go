@@ -7,21 +7,21 @@ import (
 )
 
 func (s *APISuite) TestPutBoard() {
-	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.CreateBoardReq{
 		BoardName: "Summer Contest",
 	})
 	s.Require().Equal(http.StatusCreated, resp.StatusCode)
 }
 
 func (s *APISuite) TestPutBoardInvalidId() {
-	resp := s.putJSON("/api/v1/boards/Bad_Id", handlers.PutBoardReq{
+	resp := s.putJSON("/api/v1/boards/Bad_Id", handlers.CreateBoardReq{
 		BoardName: "nope",
 	})
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
 func (s *APISuite) TestPutBoardStoresTrimmedName() {
-	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.CreateBoardReq{
 		BoardName: "  Summer Cup 🌳  ",
 	})
 	s.Require().Equal(http.StatusCreated, resp.StatusCode)
@@ -29,12 +29,12 @@ func (s *APISuite) TestPutBoardStoresTrimmedName() {
 }
 
 func (s *APISuite) TestPutBoardRejectsInvalidName() {
-	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{BoardName: ""})
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.CreateBoardReq{BoardName: ""})
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
 func (s *APISuite) TestPutBoardCreatedClosed() {
-	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.CreateBoardReq{
 		BoardName: "Summer Contest",
 		State:     "closed",
 	})
@@ -42,7 +42,7 @@ func (s *APISuite) TestPutBoardCreatedClosed() {
 }
 
 func (s *APISuite) TestPutBoardUnknownState() {
-	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.PutBoardReq{
+	resp := s.putJSON("/api/v1/boards/summer-contest", handlers.CreateBoardReq{
 		BoardName: "Summer Contest",
 		State:     "paused",
 	})

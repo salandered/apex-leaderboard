@@ -12,7 +12,7 @@ type PlayerHandler struct {
 	Storage storage.PlayerRepo
 }
 
-type PostPlayerReq struct {
+type CreatePlayerReq struct {
 	PlayerName string `json:"player_name"`
 }
 
@@ -21,7 +21,7 @@ type PlayerResp struct {
 	PlayerName string    `json:"player_name"`
 }
 
-type PostPlayerResp struct {
+type CreatePlayerResp struct {
 	Player PlayerResp `json:"player"`
 }
 
@@ -29,32 +29,33 @@ type GetPlayerResp struct {
 	Player PlayerResp `json:"player"`
 }
 
-func (h *PlayerHandler) HandlePostPlayer(w http.ResponseWriter, req *http.Request) {
+func (h *PlayerHandler) HandleCreatePlayer(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
 	idempotencyKey, err := readIdempotencyKey(req)
 	if err != nil {
-		writeRequestError(req.Context(), w, err)
+		writeRequestError(ctx, w, err)
 		return
 	}
-	var data PostPlayerReq
+	var data CreatePlayerReq
 	if err := readJSON(w, req, &data); err != nil {
-		writeRequestError(req.Context(), w, err)
+		writeRequestError(ctx, w, err)
 		return
 	}
 
 	profile, err := player.NewProfile(data.PlayerName)
 	if err != nil {
-		writeRequestError(req.Context(), w, err)
+		writeRequestError(ctx, w, err)
 		return
 	}
 
-	playerId, err := h.Storage.CreatePlayerProfile(req.Context(), profile, idempotencyKey)
+	playerId, err := h.Storage.CreatePlayerProfile(ctx, profile, idempotencyKey)
 	if err != nil {
-		writeStorageError(req.Context(), w, err)
+		writeStorageError(ctx, w, err)
 		return
 	}
 
 	w.Header().Set("Location", "/api/v1/players/"+string(playerId))
-	writeJSONToResponse(req.Context(), w, http.StatusCreated, PostPlayerResp{
+	writeJSONToResponse(ctx, w, http.StatusCreated, CreatePlayerResp{
 		Player: PlayerResp{PlayerId: playerId, PlayerName: profile.PlayerName},
 	})
 }

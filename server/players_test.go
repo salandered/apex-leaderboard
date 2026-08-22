@@ -8,12 +8,12 @@ import (
 )
 
 func (s *APISuite) TestPostPlayer() {
-	resp := s.postJSON("/api/v1/players", handlers.PostPlayerReq{
+	resp := s.postJSON("/api/v1/players", handlers.CreatePlayerReq{
 		PlayerName: "alice",
 	})
 	s.Require().Equal(http.StatusCreated, resp.StatusCode)
 
-	var result handlers.PostPlayerResp
+	var result handlers.CreatePlayerResp
 	s.decodeJSON(resp, &result)
 	s.Require().NotEmpty(result.Player.PlayerId)
 	s.Require().NoError(result.Player.PlayerId.Validate())
@@ -22,7 +22,7 @@ func (s *APISuite) TestPostPlayer() {
 }
 
 func (s *APISuite) TestPostPlayerStoresTrimmedName() {
-	resp := s.postJSON("/api/v1/players", handlers.PostPlayerReq{
+	resp := s.postJSON("/api/v1/players", handlers.CreatePlayerReq{
 		PlayerName: "  Mighty Warrior  ",
 	})
 	s.Require().Equal(http.StatusCreated, resp.StatusCode)
@@ -30,13 +30,13 @@ func (s *APISuite) TestPostPlayerStoresTrimmedName() {
 }
 
 func (s *APISuite) TestPostPlayerRejectsInvalidName() {
-	resp := s.postJSON("/api/v1/players", handlers.PostPlayerReq{PlayerName: ""})
+	resp := s.postJSON("/api/v1/players", handlers.CreatePlayerReq{PlayerName: ""})
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 }
 
 func (s *APISuite) TestPostPlayerWithIdempotencyKey() {
 	resp := s.postJSONWithHeaders("/api/v1/players",
-		handlers.PostPlayerReq{PlayerName: "alice"},
+		handlers.CreatePlayerReq{PlayerName: "alice"},
 		map[string]string{"Idempotency-Key": "player-key-1"},
 	)
 	s.Require().Equal(http.StatusCreated, resp.StatusCode)
@@ -44,7 +44,7 @@ func (s *APISuite) TestPostPlayerWithIdempotencyKey() {
 
 func (s *APISuite) TestPostPlayerRejectsBigIdempotencyKey() {
 	resp := s.postJSONWithHeaders("/api/v1/players",
-		handlers.PostPlayerReq{PlayerName: "alice"},
+		handlers.CreatePlayerReq{PlayerName: "alice"},
 		map[string]string{"Idempotency-Key": strings.Repeat("k", 129)},
 	)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
@@ -52,7 +52,7 @@ func (s *APISuite) TestPostPlayerRejectsBigIdempotencyKey() {
 
 func (s *APISuite) TestPostPlayerIdempotencyKeyConflict() {
 	resp := s.postJSONWithHeaders("/api/v1/players",
-		handlers.PostPlayerReq{PlayerName: "alice"},
+		handlers.CreatePlayerReq{PlayerName: "alice"},
 		map[string]string{"Idempotency-Key": MockedConflictIdempotencyKey},
 	)
 	s.Require().Equal(http.StatusConflict, resp.StatusCode)

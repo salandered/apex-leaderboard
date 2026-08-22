@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -89,13 +90,13 @@ func scoreEventFromLedger(event ledger.Event) ScoreEvent {
 func validateEventID(id string) error {
 	milliseconds, sequence, ok := strings.Cut(id, "-")
 	if !ok || milliseconds == "" || sequence == "" {
-		return fmt.Errorf("want <milliseconds>-<sequence>")
+		return errors.New("want <milliseconds>-<sequence>")
 	}
 	if _, err := strconv.ParseUint(milliseconds, 10, 64); err != nil {
-		return fmt.Errorf("invalid milliseconds")
+		return errors.New("invalid milliseconds")
 	}
 	if _, err := strconv.ParseUint(sequence, 10, 64); err != nil {
-		return fmt.Errorf("invalid sequence")
+		return errors.New("invalid sequence")
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
@@ -41,7 +42,7 @@ func (rs *redisStorage) CreatePlayerProfile(
 		return "", fmt.Errorf("storage create player: %w", err)
 	}
 	if len(result) == 0 {
-		return "", fmt.Errorf("storage create player: empty script result")
+		return "", errors.New("storage create player: empty script result")
 	}
 	code, ok := result[0].(int64)
 	if !ok {

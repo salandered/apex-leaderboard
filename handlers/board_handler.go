@@ -13,7 +13,7 @@ type BoardHandler struct {
 	Storage storage.BoardRepo
 }
 
-type PutBoardReq struct {
+type CreateBoardReq struct {
 	BoardName string `json:"board_name"`
 	State     string `json:"status,omitempty"` // state to status; empty means active
 }
@@ -33,13 +33,13 @@ type ListBoardsResp struct {
 	Boards []BoardResp `json:"boards"`
 }
 
-func (h *BoardHandler) HandlePutBoard(w http.ResponseWriter, req *http.Request) {
+func (h *BoardHandler) HandleCreateBoard(w http.ResponseWriter, req *http.Request) {
 	boardId, err := boardIdFromPath(req)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
 	}
-	var data PutBoardReq
+	var data CreateBoardReq
 	if err := readJSON(w, req, &data); err != nil {
 		writeRequestError(req.Context(), w, err)
 		return

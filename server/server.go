@@ -65,7 +65,7 @@ func WithRateLimit(rps float64, burst int) Option {
 	}
 }
 
-// Start runs the server until ctx is cancelled, then shuts down in-flight requests.
+// Start serves until ctx is cancelled, then shuts down in-flight requests.
 // The caller owns error logging.
 func Start(ctx context.Context, handler http.Handler, opts ...Option) error {
 	cfg := serverConfig{port: DefaultPort, shutdownTimeout: DefaultShutdownTimeout}
@@ -92,7 +92,7 @@ func Start(ctx context.Context, handler http.Handler, opts ...Option) error {
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1 mb
 		// net/http writes its own diagnostics here (superfluous WriteHeader, bad
-		// Content-Length, TLS handshake errors). This should be caught by our slog.
+		// Content-Length, TLS handshake errors). Route them through slog.
 		ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelWarn),
 	}
 	slog.Info("starting server", "addr", srv.Addr)
@@ -109,11 +109,11 @@ func Start(ctx context.Context, handler http.Handler, opts ...Option) error {
 	// Block until the ctx is cancelled, or the server sent an unexpected error
 	select {
 	case err := <-errServeCh:
-		return fmt.Errorf("%w: %w", ErrServe, err) // ListenAndServe returned unexpected error -> fail fast
+		return fmt.Errorf("%w: %w", ErrServe, err) // ListenAndServe returns unexpected error -> fail fast
 	case <-ctx.Done(): // signal -> graceful shutdown
 	}
 
-	// Shutdown.
+	// Shutdown
 	slog.Info("shutting down server", "timeout", cfg.shutdownTimeout)
 	shutDownStart := time.Now()
 
