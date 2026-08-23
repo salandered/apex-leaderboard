@@ -16,9 +16,11 @@ import (
 	"github.com/salandered/apex/apexredis"
 	"github.com/salandered/apex/consumer"
 	"github.com/salandered/apex/handlers"
-	"github.com/salandered/apex/logging"
+	"github.com/salandered/apex/requestid"
 	"github.com/salandered/apex/server"
 	"github.com/salandered/apex/storage"
+
+	logging "github.com/salandered/slogenv"
 )
 
 var ErrConfig = errors.New("invalid config")
@@ -138,7 +140,7 @@ func setupLogging() (logging.Config, io.Closer, error) {
 	if err != nil {
 		return logging.Config{}, nil, err
 	}
-	closer, err := logging.Setup(cfg)
+	closer, err := logging.Setup(cfg, requestid.LogAttrs)
 	if err != nil {
 		return logging.Config{}, nil, err
 	}
