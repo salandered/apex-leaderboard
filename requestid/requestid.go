@@ -8,6 +8,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// TODO: from wavelen: hold the header name here, 'const Header = "X-Request-ID"', and use it in
+// requestIDMiddleware and the API tests instead of repeating the literal in each of them.
+
 type contextKey int
 
 // "users of WithValue should define their own types for keys ... [like a] an unexported integer type"

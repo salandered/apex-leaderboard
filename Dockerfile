@@ -2,7 +2,7 @@
 
 # --platform=$BUILDPLATFORM keeps the compiler on the native runner arch (fast);
 # GOARCH=$TARGETARCH cross-compiles to each target - free for CGO_ENABLED=0 Go.
-FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.7-alpine AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./

@@ -80,6 +80,8 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 			// don't write header if the handler already started doing it
 			rec, ok := w.(*statusRecorder)
 			if !ok || !rec.wroteHeader { // !ok should not happen, may be add log or panic
+				// TODO: from wavelen: set "Connection: close" before the 500. The panic cut the
+				// response short, so the connection should not be reused.
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}()

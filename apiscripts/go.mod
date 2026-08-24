@@ -1,6 +1,6 @@
 module github.com/salandered/apex/loadtest
 
-go 1.26.2
+go 1.26.7
 
 require github.com/go-resty/resty/v2 v2.17.2
 

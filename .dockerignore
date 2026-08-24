@@ -16,9 +16,15 @@ docker-compose.yml
 coverage.*
 *.coverprofile
 
-# docs / configs
+# docs / configs / ci
+.github/
+__docs/
 docs/
 README.md
+LICENSE
+Makefile
+.golangci.yml
+.markdownlint.yaml
 .vscode/
 .idea/
 .claude/
