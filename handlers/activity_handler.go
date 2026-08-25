@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/salandered/apex/storage"
+	"github.com/salandered/httputils/httputils"
 )
 
 type ViewHandler struct {
@@ -40,7 +41,7 @@ func (h *ViewHandler) HandleListDailyActivity(w http.ResponseWriter, req *http.R
 		return
 	}
 
-	limit, err := parseIntQuery(req, limitQuery, defaultActivityLimit, 1, maxActivityLimit)
+	limit, err := httputils.ParseIntQuery(req, limitQuery, defaultActivityLimit, 1, maxActivityLimit)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
@@ -60,5 +61,5 @@ func (h *ViewHandler) HandleListDailyActivity(w http.ResponseWriter, req *http.R
 	for _, e := range entries {
 		response.Entries = append(response.Entries, activityEntry{PlayerId: e.PlayerID, Count: e.Count})
 	}
-	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, response)
 }

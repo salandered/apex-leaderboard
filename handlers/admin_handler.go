@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/salandered/apex/storage"
+	"github.com/salandered/httputils/httputils"
 )
 
 type AdminHandler struct {
@@ -62,5 +63,5 @@ func (h *AdminHandler) HandleVerifyProjection(w http.ResponseWriter, req *http.R
 			ReplayPresent: mismatch.ReplayPresent,
 		})
 	}
-	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, response)
 }

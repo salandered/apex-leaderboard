@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/salandered/apex/handlers"
+	"github.com/salandered/httputils/httputils"
 )
 
 const (
@@ -70,7 +70,7 @@ func (rl *rateLimiter) middleware(next http.Handler) http.Handler {
 			status = http.StatusServiceUnavailable
 		}
 		w.Header().Set("Retry-After", rl.retryAfterSec)
-		handlers.WriteErrorToResponse(req.Context(), w, err, status)
+		httputils.WriteError(req.Context(), w, err, status)
 	})
 }
 

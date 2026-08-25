@@ -10,6 +10,7 @@ import (
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/ledger"
 	"github.com/salandered/apex/storage"
+	"github.com/salandered/httputils/httputils"
 )
 
 const (
@@ -49,7 +50,7 @@ func (h *EventHandler) HandleListEvents(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	limit, err := parseIntQuery(req, limitQuery, defaultEventLimit, 1, maxEventLimit)
+	limit, err := httputils.ParseIntQuery(req, limitQuery, defaultEventLimit, 1, maxEventLimit)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
@@ -72,7 +73,7 @@ func (h *EventHandler) HandleListEvents(w http.ResponseWriter, req *http.Request
 		response.Metadata.NextAfter = events[len(events)-1].ID
 	}
 
-	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, response)
 }
 
 func scoreEventFromLedger(event ledger.Event) ScoreEvent {

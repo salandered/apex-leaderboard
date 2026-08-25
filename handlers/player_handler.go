@@ -5,6 +5,7 @@ import (
 
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/storage"
+	"github.com/salandered/httputils/httputils"
 )
 
 // PlayerHandler serves the player-profile endpoints.
@@ -37,7 +38,7 @@ func (h *PlayerHandler) HandleCreatePlayer(w http.ResponseWriter, req *http.Requ
 		return
 	}
 	var data CreatePlayerReq
-	if err := readJSON(w, req, &data); err != nil {
+	if err := httputils.ReadJSON(w, req, &data, maxRequestBodyBytes); err != nil {
 		writeRequestError(ctx, w, err)
 		return
 	}
@@ -55,7 +56,7 @@ func (h *PlayerHandler) HandleCreatePlayer(w http.ResponseWriter, req *http.Requ
 	}
 
 	w.Header().Set("Location", "/api/v1/players/"+string(playerId))
-	writeJSONToResponse(ctx, w, http.StatusCreated, CreatePlayerResp{
+	httputils.WriteJSON(ctx, w, http.StatusCreated, CreatePlayerResp{
 		Player: PlayerResp{PlayerId: playerId, PlayerName: profile.PlayerName},
 	})
 }
@@ -79,5 +80,5 @@ func (h *PlayerHandler) HandleGetPlayer(w http.ResponseWriter, req *http.Request
 		PlayerName: profile.PlayerName,
 	}}
 
-	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, response)
 }

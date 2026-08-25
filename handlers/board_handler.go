@@ -6,6 +6,7 @@ import (
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/apex/board"
 	"github.com/salandered/apex/storage"
+	"github.com/salandered/httputils/httputils"
 )
 
 // BoardHandler serves the board endpoints.
@@ -40,7 +41,7 @@ func (h *BoardHandler) HandleCreateBoard(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	var data CreateBoardReq
-	if err := readJSON(w, req, &data); err != nil {
+	if err := httputils.ReadJSON(w, req, &data, maxRequestBodyBytes); err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
 	}
@@ -72,7 +73,7 @@ func (h *BoardHandler) HandleGetBoard(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	writeJSONToResponse(req.Context(), w, http.StatusOK, GetBoardResp{Board: boardToResp(b)})
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, GetBoardResp{Board: boardToResp(b)})
 }
 
 func (h *BoardHandler) HandleListBoards(w http.ResponseWriter, req *http.Request) {
@@ -87,7 +88,7 @@ func (h *BoardHandler) HandleListBoards(w http.ResponseWriter, req *http.Request
 		response.Boards = append(response.Boards, boardToResp(&boards[i]))
 	}
 
-	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, response)
 }
 
 func (h *BoardHandler) HandleCloseBoard(w http.ResponseWriter, req *http.Request) {

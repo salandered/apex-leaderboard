@@ -2,9 +2,10 @@
 -include .env
 export
 
+# Prints every "## target: description" comment in this file.
 .PHONY: help
 help:
-	@echo targets: run up down redis lint test test/all
+	@awk '/^## /{sub(/^## /,""); i=index($$0,": "); printf "  %-26s %s\n", substr($$0,1,i-1), substr($$0,i+2)}' $(MAKEFILE_LIST)
 
 # ---- run ----
 
@@ -39,6 +40,20 @@ redis:
 lint:
 	golangci-lint run ./...
 	cd apiscripts && golangci-lint run ./...
+
+## audit: tidy check, verify, lint and tests over both modules
+# -vet=off because golangci-lint already ran govet.
+.PHONY: audit
+audit:
+	@echo Checking module dependencies...
+	go mod tidy -diff
+	go mod verify
+	cd apiscripts && go mod tidy -diff && go mod verify
+	@echo Linting...
+	golangci-lint run ./...
+	cd apiscripts && golangci-lint run ./...
+	@echo Running tests...
+	go test -race -vet=off ./...
 
 # ---- tests ----
 

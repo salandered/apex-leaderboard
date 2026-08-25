@@ -2,14 +2,10 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/salandered/apex/apextime"
@@ -17,6 +13,7 @@ import (
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/requestid"
 	"github.com/salandered/apex/storage"
+	"github.com/salandered/httputils/httputils"
 )
 
 const (
@@ -56,6 +53,9 @@ func requestID(req *http.Request) string {
 	return requestid.New()
 }
 
+// Currently POST bodies are small (like a player name)
+const maxRequestBodyBytes int64 = 1 << 16 // 64 kb
+
 const idempotencyKeyHeader = "Idempotency-Key"
 const maxIdempotencyKeyLen = 128
 
@@ -74,30 +74,6 @@ func readIdempotencyKey(req *http.Request) (string, error) {
 		return "", fmt.Errorf("%s must be at most %d characters", idempotencyKeyHeader, maxIdempotencyKeyLen)
 	}
 	return key, nil
-}
-
-// max <= 0 means no cap
-func parseIntQuery(req *http.Request, name string, def, min, max int64) (int64, error) {
-	raw := req.URL.Query().Get(name)
-	if raw == "" {
-		return def, nil
-	}
-	v, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf(
-			"invalid query param, want an integer; param '%v', value '%v'", name, raw)
-	}
-	if v < min || (v > max && max > 0) {
-		if max > 0 {
-			return 0, fmt.Errorf(
-				"invalid query param, want an integer in [%v, %v]; param '%v', value '%v'",
-				min, max, name, raw,
-			)
-		}
-		return 0, fmt.Errorf(
-			"invalid query param, want an integer >= %v; param '%v', value '%v'", min, name, raw)
-	}
-	return v, nil
 }
 
 // want YYYY-MM-DD; returns the UTC start of that day
@@ -151,92 +127,13 @@ type totalMeta struct {
 
 // Response/Request Utils
 
-// Currently POST bodies are small (like a player name)
-const maxRequestBodyBytes = 1 << 16 // 64 kb
-
-// Decodes the incoming req.
-// Checks: only one JSON object; bounded; no unknown fields.
-func readJSON(w http.ResponseWriter, req *http.Request, dst any) error {
-	req.Body = http.MaxBytesReader(w, req.Body, maxRequestBodyBytes)
-	dec := json.NewDecoder(req.Body)
-	dec.DisallowUnknownFields()
-
-	// Consider adding branches for json errors like json.SyntaxError, json.UnmarshalTypeError, etc
-	if err := dec.Decode(dst); err != nil {
-		return err
-	}
-
-	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errors.New("body must contain a single JSON object")
-	}
-
-	slog.DebugContext(req.Context(), "request decoded", "body", dst)
-	return nil
-}
-
-func writeJSONToResponse(ctx context.Context, w http.ResponseWriter, statusCode int, data any) {
-	rawJSON, err := json.Marshal(data)
-	if err != nil {
-		WriteErrorToResponse(
-			ctx,
-			w,
-			fmt.Errorf("marshalling response body: %w", err),
-			http.StatusInternalServerError,
-		)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode) // before Write
-
-	_, err = w.Write(rawJSON)
-	if err != nil {
-		// headers with the status code were already sent to the client
-		slog.ErrorContext(ctx, "failed writing response body", "status", statusCode, "error", err)
-		return
-	}
-	slog.DebugContext(ctx, "response sent",
-		"bytes", len(rawJSON), "payload", truncatePayload(rawJSON))
-}
-
-type errorResponse struct {
-	Error string `json:"error"`
-}
-
-func WriteErrorToResponse(ctx context.Context, w http.ResponseWriter, err error, statusCode int) {
-	msg := err.Error()
-	if statusCode >= http.StatusInternalServerError {
-		slog.ErrorContext(ctx, "request failed", "status", statusCode, "error", err)
-		msg = "internal server error" // the client should not see the actual error
-	} else {
-		slog.WarnContext(ctx, "request rejected", "status", statusCode, "error", err)
-	}
-
-	rawJSON, marshalErr := json.Marshal(errorResponse{Error: msg})
-	if marshalErr != nil {
-		// providing requestID (via ctx)
-		slog.ErrorContext(ctx, "failed marshalling error response", "error", marshalErr)
-		// all bad, just return a plain text
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	// w.Header().Set("X-Content-Type-Options", "nosniff") // consider adding
-	w.WriteHeader(statusCode)
-
-	if _, writeErr := w.Write(rawJSON); writeErr != nil {
-		slog.ErrorContext(ctx, "failed writing error response", "status", statusCode, "error", writeErr)
-	}
-}
-
 func writeRequestError(ctx context.Context, w http.ResponseWriter, err error) {
 	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		WriteErrorToResponse(
+		httputils.WriteError(
 			ctx, w, errors.New("request body too large"), http.StatusRequestEntityTooLarge)
 		return
 	}
-	WriteErrorToResponse(ctx, w, err, http.StatusBadRequest)
+	httputils.WriteError(ctx, w, err, http.StatusBadRequest)
 }
 
 // maps a storage-layer error to an HTTP response
@@ -244,30 +141,20 @@ func writeStorageError(ctx context.Context, w http.ResponseWriter, err error) {
 	// client messages duplicate 'err' content, but we might want to hide some internal info
 	switch {
 	case errors.Is(err, storage.ErrNotFound):
-		WriteErrorToResponse(ctx, w, errors.New("not found"), http.StatusNotFound)
+		httputils.WriteError(ctx, w, errors.New("not found"), http.StatusNotFound)
 	case errors.Is(err, storage.ErrBoardNotFound):
-		WriteErrorToResponse(ctx, w, errors.New("board not found"), http.StatusNotFound)
+		httputils.WriteError(ctx, w, errors.New("board not found"), http.StatusNotFound)
 	case errors.Is(err, storage.ErrBoardExists):
-		WriteErrorToResponse(ctx, w, errors.New("board already exists"), http.StatusConflict)
+		httputils.WriteError(ctx, w, errors.New("board already exists"), http.StatusConflict)
 	case errors.Is(err, storage.ErrBoardClosed):
-		WriteErrorToResponse(ctx, w, errors.New("board closed"), http.StatusConflict)
+		httputils.WriteError(ctx, w, errors.New("board closed"), http.StatusConflict)
 	case errors.Is(err, storage.ErrIdempotencyConflict):
-		WriteErrorToResponse(ctx, w, errors.New(
+		httputils.WriteError(ctx, w, errors.New(
 			"idempotency key reused with a different request"), http.StatusConflict)
 	case errors.Is(err, storage.ErrScoreOutOfRange):
-		WriteErrorToResponse(ctx, w, errors.New(
+		httputils.WriteError(ctx, w, errors.New(
 			"resulting score must be in [-1e13, 1e13]"), http.StatusConflict)
 	default:
-		WriteErrorToResponse(ctx, w, err, http.StatusInternalServerError)
+		httputils.WriteError(ctx, w, err, http.StatusInternalServerError)
 	}
-}
-
-const maxLoggedPayload = 512
-
-func truncatePayload(rawJSON []byte) string {
-	if len(rawJSON) <= maxLoggedPayload {
-		return string(rawJSON)
-	}
-	// json.Marshal emits raw UTF-8, so just a cut might split a rune
-	return strings.ToValidUTF8(string(rawJSON[:maxLoggedPayload]), "") + "..."
 }

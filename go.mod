@@ -6,6 +6,7 @@ require (
 	github.com/getkin/kin-openapi v0.142.0
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.21.0
+	github.com/salandered/httputils v0.0.1
 	github.com/salandered/slogenv v0.1.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.43.0

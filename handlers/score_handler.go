@@ -10,6 +10,7 @@ import (
 	"github.com/salandered/apex/player"
 	"github.com/salandered/apex/score"
 	"github.com/salandered/apex/storage"
+	"github.com/salandered/httputils/httputils"
 )
 
 const asOfQuery = "as_of"
@@ -67,7 +68,7 @@ func (h *ScoreHandler) HandleSetScore(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 	var data SetScoreReq
-	if err := readJSON(w, req, &data); err != nil {
+	if err := httputils.ReadJSON(w, req, &data, maxRequestBodyBytes); err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
 	}
@@ -112,7 +113,7 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 		return
 	}
 	var data IncrementScoreReq
-	if err := readJSON(w, req, &data); err != nil {
+	if err := httputils.ReadJSON(w, req, &data, maxRequestBodyBytes); err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
 	}
@@ -159,7 +160,7 @@ func (h *ScoreHandler) HandleGetRank(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	writeJSONToResponse(req.Context(), w, http.StatusOK, RankResp{
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, RankResp{
 		Standing: scoreEntry{
 			PlayerId: string(playerId),
 			Score:    standing.Score,
@@ -175,12 +176,12 @@ func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request
 		writeRequestError(req.Context(), w, err)
 		return
 	}
-	limit, err := parseIntQuery(req, limitQuery, defaultListLimit, 1, maxListLimit)
+	limit, err := httputils.ParseIntQuery(req, limitQuery, defaultListLimit, 1, maxListLimit)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
 	}
-	offset, err := parseIntQuery(req, offsetQuery, 0, 0, 0)
+	offset, err := httputils.ParseIntQuery(req, offsetQuery, 0, 0, 0)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
@@ -223,7 +224,7 @@ func (h *ScoreHandler) HandleListScores(w http.ResponseWriter, req *http.Request
 		})
 	}
 
-	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, response)
 }
 
 func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request) {
@@ -238,7 +239,7 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	limit, err := parseIntQuery(req, limitQuery, defaultHistoryLimit, 1, maxHistoryLimit)
+	limit, err := httputils.ParseIntQuery(req, limitQuery, defaultHistoryLimit, 1, maxHistoryLimit)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
@@ -260,5 +261,5 @@ func (h *ScoreHandler) HandleGetHistory(w http.ResponseWriter, req *http.Request
 		response.Events = append(response.Events, scoreEventFromLedger(e))
 	}
 
-	writeJSONToResponse(req.Context(), w, http.StatusOK, response)
+	httputils.WriteJSON(req.Context(), w, http.StatusOK, response)
 }

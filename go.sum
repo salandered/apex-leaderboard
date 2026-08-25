@@ -112,6 +112,8 @@ github.com/redis/go-redis/v9 v9.21.0 h1:FPBE4hhbAke+TLmcY3WkpbDffJEomdqPn3HYiqAt
 github.com/redis/go-redis/v9 v9.21.0/go.mod h1:v/M13XI1PVCDcm01VtPFOADfZtHf8YW3baQf57KlIkA=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
+github.com/salandered/httputils v0.0.1 h1:EGVFIVc9tpHv/1YE4uhihIZlT09rxlmjfkTNVtQfoGQ=
+github.com/salandered/httputils v0.0.1/go.mod h1:cv1MTHTDWtAdohO5ZSIhzxZsQlUNeQvqw3v+9dsr8XQ=
 github.com/salandered/slogenv v0.1.0 h1:kSHuGGdT/uYFc63cdA84rrZNQoDla/PS4sCI1CryV7w=
 github.com/salandered/slogenv v0.1.0/go.mod h1:RCfv6tD8HvWpEpSg9lvCABivx8QfegTyEwb2Q7aDIq4=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEVZGK7IN2kJkjTuQ=
