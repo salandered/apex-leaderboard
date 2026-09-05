@@ -32,11 +32,11 @@ const (
 func (rs *redisStorage) CreatePlayerProfile(
 	ctx context.Context,
 	profile *player.Profile,
-	idempotencyKey string,
+	idempKey string,
 ) (player.ID, error) {
 	result, err := createPlayerScript.Run(ctx, rs.client,
 		[]string{playerProfileKey(profile.PlayerId), playerIdempotencyHashKey},
-		profile.PlayerName, apextime.Format(profile.CreatedAt), string(profile.PlayerId), idempotencyKey,
+		profile.PlayerName, apextime.Format(profile.CreatedAt), string(profile.PlayerId), idempKey,
 	).Slice()
 	if err != nil {
 		return "", fmt.Errorf("storage create player: %w", err)

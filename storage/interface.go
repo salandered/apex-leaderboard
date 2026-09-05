@@ -10,8 +10,8 @@ import (
 )
 
 type PlayerRepo interface {
-	// idempotencyKey is the optional client-supplied key (empty string skips the idempotency record)
-	CreatePlayerProfile(ctx context.Context, profile *player.Profile, idempotencyKey string) (player.ID, error)
+	// idempKey is the optional client-supplied key (empty string skips the idempotency record)
+	CreatePlayerProfile(ctx context.Context, profile *player.Profile, idempKey string) (player.ID, error)
 	GetPlayerProfile(ctx context.Context, playerId player.ID) (*player.Profile, error)
 }
 
@@ -28,9 +28,9 @@ type BoardRepo interface {
 // Score reads and writes exposed through the API.
 type ScoreRepo interface {
 	// requestID is the server-generated id;
-	// idempotencyKey is the optional client-supplied key (empty string skips the idempotency record)
-	IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount int64, requestID, idempotencyKey string) error
-	SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score int64, requestID, idempotencyKey string) error
+	// idempKey is the optional client-supplied key (empty string skips the idempotency record)
+	IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount int64, reqID, idempKey string) error
+	SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score int64, reqID, idempKey string) error
 
 	// Returns a player's standing and the total number of ranked players. Rank is 1-based.
 	GetStanding(ctx context.Context, playerId player.ID, boardId board.ID) (Standing, int64, error)

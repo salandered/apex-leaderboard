@@ -16,13 +16,10 @@
 
 ![alt text](logo.png)
 
-Apex is a backend web service for leaderboards, built as an MVP to prove out two things:
+Apex is a backend web service for leaderboards, built as an MVP to prove out (or fail with) two things:
 
-- **Architecturally:** every score is event-sourced. An event ledger is the source of truth, and
-  leaderboards are derived views.
-- **Technically:** Redis is the only datastore. Beyond plain key-value use, it acts as a persistent
-  document database and as the main store for the event-sourced parts: topics (streams), views, and
-  consumer data.
+- **Architecturally:** every score is event-sourced. An event ledger is the source of truth, and leaderboards are derived views.
+- **Technically:** Redis is the only datastore. Plain key-value use, a persistent document db and the main store for the event-sourced parts (topics, views, consumer data). See [why-redis](docs/why-redis.md)
 
 More details in [docs/architecture.md](docs/architecture.md)
 

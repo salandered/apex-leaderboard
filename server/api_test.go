@@ -204,10 +204,10 @@ func (ms *mockStorage) Ping(context.Context) error {
 	return ms.pingErr
 }
 
-func (ms *mockStorage) CreatePlayerProfile(c context.Context, profile *player.Profile, idempotencyKey string) (player.ID, error) {
+func (ms *mockStorage) CreatePlayerProfile(c context.Context, profile *player.Profile, idempKey string) (player.ID, error) {
 	fmt.Printf("creating profile %v to mocked storage", profile)
 	ms.lastProfile = profile
-	if idempotencyKey == MockedConflictIdempotencyKey {
+	if idempKey == MockedConflictIdempotencyKey {
 		return "", storage.ErrIdempotencyConflict
 	}
 	return profile.PlayerId, nil
@@ -255,14 +255,14 @@ func (ms *mockStorage) ListBoards(c context.Context) ([]board.Board, error) {
 	}, nil
 }
 
-func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, boardId board.ID, amount int64, requestID, idempotencyKey string) error {
+func (ms *mockStorage) IncrementScore(c context.Context, playerId player.ID, boardId board.ID, amount int64, reqID, idempKey string) error {
 	if boardId == board.ID(MockedClosedBoardId) {
 		return storage.ErrBoardClosed
 	}
 	return nil
 }
 
-func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, boardId board.ID, score int64, requestID, idempotencyKey string) error {
+func (ms *mockStorage) SetScore(c context.Context, playerId player.ID, boardId board.ID, score int64, reqID, idempKey string) error {
 	if boardId == board.ID(MockedClosedBoardId) {
 		return storage.ErrBoardClosed
 	}

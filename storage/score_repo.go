@@ -34,14 +34,14 @@ var applyScoreScript = redis.NewScript(applyScoreLua)
 
 // Sets an absolute score.
 // An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
-func (rs *redisStorage) SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score int64, requestID, idempotencyKey string) error {
-	return rs.applyEvent(ctx, ledger.EventSet, playerId, boardId, score, requestID, idempotencyKey)
+func (rs *redisStorage) SetScore(ctx context.Context, playerId player.ID, boardId board.ID, score int64, reqID, idempKey string) error {
+	return rs.applyEvent(ctx, ledger.EventSet, playerId, boardId, score, reqID, idempKey)
 }
 
 // Applies a delta to score on the board (a player with no entry starts from 0).
 // An unknown player/board returns ErrNotFound/ErrBoardNotFound without appending.
-func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount int64, requestID, idempotencyKey string) error {
-	return rs.applyEvent(ctx, ledger.EventIncrement, playerId, boardId, amount, requestID, idempotencyKey)
+func (rs *redisStorage) IncrementScore(ctx context.Context, playerId player.ID, boardId board.ID, amount int64, reqID, idempKey string) error {
+	return rs.applyEvent(ctx, ledger.EventIncrement, playerId, boardId, amount, reqID, idempKey)
 }
 
 // Commands are pipelined into one round trip (best-effort, not atomic: consider using MULT).
@@ -286,22 +286,22 @@ func applyCodeName(code int64) string {
 
 // Runs the write script. Both a new and retried applies are non-errors.
 // A rejected write appends nothing and maps to an error.
-// idempotencyKey is the client-supplied key, used if not empty.
+// idempKey is the client-supplied key, used if not empty.
 func (rs *redisStorage) applyEvent(
 	ctx context.Context,
 	etype ledger.EventType,
 	playerId player.ID,
 	boardId board.ID,
 	amount int64,
-	requestID string,
-	idempotencyKey string,
+	reqID string,
+	idempKey string,
 ) error {
 	result, err := applyScoreScript.Run(ctx, rs.client,
 		[]string{
 			leaderboardKey(boardId), ledgerKey, idempotencyHashKey,
 			playerProfileKey(playerId), boardProfileKey(boardId),
 		},
-		string(etype), string(playerId), amount, requestID, string(boardId), idempotencyKey, score.Max,
+		string(etype), string(playerId), amount, reqID, string(boardId), idempKey, score.Max,
 	).Slice()
 	if err != nil {
 		return fmt.Errorf("storage apply %s event: %w", etype, err)

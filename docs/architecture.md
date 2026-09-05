@@ -5,11 +5,10 @@ Apex is a leaderboard backend: a Go HTTP service with Redis as the only datastor
 ## The core idea: event sourced score
 
 Every score change is recorded as an **event** in an append-only **ledger** (a Redis Stream).
-The ledger is the source of truth for the score values. The leaderboards are **projections**:
-derived views that can be deleted and rebuilt from the ledger with an identical result.
-Each leaderboard is a Redis Sorted Set.
+The leaderboards (Redis Sorted Set) are ledger's **projections**:
+views that can be deleted and rebuilt with an identical result.
 
-Pros:
+What it gives us:
 
 - a full audit history of every score (the history API is just a ledger read)
 - disposable rankings - projection corruption is repaired by replay
@@ -38,8 +37,6 @@ flowchart TD
 
 ```
 
-The ledger is the source of truth; every projection is derived from it and can be rebuilt by replay.
-
 ### Player profile
 
 Board-independent document (name, creation date) keyed by a
@@ -53,7 +50,7 @@ Named score containers. Ids are short, client-chosen slugs (`summer-contest2026`
 rather than UUIDs. They are readable and appear in URLs.
 
 The board id is **immutable forever** (ids are written into ledger events),
-however, a board has a mutable display name.
+but a board has a mutable display name.
 A registry (currently acts as a sorting index) keeps the list of boards in creation order.
 
 A board has a status: `active` or `closed`.
@@ -68,15 +65,16 @@ Currently boards cannot be deleted.
 One global stream containing all score events.
 Event is recorded only if the operation was succesfully applied (fact only).
 Currently two event types exist: `set` and `increment` (a delta).
-"Set" typed event acts as a snapshot barrier - replay never needs to look past the latest `set`.
+"Set" event acts as a snapshot barrier - replay does not need to look past the latest `set`.
 
 Clients can consume the same global order through `GET /api/v1/events`: pass the last seen
-event id as an exclusive `after` cursor. In this case, a cursor is managed by client.
+event id as an exclusive `after` cursor. Such cursor is managed by client.
 
-### Projection (leaderboard)
+### Leaderboard projection
 
 The actual leaderboard which faces clients. One sorted set per board holding the current scores.
-In app (not API) we call a projection entry a **standing**: besides the score value it holds a player id
+
+In app (not publci API) we call a projection entry a **standing**: besides the score value it holds a player id
 and also implicitly implies a "rank", which is its index (1-based). So standing is a (score, player_id, rank).
 
 All standing reads (i.e top-N pages, a single player's standing) are cheap sorted-set operations.
@@ -85,6 +83,7 @@ It allows listing operations to use plain limit/offset pagination.
 The scores endpoint also accepts `as_of=YYYY-MM-DD`. This reconstructs a transient historical
 leaderboard by folding events from the beginning to `as_of`; it does not
 consult or modify the live projection.
+
 The current implementation scans the global event history, it **demonstrates time-travel possibilities**
 rather than providing a scalable query.
 
@@ -98,7 +97,7 @@ This makes retries idempotent (essential for the incrementing a score or creatin
 
 The same key reused with a different payload (like a score amount) is rejected with `409`.
 
-Board creation doesn;t use this mechanic: `PUT` with a client-chosen slug is already retry-safe.
+Board creation doesn't use this mechanic: `PUT` with a client-chosen slug is already retry-safe.
 
 `Idempotency-Key` is _optional_, but is recommended.
 
@@ -148,18 +147,14 @@ flowchart LR
     end
 ```
 
-Steps in order: idempotency check → player/board exist & board active → apply to
-projection → append event → record idempotency key (if supplied).
-
 All steps run inside a single Lua script: projection and ledger move together or not at all.
 
 Every score write runs one Lua script executing atomically: optional idempotency check → player and
 board existence check → apply to the projection → append the event → record the idempotency key
 (only when the client supplied one). Projection and ledger move together or not at all.
 
-Rebuild and verification are the operational counterpart. Both are scoped to one board.
-Rebuild folds board's ledger events into its projection (a leaderboard). Verification does the same but with a
-scratch and then compares it with a live projection.
+Rebuild and verification are the operational writes. Both are scoped to one board.
+Rebuild folds board's ledger events into its projection (a leaderboard). Verification does the same but creates a temporary projection which is being compared with a primary projection.
 
 ## Async projections (consumers)
 
@@ -198,11 +193,11 @@ On first boot the cursor is absent, so it starts at `0-0` (the stream head) and 
 catch-up over all history. `XREAD` returns only entries _after_ the given id.
 
 **At-least-once.** The batch is applied _before_ the cursor is saved. If the consumer
-crashes between the two, the restart would re-apply the same batch -
-so a count can be inflated, but data is never lost. For a proof of concept view it is an
-acceptable trade. Also like any projection the view is disposable can can be rebuild (drop the daily ZSETs, reset the cursor to `0-0`).
+crashes between the two, the restart would re-apply the same batch. This means that a count _can be inflated_, but data is never lost. I currently think this is acceptable.
 
-Note that using the event API `GET /api/v1/events` a client can implement it's own consumer.
+Like any projection the view is disposable and can be rebuild (drop the daily ZSETs, reset the cursor to `0-0`).
+
+Note that by using the event API `GET /api/v1/events` a client can implement its own consumer.
 
 ## How it got here
 

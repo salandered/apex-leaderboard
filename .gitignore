@@ -14,9 +14,6 @@ coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
 # Go workspace file
 go.work
 go.work.sum
@@ -34,7 +31,11 @@ go.work.sum
 CLAUDE.md
 AGENTS.md
 
+
 # custom
 *__internal*
 *__docs*
 _tmp*.json
+desktop.ini
+# local build output (makefile)
+/bin/ 

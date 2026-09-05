@@ -32,7 +32,7 @@ type GetPlayerResp struct {
 
 func (h *PlayerHandler) HandleCreatePlayer(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
-	idempotencyKey, err := readIdempotencyKey(req)
+	idempKey, err := readIdempotencyKey(req)
 	if err != nil {
 		writeRequestError(ctx, w, err)
 		return
@@ -49,7 +49,7 @@ func (h *PlayerHandler) HandleCreatePlayer(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	playerId, err := h.Storage.CreatePlayerProfile(ctx, profile, idempotencyKey)
+	playerId, err := h.Storage.CreatePlayerProfile(ctx, profile, idempKey)
 	if err != nil {
 		writeStorageError(ctx, w, err)
 		return

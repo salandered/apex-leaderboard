@@ -62,7 +62,7 @@ func (h *ScoreHandler) HandleSetScore(w http.ResponseWriter, req *http.Request) 
 		writeRequestError(req.Context(), w, err)
 		return
 	}
-	idempotencyKey, err := readIdempotencyKey(req)
+	idempKey, err := readIdempotencyKey(req)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
@@ -86,7 +86,7 @@ func (h *ScoreHandler) HandleSetScore(w http.ResponseWriter, req *http.Request) 
 		boardId,
 		*data.PlayerScore,
 		requestID(req),
-		idempotencyKey,
+		idempKey,
 	)
 	if err != nil {
 		writeStorageError(req.Context(), w, err)
@@ -107,7 +107,7 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 		writeRequestError(req.Context(), w, err)
 		return
 	}
-	idempotencyKey, err := readIdempotencyKey(req)
+	idempKey, err := readIdempotencyKey(req)
 	if err != nil {
 		writeRequestError(req.Context(), w, err)
 		return
@@ -132,7 +132,7 @@ func (h *ScoreHandler) HandleIncrementScore(w http.ResponseWriter, req *http.Req
 		boardId,
 		*data.Amount,
 		requestID(req),
-		idempotencyKey,
+		idempKey,
 	)
 	if err != nil {
 		writeStorageError(req.Context(), w, err)
