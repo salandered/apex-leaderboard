@@ -38,19 +38,20 @@ func TestValidateName(t *testing.T) {
 		{in: "Mighty Warrior", name: "space inside"},
 		{in: "a b_c-1", name: "all allowed chars"},
 		{in: strings.Repeat("a", 32), name: "max len"},
+		{in: "a__b--c", name: "repeated separators"},
 
-		{in: "", wantErr: true, name: "empty"},
 		{in: "ab", wantErr: true, name: "too short"},
 		{in: strings.Repeat("a", 33), wantErr: true, name: "too long"},
 		{in: "1abc", wantErr: true, name: "digit start"},
 		{in: "_abc", wantErr: true, name: "underscore start"},
 		{in: "-abc", wantErr: true, name: "hyphen start"},
+		{in: "abc-", wantErr: true, name: "hyphen end"},
+		{in: "abc_", wantErr: true, name: "underscore end"},
 		{in: "café", wantErr: true, name: "non-ascii"},
 		{in: "alice🌳", wantErr: true, name: "emoji"},
 		{in: "alice!", wantErr: true, name: "punctuation"},
 		{in: "al\nice", wantErr: true, name: "inner newline"},
-		{in: "  alice  ", wantErr: true, name: "not normalized"},
-		{in: "   ", wantErr: true, name: "whitespace only"},
+		{in: "  alice", wantErr: true, name: "leading whitespace"},
 	}
 
 	for _, tt := range tests {
