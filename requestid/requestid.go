@@ -4,12 +4,11 @@ package requestid
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // TODO: from wavelen: hold the header name here, 'const Header = "X-Request-ID"', and use it in
-// requestIDMiddleware and the API tests instead of repeating the literal in each of them.
+// requestIDMiddleware and the API tests.
 
 type contextKey int
 
@@ -17,7 +16,7 @@ type contextKey int
 const idContextKey contextKey = iota
 
 func New() string {
-	return uuid.NewString()
+	return uuid.New().String()
 }
 
 func WithID(ctx context.Context, id string) context.Context {

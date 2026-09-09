@@ -1,0 +1,17 @@
+# https://docs.codecov.com/docs/codecovyml-reference
+
+coverage:
+  status:
+    project:
+      default: # This can be anything, but it needs to exist as the name
+        target: auto
+        threshold: 5%
+    # https://docs.codecov.com/docs/commit-status#patch-status
+    patch:
+      default:
+        target: auto # new lines must match the base coverage
+
+comment:
+  # https://docs.codecov.com/docs/pull-request-comments#layout
+  layout: "condensed_header, condensed_files, condensed_footer"
+  require_changes: true # if true: only post the comment if coverage changes

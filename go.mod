@@ -1,14 +1,13 @@
 module github.com/salandered/apex
 
-go 1.26.7
+go 1.27.1
 
 require (
 	github.com/getkin/kin-openapi v0.142.0
-	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/salandered/httputils v0.0.1
-	github.com/salandered/slogenv v0.1.0
-	github.com/salandered/strvalid v0.3.0
+	github.com/salandered/slogenv v0.2.0
+	github.com/salandered/strvalid v0.4.0
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0
@@ -36,6 +35,7 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
 	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/lmittmann/tint v1.2.0 // indirect

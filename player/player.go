@@ -4,8 +4,8 @@ package player
 import (
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/salandered/apex/apextime"
 	"github.com/salandered/strvalid"
 )

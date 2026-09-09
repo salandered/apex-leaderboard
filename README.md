@@ -1,5 +1,7 @@
 # Apex
 
+[![codecov](https://codecov.io/gh/salandered/apex-leaderboard/branch/main/graph/badge.svg)](https://codecov.io/gh/salandered/apex-leaderboard)
+
 - [🚀 Quick Start](#-quick-start)
 - [API Spec](#api-spec)
 - [🛠️ Development](#️-development)
@@ -94,7 +96,7 @@ curl http://localhost:8090/api/v1/boards
 
 ℹ️ More developer docs: see `docs/` folder.
 
-[Go](https://go.dev/doc/install) 1.26+ is used in addition to Docker.
+[Go](https://go.dev/doc/install) 1.27+ is used in addition to Docker.
 
 ### Running the Server
 

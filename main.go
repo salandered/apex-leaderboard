@@ -20,7 +20,7 @@ import (
 	"github.com/salandered/apex/server"
 	"github.com/salandered/apex/storage"
 
-	logging "github.com/salandered/slogenv"
+	"github.com/salandered/slogenv"
 )
 
 var ErrConfig = errors.New("invalid config")
@@ -44,7 +44,7 @@ func main() {
 	defer func() { _ = logCloser.Close() }()
 
 	// decoration, not a log record
-	if cfg.Format == logging.FormatText && cfg.File == "" {
+	if cfg.Format == slogenv.FormatText && cfg.File == "" {
 		fmt.Printf("%v\n\n", banner)
 	}
 
@@ -135,14 +135,14 @@ func main() {
 	}
 }
 
-func setupLogging() (logging.Config, io.Closer, error) {
-	cfg, err := logging.ConfigFromEnv()
+func setupLogging() (slogenv.Config, io.Closer, error) {
+	cfg, err := slogenv.ConfigFromEnv()
 	if err != nil {
-		return logging.Config{}, nil, err
+		return slogenv.Config{}, nil, err
 	}
-	closer, err := logging.Setup(cfg, requestid.LogAttrs)
+	closer, err := slogenv.Setup(cfg, requestid.LogAttrs)
 	if err != nil {
-		return logging.Config{}, nil, err
+		return slogenv.Config{}, nil, err
 	}
 	return cfg, closer, nil
 }

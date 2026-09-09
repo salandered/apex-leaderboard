@@ -77,7 +77,16 @@ jobs:
         run: go mod verify
 
       - name: Run tests
-        run: go test ./...
+        run: go test -covermode=atomic -coverprofile=cover.out ./...
+
+      # https://github.com/marketplace/actions/codecov#arguments
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./cover.out
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   integration-test:
     name: Go integration tests
