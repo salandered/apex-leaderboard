@@ -33,30 +33,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # includes govet
       - name: Lint (root module)
         uses: golangci/golangci-lint-action@v9
-        continue-on-error: true # it's ok currently
         with:
-          version: v2.12.2
+          version: v2.13.1
 
+      # includes govet
       - name: Lint (apiscripts module)
         uses: golangci/golangci-lint-action@v9
-        continue-on-error: true # it's ok currently
         with:
-          version: v2.12.2
-          working-directory: apiscripts
-
-      - name: Vet (root module)
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.12.2
-          args: --enable-only=govet # go vet is mandatory, runs after optional steps
-
-      - name: Vet (apiscripts module)
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.12.2
-          args: --enable-only=govet
+          version: v2.13.1
           working-directory: apiscripts
 
   test:
@@ -84,6 +71,7 @@ jobs:
         uses: codecov/codecov-action@v7
         with:
           files: ./cover.out
+          flags: unit
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
@@ -103,7 +91,19 @@ jobs:
           cache: true
 
       - name: Run integration tests
-        run: go test -tags=integration -run TestStorageSuite ./storage/
+        run: >
+          go test -tags=integration -run TestStorageSuite
+          -covermode=atomic -coverpkg=./storage/...
+          -coverprofile=cover.out ./storage/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./cover.out
+          flags: integration
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   smoke:
     name: Smoke (docker compose)
